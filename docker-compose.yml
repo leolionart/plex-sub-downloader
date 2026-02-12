@@ -38,6 +38,22 @@ services:
       # Temporary Storage
       TEMP_DIR: /tmp/plex-subtitles
 
+      # Telegram Notifications (optional)
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+
+      # Cache Settings
+      CACHE_ENABLED: ${CACHE_ENABLED:-true}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS:-3600}
+
+      # OpenAI Translation (optional)
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      TRANSLATION_ENABLED: ${TRANSLATION_ENABLED:-false}
+      TRANSLATION_REQUIRES_APPROVAL: ${TRANSLATION_REQUIRES_APPROVAL:-true}
+
     volumes:
       # Optional: persist logs
       # - ./logs:/app/logs
@@ -55,6 +71,22 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+
+  # Optional: Redis for caching
+  redis:
+    image: redis:7-alpine
+    container_name: plex-subtitle-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    networks:
+      - plex-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
 
   # Optional: Plex service (nếu chưa có)
   # plex:
@@ -74,6 +106,8 @@ services:
 
 volumes:
   subtitle-temp:
+    driver: local
+  redis-data:
     driver: local
   # plex-config:
   #   driver: local

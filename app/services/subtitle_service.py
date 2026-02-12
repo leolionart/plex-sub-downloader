@@ -13,6 +13,9 @@ from plexapi.video import Video
 from app.config import settings
 from app.clients.plex_client import PlexClient, PlexClientError
 from app.clients.subsource_client import SubsourceClient, SubsourceClientError
+from app.clients.telegram_client import TelegramClient
+from app.clients.cache_client import CacheClient
+from app.clients.openai_translation_client import OpenAITranslationClient, TranslationClientError
 from app.models.webhook import MediaMetadata
 from app.models.subtitle import SubtitleSearchParams, SubtitleResult
 from app.models.settings import ServiceConfig, SubtitleSettings
@@ -43,6 +46,10 @@ class SubtitleService:
         """Initialize service with clients."""
         self.plex_client = PlexClient()
         self.subsource_client = SubsourceClient()
+        self.telegram_client = TelegramClient()
+        self.cache_client = CacheClient()
+        self.translation_client = OpenAITranslationClient()
+
         self.temp_dir = Path(settings.temp_dir)
         self.temp_dir.mkdir(parents=True, exist_ok=True)
 
@@ -52,6 +59,9 @@ class SubtitleService:
     async def close(self) -> None:
         """Cleanup resources."""
         await self.subsource_client.close()
+        await self.telegram_client.close()
+        await self.cache_client.close()
+        await self.translation_client.close()
 
     def update_settings(self, new_settings: SubtitleSettings) -> None:
         """Update subtitle settings từ Web UI."""
@@ -122,6 +132,24 @@ class SubtitleService:
             subtitle = await self._find_best_subtitle(metadata, log)
             if not subtitle:
                 log.warning("No suitable subtitle found", title=metadata.title)
+
+                # Try translation fallback if enabled
+                if settings.translation_enabled:
+                    log.info("Attempting translation fallback (en → vi)")
+                    translation_result = await self._try_translation_fallback(
+                        metadata,
+                        video,
+                        log,
+                    )
+                    if translation_result:
+                        return translation_result
+
+                # Send Telegram notification
+                await self.telegram_client.notify_subtitle_not_found(
+                    title=str(metadata),
+                    language=settings.default_language,
+                )
+
                 return {
                     "status": "not_found",
                     "message": "No subtitle found",
@@ -151,6 +179,14 @@ class SubtitleService:
             self.config.increment_downloads()
             self.config.last_download = datetime.now().isoformat()
 
+            # Send Telegram notification
+            await self.telegram_client.notify_subtitle_downloaded(
+                title=str(metadata),
+                subtitle_name=subtitle.name,
+                language=settings.default_language,
+                quality=subtitle.quality_type,
+            )
+
             log.info("✓ Subtitle workflow completed successfully")
             return {
                 "status": "success",
@@ -159,12 +195,24 @@ class SubtitleService:
 
         except PlexClientError as e:
             log.error(f"Plex error: {e}")
+            await self.telegram_client.notify_error(
+                title=str(metadata) if 'metadata' in locals() else "Unknown",
+                error_message=str(e),
+            )
             raise SubtitleServiceError(f"Plex error: {e}") from e
         except SubsourceClientError as e:
             log.error(f"Subsource error: {e}")
+            await self.telegram_client.notify_error(
+                title=str(metadata) if 'metadata' in locals() else "Unknown",
+                error_message=str(e),
+            )
             raise SubtitleServiceError(f"Subsource error: {e}") from e
         except Exception as e:
             log.error(f"Unexpected error: {e}")
+            await self.telegram_client.notify_error(
+                title=str(metadata) if 'metadata' in locals() else "Unknown",
+                error_message=str(e),
+            )
             raise SubtitleServiceError(f"Workflow failed: {e}") from e
         finally:
             # Cleanup temp files
@@ -254,7 +302,7 @@ class SubtitleService:
         log: RequestContextLogger,
     ) -> SubtitleResult | None:
         """
-        Search và chọn subtitle tốt nhất.
+        Search và chọn subtitle tốt nhất với cache support.
 
         Args:
             metadata: MediaMetadata
@@ -275,7 +323,18 @@ class SubtitleService:
 
         log.info("Searching subtitles", params=str(search_params))
 
-        results = await self.subsource_client.search_subtitles(search_params)
+        # Try cache first
+        cached_results = await self.cache_client.get_search_results(search_params)
+        if cached_results:
+            log.info(f"Using cached results ({len(cached_results)} subtitles)")
+            results = cached_results
+        else:
+            # Search via API
+            results = await self.subsource_client.search_subtitles(search_params)
+
+            # Cache results
+            if results:
+                await self.cache_client.set_search_results(search_params, results)
 
         if not results:
             return None
@@ -364,3 +423,131 @@ class SubtitleService:
                 logger.debug(f"Cleaned up temp directory: {temp_subdir}")
         except Exception as e:
             logger.warning(f"Failed to cleanup temp files: {e}")
+
+    async def _try_translation_fallback(
+        self,
+        metadata: MediaMetadata,
+        video: Video,
+        log: RequestContextLogger,
+    ) -> dict[str, str] | None:
+        """
+        Fallback: Search English subtitle và translate sang Vietnamese.
+
+        Args:
+            metadata: MediaMetadata
+            video: Plex Video object
+            log: Logger instance
+
+        Returns:
+            Dict với status nếu thành công, None nếu fail
+        """
+        if not settings.translation_enabled:
+            return None
+
+        log.info("Translation fallback: Searching English subtitle")
+
+        # Search English subtitle
+        en_search_params = SubtitleSearchParams(
+            language="en",
+            title=metadata.search_title,
+            year=metadata.year,
+            imdb_id=metadata.imdb_id,
+            tmdb_id=metadata.tmdb_id,
+            season=metadata.season_number,
+            episode=metadata.episode_number,
+        )
+
+        en_subtitle = await self._find_best_subtitle_by_params(en_search_params, log)
+        if not en_subtitle:
+            log.warning("No English subtitle found for translation")
+            return None
+
+        log.info(f"Found English subtitle: {en_subtitle.name}")
+
+        # Check if requires approval
+        if settings.translation_requires_approval:
+            # TODO: Implement approval mechanism
+            # For now, log và skip
+            log.warning(
+                "Translation requires approval (translation_requires_approval=True). "
+                "Skipping automatic translation. "
+                "Consider using manual translation API endpoint."
+            )
+            return None
+
+        # Download English subtitle
+        en_subtitle_path = await self._download_subtitle(en_subtitle, metadata, log)
+
+        # Notify translation started
+        await self.telegram_client.notify_translation_started(
+            title=str(metadata),
+            from_lang="en",
+            to_lang="vi",
+        )
+
+        # Translate
+        try:
+            log.info("Translating English subtitle to Vietnamese...")
+
+            vi_subtitle_path = en_subtitle_path.parent / f"{en_subtitle_path.stem}.vi.srt"
+
+            stats = await self.translation_client.translate_srt_file(
+                srt_path=en_subtitle_path,
+                output_path=vi_subtitle_path,
+                from_lang="en",
+                to_lang="vi",
+            )
+
+            log.info(f"✓ Translation completed: {stats['lines_translated']} lines")
+
+            # Upload translated subtitle
+            await self._upload_to_plex(video, vi_subtitle_path, log)
+
+            # Notify success
+            await self.telegram_client.notify_translation_completed(
+                title=str(metadata),
+                to_lang="vi",
+                lines_translated=stats["lines_translated"],
+            )
+
+            # Update stats
+            self.config.increment_downloads()
+
+            return {
+                "status": "success",
+                "message": f"Translated subtitle uploaded ({stats['lines_translated']} lines)",
+            }
+
+        except TranslationClientError as e:
+            log.error(f"Translation failed: {e}")
+            await self.telegram_client.notify_error(
+                title=str(metadata),
+                error_message=f"Translation failed: {e}",
+            )
+            return None
+
+    async def _find_best_subtitle_by_params(
+        self,
+        params: SubtitleSearchParams,
+        log: RequestContextLogger,
+    ) -> SubtitleResult | None:
+        """
+        Helper to search subtitle với custom params.
+
+        Args:
+            params: SubtitleSearchParams
+            log: Logger instance
+
+        Returns:
+            Best SubtitleResult hoặc None
+        """
+        # Try cache first
+        cached_results = await self.cache_client.get_search_results(params)
+        if cached_results:
+            results = cached_results
+        else:
+            results = await self.subsource_client.search_subtitles(params)
+            if results:
+                await self.cache_client.set_search_results(params, results)
+
+        return results[0] if results else None

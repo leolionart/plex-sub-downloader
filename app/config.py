@@ -76,6 +76,53 @@ class Settings(BaseSettings):
         description="Temporary directory for downloaded subtitles"
     )
 
+    # Telegram Notifications
+    telegram_bot_token: str | None = Field(
+        default=None,
+        description="Telegram bot token for notifications"
+    )
+    telegram_chat_id: str | None = Field(
+        default=None,
+        description="Telegram chat ID to send notifications"
+    )
+
+    # Cache Settings
+    cache_enabled: bool = Field(
+        default=True,
+        description="Enable subtitle search result caching"
+    )
+    redis_url: str | None = Field(
+        default=None,
+        description="Redis connection URL (e.g., redis://localhost:6379/0). If None, uses in-memory cache"
+    )
+    cache_ttl_seconds: int = Field(
+        default=3600,
+        ge=60,
+        description="Cache TTL in seconds (default: 1 hour)"
+    )
+
+    # OpenAI Translation
+    openai_api_key: str | None = Field(
+        default=None,
+        description="OpenAI API key for subtitle translation"
+    )
+    openai_base_url: str = Field(
+        default="https://api.openai.com/v1",
+        description="OpenAI API base URL (or compatible endpoint)"
+    )
+    openai_model: str = Field(
+        default="gpt-4o-mini",
+        description="OpenAI model for translation"
+    )
+    translation_enabled: bool = Field(
+        default=False,
+        description="Enable auto-translation when Vietnamese subtitle not found"
+    )
+    translation_requires_approval: bool = Field(
+        default=True,
+        description="Require manual approval before translating (to avoid unexpected costs)"
+    )
+
     @field_validator("plex_url")
     @classmethod
     def validate_plex_url(cls, v: str) -> str:
