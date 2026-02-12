@@ -9,9 +9,19 @@ Service chạy ngầm, lắng nghe webhook từ Plex, tự động tìm và uplo
 - ✅ **Tự động hoàn toàn** - Không cần thao tác thủ công
 - ✅ **Upload trực tiếp** - Không cần mount thư viện media
 - ✅ **Ưu tiên chất lượng** - Retail > Translated > AI subtitles
+- ✅ **Multi-language** - Hỗ trợ nhiều ngôn ngữ subtitle
+- ✅ **Smart duplicate detection** - Tránh download trùng lặp
+- ✅ **Web UI configuration** - Giao diện cài đặt không cần login
 - ✅ **Async & Fast** - FastAPI với asyncio
 - ✅ **Docker ready** - Deploy trong 2 phút
 - ✅ **Dễ mở rộng** - Provider pattern cho nhiều nguồn subtitle
+
+### 🎉 **NEW in v0.3.0:**
+- ✅ **📱 Telegram Notifications** - Alerts cho downloads, errors, translations
+- ✅ **🚀 Redis Cache** - Giảm 80% API calls với caching
+- ✅ **🤖 OpenAI Translation** - Auto-translate EN → VI khi không tìm thấy subtitle
+
+> **See:** [NEW_FEATURES.md](NEW_FEATURES.md) for detailed setup guide
 
 ## 🏗️ Architecture
 
@@ -267,15 +277,19 @@ print(video.guids)  # Check external IDs
 **Debug:**
 Set `LOG_LEVEL=DEBUG` trong `.env` để xem chi tiết.
 
-## 🌟 Roadmap
+## 🗺️ Roadmap
 
-- [ ] **Multiple providers** - OpenSubtitles, SubDL, Subscene
-- [ ] **Web UI** - Dashboard để quản lý subtitles
-- [ ] **Manual search** - API endpoint để search manual
-- [ ] **Subtitle editing** - Fix timing, encoding issues
-- [ ] **Statistics** - Track subtitle downloads
-- [ ] **Notifications** - Discord/Telegram alerts
-- [ ] **Cache** - Cache search results để giảm API calls
+### v0.4.0 (Next)
+- [ ] **Web UI improvements** - Translation approval UI, manual search
+- [ ] **Database** - SQLite tracking history, persistent settings
+- [ ] **Scheduled tasks** - Daily stats, cache cleanup
+- [ ] **More providers** - OpenSubtitles, SubDL integration
+
+### Future
+- [ ] **Advanced features** - Subtitle editing, timing fix, encoding conversion
+- [ ] **Statistics dashboard** - Charts, graphs, trends
+- [ ] **Notifications** - Discord webhooks, Email alerts
+- [ ] **Mobile app** - Companion app cho iOS/Android
 
 ## 🤝 Contributing
 
