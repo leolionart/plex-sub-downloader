@@ -19,6 +19,7 @@ from app.models.webhook import PlexWebhookPayload, TautulliWebhookPayload
 from app.models.settings import SubtitleSettings
 from app.services.subtitle_service import SubtitleService, SubtitleServiceError
 from app.utils.logger import setup_logging, get_logger
+from app.routes import translation
 
 # Setup logging
 setup_logging()
@@ -69,6 +70,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include routers
+app.include_router(translation.router)
 
 
 @app.middleware("http")
@@ -129,6 +133,12 @@ async def web_ui(request: Request) -> HTMLResponse:
             "languages": settings_data.languages,
         },
     )
+
+
+@app.get("/translation", response_class=HTMLResponse)
+async def translation_ui(request: Request) -> HTMLResponse:
+    """Translation approval UI."""
+    return templates.TemplateResponse("translation.html", {"request": request})
 
 
 @app.get("/api/info")

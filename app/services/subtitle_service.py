@@ -56,6 +56,14 @@ class SubtitleService:
         # Runtime configuration
         self.config = service_config or ServiceConfig()
 
+        # Pending translation queue (for approval mode)
+        self._pending_translations: dict[str, dict] = {}
+        self._translation_stats = {
+            "total_translations": 0,
+            "total_lines": 0,
+            "total_cost": 0.0,
+        }
+
     async def close(self) -> None:
         """Cleanup resources."""
         await self.subsource_client.close()
@@ -466,65 +474,56 @@ class SubtitleService:
 
         # Check if requires approval
         if settings.translation_requires_approval:
-            # TODO: Implement approval mechanism
-            # For now, log và skip
-            log.warning(
-                "Translation requires approval (translation_requires_approval=True). "
-                "Skipping automatic translation. "
-                "Consider using manual translation API endpoint."
-            )
-            return None
-
-        # Download English subtitle
-        en_subtitle_path = await self._download_subtitle(en_subtitle, metadata, log)
-
-        # Notify translation started
-        await self.telegram_client.notify_translation_started(
-            title=str(metadata),
-            from_lang="en",
-            to_lang="vi",
-        )
-
-        # Translate
-        try:
-            log.info("Translating English subtitle to Vietnamese...")
-
-            vi_subtitle_path = en_subtitle_path.parent / f"{en_subtitle_path.stem}.vi.srt"
-
-            stats = await self.translation_client.translate_srt_file(
-                srt_path=en_subtitle_path,
-                output_path=vi_subtitle_path,
+            # Add to pending queue
+            self.add_pending_translation(
+                rating_key=metadata.rating_key,
+                metadata=metadata,
                 from_lang="en",
                 to_lang="vi",
             )
 
-            log.info(f"✓ Translation completed: {stats['lines_translated']} lines")
+            # Send Telegram notification với approval link
+            await self.telegram_client.send_message(
+                f"""
+🔔 *Translation Approval Required*
 
-            # Upload translated subtitle
-            await self._upload_to_plex(video, vi_subtitle_path, log)
+📺 *Title:* {metadata}
+🌐 *Translation:* en → vi
+📄 *Subtitle:* {en_subtitle.name}
 
-            # Notify success
-            await self.telegram_client.notify_translation_completed(
-                title=str(metadata),
-                to_lang="vi",
-                lines_translated=stats["lines_translated"],
+⚠️ *Action Required:*
+Open Web UI to approve/reject:
+http://your-server:9000/#/translation/pending
+
+💰 *Estimate cost first:*
+```
+curl -X POST http://your-server:9000/api/translation/estimate \\
+  -d '{{"rating_key": "{metadata.rating_key}"}}'
+```
+""",
+                parse_mode="Markdown",
             )
 
-            # Update stats
-            self.config.increment_downloads()
+            log.warning(
+                "Translation requires approval. Added to pending queue. "
+                "User must approve via Web UI: http://localhost:9000/#/translation/pending"
+            )
 
             return {
-                "status": "success",
-                "message": f"Translated subtitle uploaded ({stats['lines_translated']} lines)",
+                "status": "pending_approval",
+                "message": "Translation request added to queue. Check Web UI to approve.",
             }
 
-        except TranslationClientError as e:
-            log.error(f"Translation failed: {e}")
-            await self.telegram_client.notify_error(
-                title=str(metadata),
-                error_message=f"Translation failed: {e}",
-            )
-            return None
+        # Auto mode - execute immediately
+        log.info("Auto-translation enabled, executing...")
+
+        return await self._execute_translation(
+            metadata=metadata,
+            video=video,
+            from_lang="en",
+            to_lang="vi",
+            log=log,
+        )
 
     async def _find_best_subtitle_by_params(
         self,
@@ -551,3 +550,149 @@ class SubtitleService:
                 await self.cache_client.set_search_results(params, results)
 
         return results[0] if results else None
+
+    def add_pending_translation(
+        self,
+        rating_key: str,
+        metadata: MediaMetadata,
+        from_lang: str = "en",
+        to_lang: str = "vi",
+    ) -> None:
+        """
+        Add translation request vào pending queue.
+
+        User sẽ approve/reject qua Web UI.
+        """
+        self._pending_translations[rating_key] = {
+            "rating_key": rating_key,
+            "title": str(metadata),
+            "from_lang": from_lang,
+            "to_lang": to_lang,
+            "added_at": datetime.now().isoformat(),
+            "metadata": metadata.model_dump(),
+        }
+
+        logger.info(f"Added pending translation: {metadata} ({from_lang} → {to_lang})")
+
+    def get_pending_translations(self) -> list[dict]:
+        """Get list of pending translations."""
+        return list(self._pending_translations.values())
+
+    def remove_pending_translation(self, rating_key: str) -> None:
+        """Remove translation từ pending queue."""
+        if rating_key in self._pending_translations:
+            del self._pending_translations[rating_key]
+            logger.info(f"Removed pending translation: {rating_key}")
+
+    def get_translation_stats(self) -> dict:
+        """Get translation statistics."""
+        return {
+            **self._translation_stats,
+            "pending_count": len(self._pending_translations),
+            "average_cost": (
+                self._translation_stats["total_cost"] / self._translation_stats["total_translations"]
+                if self._translation_stats["total_translations"] > 0
+                else 0
+            ),
+        }
+
+    def _get_logger(self, request_id: str) -> RequestContextLogger:
+        """Create logger với request ID."""
+        return RequestContextLogger(logger, request_id)
+
+    async def _execute_translation(
+        self,
+        metadata: MediaMetadata,
+        video: Video,
+        from_lang: str,
+        to_lang: str,
+        log: RequestContextLogger,
+    ) -> dict[str, str] | None:
+        """
+        Execute translation (called after approval).
+
+        Args:
+            metadata: MediaMetadata
+            video: Plex Video object
+            from_lang: Source language
+            to_lang: Target language
+            log: Logger instance
+
+        Returns:
+            Dict với status nếu thành công
+        """
+        # Search source language subtitle
+        search_params = SubtitleSearchParams(
+            language=from_lang,
+            title=metadata.search_title,
+            year=metadata.year,
+            imdb_id=metadata.imdb_id,
+            tmdb_id=metadata.tmdb_id,
+            season=metadata.season_number,
+            episode=metadata.episode_number,
+        )
+
+        source_subtitle = await self._find_best_subtitle_by_params(search_params, log)
+        if not source_subtitle:
+            log.warning(f"No {from_lang} subtitle found for translation")
+            return None
+
+        log.info(f"Found {from_lang} subtitle: {source_subtitle.name}")
+
+        # Download source subtitle
+        source_subtitle_path = await self._download_subtitle(source_subtitle, metadata, log)
+
+        # Notify translation started
+        await self.telegram_client.notify_translation_started(
+            title=str(metadata),
+            from_lang=from_lang,
+            to_lang=to_lang,
+        )
+
+        # Translate
+        try:
+            log.info(f"Translating {from_lang} subtitle to {to_lang}...")
+
+            target_subtitle_path = source_subtitle_path.parent / f"{source_subtitle_path.stem}.{to_lang}.srt"
+
+            stats = await self.translation_client.translate_srt_file(
+                srt_path=source_subtitle_path,
+                output_path=target_subtitle_path,
+                from_lang=from_lang,
+                to_lang=to_lang,
+            )
+
+            log.info(f"✓ Translation completed: {stats['lines_translated']} lines")
+
+            # Upload translated subtitle
+            await self._upload_to_plex(video, target_subtitle_path, log)
+
+            # Notify success
+            await self.telegram_client.notify_translation_completed(
+                title=str(metadata),
+                to_lang=to_lang,
+                lines_translated=stats["lines_translated"],
+            )
+
+            # Update stats
+            self.config.increment_downloads()
+            self._translation_stats["total_translations"] += 1
+            self._translation_stats["total_lines"] += stats["lines_translated"]
+            # Note: Actual cost would need to be calculated from API response
+
+            # Remove from pending queue if exists
+            self.remove_pending_translation(metadata.rating_key)
+
+            return {
+                "status": "success",
+                "message": f"Translated subtitle uploaded ({stats['lines_translated']} lines)",
+                "stats": stats,
+            }
+
+        except TranslationClientError as e:
+            log.error(f"Translation failed: {e}")
+            await self.telegram_client.notify_error(
+                title=str(metadata),
+                error_message=f"Translation failed: {e}",
+            )
+            return None
