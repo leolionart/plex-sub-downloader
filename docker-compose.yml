@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  subtitle-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: plex-subtitle-service
+    restart: unless-stopped
+
+    ports:
+      - "9000:9000"
+
+    environment:
+      # Plex Configuration
+      PLEX_URL: ${PLEX_URL:-http://plex:32400}
+      PLEX_TOKEN: ${PLEX_TOKEN:?PLEX_TOKEN is required}
+
+      # Subsource Configuration
+      SUBSOURCE_API_KEY: ${SUBSOURCE_API_KEY:?SUBSOURCE_API_KEY is required}
+      SUBSOURCE_BASE_URL: ${SUBSOURCE_BASE_URL:-https://api.subsource.net/api}
+
+      # Subtitle Preferences
+      DEFAULT_LANGUAGE: ${DEFAULT_LANGUAGE:-vi}
+
+      # Webhook Security (optional)
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
+
+      # Application Settings
+      APP_HOST: 0.0.0.0
+      APP_PORT: 9000
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+      # Retry Configuration
+      MAX_RETRIES: ${MAX_RETRIES:-3}
+      RETRY_DELAY: ${RETRY_DELAY:-2}
+
+      # Temporary Storage
+      TEMP_DIR: /tmp/plex-subtitles
+
+    volumes:
+      # Optional: persist logs
+      # - ./logs:/app/logs
+
+      # Temp directory (không cần mount media files!)
+      - subtitle-temp:/tmp/plex-subtitles
+
+    networks:
+      - plex-network
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Optional: Plex service (nếu chưa có)
+  # plex:
+  #   image: plexinc/pms-docker:latest
+  #   container_name: plex
+  #   restart: unless-stopped
+  #   ports:
+  #     - "32400:32400"
+  #   environment:
+  #     - TZ=Asia/Ho_Chi_Minh
+  #     - PLEX_CLAIM=${PLEX_CLAIM}
+  #   volumes:
+  #     - plex-config:/config
+  #     - /path/to/media:/data
+  #   networks:
+  #     - plex-network
+
+volumes:
+  subtitle-temp:
+    driver: local
+  # plex-config:
+  #   driver: local
+
+networks:
+  plex-network:
+    driver: bridge
