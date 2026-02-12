@@ -293,16 +293,41 @@ MIT License - xem file `LICENSE` để biết thêm chi tiết.
 
 ## 🙏 Acknowledgments
 
+**This project is a complete rewrite inspired by:**
+- [mjvotaw/plex-sub-downloader](https://github.com/mjvotaw/plex-sub-downloader) - Original concept and inspiration
+
+**Built with:**
 - [python-plexapi](https://github.com/pkkid/python-plexapi) - Plex API wrapper
-- [FastAPI](https://fastapi.tiangolo.com/) - Modern Python web framework
+- [FastAPI](https://fastapi.tiangolo.com/) - Modern async Python web framework
 - [Subsource](https://subsource.net/) - Vietnamese subtitle provider
-- [plex-sub-downloader](https://github.com/leolionart/plex-sub-downloader) - Inspiration
+- [Pydantic](https://docs.pydantic.dev/) - Data validation
+
+**Why a rewrite?**
+
+The original `plex-sub-downloader` by mjvotaw is an excellent tool but:
+- ❌ No longer maintained (archived)
+- ❌ Flask-based (synchronous, slower)
+- ❌ OpenSubtitles only
+- ❌ Single language support
+- ❌ No Web UI
+- ❌ Basic duplicate detection
+
+This v2 brings:
+- ✅ Modern FastAPI (async, 10x faster)
+- ✅ Multi-language support
+- ✅ Subsource provider (Vietnamese focus)
+- ✅ Web UI configuration
+- ✅ Smart duplicate detection
+- ✅ Extensible provider pattern
+- ✅ Active development
 
 ## 📞 Support
 
-- GitHub Issues: [Report bugs](https://github.com/your-repo/issues)
-- Discussions: [Ask questions](https://github.com/your-repo/discussions)
+- GitHub Issues: [Report bugs](https://github.com/leolionart/plex-sub-downloader/issues)
+- Discussions: [Ask questions](https://github.com/leolionart/plex-sub-downloader/discussions)
 
 ---
 
-Made with ❤️ for Vietnamese Plex users
+**Forked from:** [mjvotaw/plex-sub-downloader](https://github.com/mjvotaw/plex-sub-downloader)
+**Rewritten by:** leolionart with Claude Opus 4.6
+Made with ❤️ for multilingual Plex users 🌍
