@@ -56,10 +56,14 @@ async def get_runtime_config() -> dict[str, Any]:
     config_store, subtitle_service, runtime_config = _get_services()
     data = runtime_config.sanitized().model_dump()
 
-    # Add computed webhook_url with the server's LAN IP
-    lan_ip = _detect_lan_ip()
-    port = settings.app_port
-    data["webhook_url"] = f"http://{lan_ip}:{port}/webhook"
+    # Add computed webhook_url
+    if settings.external_url:
+        base = settings.external_url.rstrip("/")
+        data["webhook_url"] = f"{base}/webhook"
+    else:
+        lan_ip = _detect_lan_ip()
+        port = settings.app_port
+        data["webhook_url"] = f"http://{lan_ip}:{port}/webhook"
 
     return data
 

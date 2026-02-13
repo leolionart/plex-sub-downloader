@@ -9,6 +9,10 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
+    environment:
+      # Set external URL so webhook URL displays correctly on the UI
+      # Change to match your host IP and port mapping
+      - EXTERNAL_URL=http://172.16.0.101:8000
     volumes:
       - ./data:/app/data
     networks:

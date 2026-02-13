@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     # Infrastructure-only Settings (env)
     app_host: str = Field(default="0.0.0.0", description="FastAPI bind host")
     app_port: int = Field(default=8000, ge=1, le=65535, description="FastAPI bind port")
+    external_url: str | None = Field(default=None, description="External base URL for webhook (e.g. http://172.16.0.101:8765)")
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(
         default="INFO",
         description="Logging level"
