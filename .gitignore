@@ -67,3 +67,6 @@ dmypy.json
 
 # Ruff
 .ruff_cache/
+
+# Playwright MCP
+.playwright-mcp/
