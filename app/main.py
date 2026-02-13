@@ -322,6 +322,13 @@ async def handle_webhook(
             },
         )
 
+    except ValueError as e:
+        # Expected errors (empty body, missing fields) — log without traceback
+        logger.debug(f"[{request_id}] Webhook skipped: {e}")
+        return JSONResponse(
+            status_code=200,
+            content={"status": "ignored", "message": str(e)},
+        )
     except Exception as e:
         logger.error(f"[{request_id}] Webhook error: {e}", exc_info=True)
         return JSONResponse(
@@ -357,6 +364,10 @@ async def _parse_plex_webhook(request: Request) -> dict[str, Any]:
 
 async def _parse_tautulli_webhook(request: Request) -> dict[str, Any]:
     """Parse Tautulli webhook payload (JSON)."""
+    body = await request.body()
+    if not body or not body.strip():
+        raise ValueError("Empty webhook body — likely a Plex health-check ping")
+
     payload_dict = await request.json()
 
     # Validate với Pydantic model

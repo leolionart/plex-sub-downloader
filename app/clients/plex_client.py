@@ -340,11 +340,6 @@ class PlexClient:
             logger.info(f"Uploading subtitle for '{video.title}' (lang={language})")
             logger.debug(f"Subtitle path: {subtitle_path}")
 
-            # PlexAPI uploadSubtitles() method
-            # Signature: uploadSubtitles(filepath: str)
-            # Note: PlexAPI tự động detect language từ filename suffix (_vi.srt)
-            # hoặc từ file content, nhưng tốt nhất rename file theo convention
-
             # Rename file để include language code (Plex convention)
             temp_path = subtitle_path.parent / f"{subtitle_path.stem}.{language}.srt"
             subtitle_path.rename(temp_path)
