@@ -7,11 +7,14 @@ from datetime import datetime, timedelta
 from typing import Any
 import xml.etree.ElementTree as ET
 
+import socket
+
 import httpx
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from app.clients.plex_client import PlexClientError
+from app.config import settings
 
 from app.models.runtime_config import RuntimeConfig
 
@@ -35,10 +38,28 @@ def _get_services():
     return config_store, subtitle_service, runtime_config
 
 
+def _detect_lan_ip() -> str:
+    """Detect the LAN IP address of this machine."""
+    try:
+        # Connect to an external address to determine which interface is used
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
+    except Exception:
+        return "127.0.0.1"
+
+
 @router.get("/config")
 async def get_runtime_config() -> dict[str, Any]:
     config_store, subtitle_service, runtime_config = _get_services()
-    return runtime_config.sanitized().model_dump()
+    data = runtime_config.sanitized().model_dump()
+
+    # Add computed webhook_url with the server's LAN IP
+    lan_ip = _detect_lan_ip()
+    port = settings.app_port
+    data["webhook_url"] = f"http://{lan_ip}:{port}/webhook"
+
+    return data
 
 
 @router.post("/config")

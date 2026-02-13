@@ -812,6 +812,63 @@
             flex-shrink: 0;
         }
 
+        /* ── Service Status Indicator ── */
+        .service-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            transition: all var(--transition-normal);
+        }
+
+        .service-status.running {
+            background: var(--success-dim);
+            color: var(--success);
+        }
+
+        .service-status.stopped {
+            background: var(--error-dim);
+            color: var(--error);
+        }
+
+        .service-status.checking {
+            background: var(--warning-dim);
+            color: var(--warning);
+        }
+
+        .service-status .pulse {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+            position: relative;
+        }
+
+        .service-status.running .pulse::after {
+            content: '';
+            position: absolute;
+            inset: -3px;
+            border-radius: 50%;
+            border: 2px solid currentColor;
+            opacity: 0;
+            animation: statusPulse 2s ease-out infinite;
+        }
+
+        @keyframes statusPulse {
+            0% { opacity: 0.6; transform: scale(0.8); }
+            100% { opacity: 0; transform: scale(1.6); }
+        }
+
+        .page-header-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
         /* ── Page transitions ── */
         .fade-in {
             animation: fadeIn 0.3s ease;
@@ -861,6 +918,13 @@
                     <span>Translation</span>
                 </a>
 
+                <a href="/logs" class="nav-item {% block nav_logs %}{% endblock %}">
+                    <span class="nav-icon">
+                        <svg viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V8h16v10zm-2-1h-6v-2h6v2zm-8-4H6v-2h4v2zm0 4H6v-2h4v2zm2-4h6v-2h-6v2z"/></svg>
+                    </span>
+                    <span>Logs</span>
+                </a>
+
                 <span class="nav-section-label">System</span>
 
                 <a href="/setup" class="nav-item {% block nav_setup %}{% endblock %}">
@@ -886,7 +950,13 @@
         <!-- Main Content -->
         <main class="main-content">
             <div class="page-header">
-                <h1>{% block page_title %}{% endblock %}</h1>
+                <div class="page-header-row">
+                    <h1>{% block page_title %}{% endblock %}</h1>
+                    <span id="service-status" class="service-status checking">
+                        <span class="pulse"></span>
+                        <span class="status-label">Checking...</span>
+                    </span>
+                </div>
                 <p class="page-description">{% block page_description %}{% endblock %}</p>
             </div>
 
@@ -942,6 +1012,32 @@
                 alert.style.display = 'none';
             }, 5000);
         }
+
+        // Service status polling
+        (function() {
+            const el = document.getElementById('service-status');
+            if (!el) return;
+            const label = el.querySelector('.status-label');
+
+            async function checkHealth() {
+                try {
+                    const res = await fetch('/health', { signal: AbortSignal.timeout(5000) });
+                    if (res.ok) {
+                        el.className = 'service-status running';
+                        label.textContent = 'Running';
+                    } else {
+                        el.className = 'service-status stopped';
+                        label.textContent = 'Stopped';
+                    }
+                } catch {
+                    el.className = 'service-status stopped';
+                    label.textContent = 'Stopped';
+                }
+            }
+
+            checkHealth();
+            setInterval(checkHealth, 30000);
+        })();
     </script>
     {% block scripts %}{% endblock %}
 </body>

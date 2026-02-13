@@ -124,49 +124,58 @@ class SubtitleService:
             SubtitleServiceError: Nếu workflow fail
         """
         log = RequestContextLogger(logger, request_id)
-        log.info("Processing webhook", rating_key=rating_key, event=event)
+        log.info("▶ Processing webhook", rating_key=rating_key, event=event)
 
         # Check settings xem có nên process event này không
         if not self.config.subtitle_settings.should_download_on_event(event):
-            log.info(f"Event {event} disabled in settings - skipping")
+            log.info(f"⏭ Event {event} disabled in settings - skipping")
             return {
                 "status": "skipped",
                 "message": f"Auto-download disabled for event: {event}",
             }
 
+        title_label = "Unknown"
+
         try:
             # Step 1: Fetch video từ Plex
+            log.info("[Step 1/7] Fetching video from Plex", rating_key=rating_key)
             video = await asyncio.to_thread(
                 self.plex_client.get_video,
                 rating_key,
             )
-            log.info(f"Fetched video: {video.title}", type=video.type)
+            title_label = video.title
+            log.info(f"[Step 1/7] ✓ Fetched: {video.title}", type=video.type)
 
             # Step 2: Extract metadata
+            log.info("[Step 2/7] Extracting metadata")
             metadata = await asyncio.to_thread(
                 self.plex_client.extract_metadata,
                 video,
             )
-            log.info(f"Extracted metadata: {metadata}")
+            title_label = str(metadata)
+            log.info(f"[Step 2/7] ✓ Metadata: {metadata}")
 
             # Step 3: Check existing subtitles với improved logic
+            log.info("[Step 3/7] Checking existing subtitles")
             should_download, reason = await self._should_download_subtitle(video, metadata, log)
             if not should_download:
-                log.info(f"Skipping download: {reason}", title=metadata.title)
+                log.info(f"[Step 3/7] ⏭ Skipping: {reason}", title=metadata.title)
                 self.config.increment_skipped()
                 return {
                     "status": "skipped",
                     "message": reason,
                 }
+            log.info(f"[Step 3/7] ✓ Download needed: {reason}")
 
             # Step 4: Search subtitle
+            log.info(f"[Step 4/7] Searching {self.runtime_config.default_language} subtitle")
             subtitle = await self._find_best_subtitle(metadata, log)
             if not subtitle:
-                log.warning("No suitable subtitle found", title=metadata.title)
+                log.warning(f"[Step 4/7] ✗ No {self.runtime_config.default_language} subtitle found for: {metadata.title}")
 
                 # Try translation fallback if enabled
                 if self.runtime_config.translation_enabled:
-                    log.info("Attempting translation fallback (en → vi)")
+                    log.info("[Step 4/7] Attempting translation fallback (en → vi)")
                     translation_result = await self._try_translation_fallback(
                         metadata,
                         video,
@@ -181,15 +190,19 @@ class SubtitleService:
                     language=self.runtime_config.default_language,
                 )
 
+                log.warning(f"▶ Workflow finished: no subtitle found for {metadata.title}")
                 return {
                     "status": "not_found",
                     "message": "No subtitle found",
                 }
 
+            log.info(f"[Step 4/7] ✓ Found subtitle: {subtitle.name}", score=subtitle.priority_score)
+
             # Step 5: Quality threshold check
+            log.info(f"[Step 5/7] Checking quality threshold")
             if not self._meets_quality_threshold(subtitle):
                 log.info(
-                    f"Subtitle quality below threshold",
+                    f"[Step 5/7] ✗ Quality below threshold",
                     quality=subtitle.quality_type,
                     threshold=self.config.subtitle_settings.min_quality_threshold,
                 )
@@ -197,14 +210,17 @@ class SubtitleService:
                     "status": "quality_too_low",
                     "message": f"Subtitle quality ({subtitle.quality_type}) below threshold",
                 }
-
-            log.info(f"Selected subtitle: {subtitle.name}", score=subtitle.priority_score)
+            log.info(f"[Step 5/7] ✓ Quality OK: {subtitle.quality_type}")
 
             # Step 6: Download subtitle
+            log.info(f"[Step 6/7] Downloading subtitle: {subtitle.name}")
             subtitle_path = await self._download_subtitle(subtitle, metadata, log)
+            log.info(f"[Step 6/7] ✓ Downloaded to: {subtitle_path}")
 
             # Step 7: Upload to Plex
+            log.info(f"[Step 7/7] Uploading subtitle to Plex")
             await self._upload_to_plex(video, subtitle_path, log)
+            log.info(f"[Step 7/7] ✓ Uploaded successfully")
 
             # Update stats
             self.config.increment_downloads()
@@ -218,30 +234,32 @@ class SubtitleService:
                 quality=subtitle.quality_type,
             )
 
-            log.info("✓ Subtitle workflow completed successfully")
+            log.info(f"▶ Workflow completed successfully for: {metadata.title}")
             return {
                 "status": "success",
                 "message": f"Uploaded subtitle: {subtitle.name}",
             }
 
         except PlexClientError as e:
-            log.error(f"Plex error: {e}")
+            log.error(f"✗ Plex error while processing '{title_label}': {e}")
             await self.telegram_client.notify_error(
-                title=str(metadata) if 'metadata' in locals() else "Unknown",
+                title=title_label,
                 error_message=str(e),
             )
             raise SubtitleServiceError(f"Plex error: {e}") from e
         except SubsourceClientError as e:
-            log.error(f"Subsource error: {e}")
+            log.error(f"✗ Subsource error while processing '{title_label}': {e}")
             await self.telegram_client.notify_error(
-                title=str(metadata) if 'metadata' in locals() else "Unknown",
+                title=title_label,
                 error_message=str(e),
             )
             raise SubtitleServiceError(f"Subsource error: {e}") from e
+        except SubtitleServiceError:
+            raise
         except Exception as e:
-            log.error(f"Unexpected error: {e}")
+            log.error(f"✗ Unexpected error while processing '{title_label}': {e}")
             await self.telegram_client.notify_error(
-                title=str(metadata) if 'metadata' in locals() else "Unknown",
+                title=title_label,
                 error_message=str(e),
             )
             raise SubtitleServiceError(f"Workflow failed: {e}") from e
@@ -354,30 +372,37 @@ class SubtitleService:
             episode=metadata.episode_number,
         )
 
-        log.info("Searching subtitles", params=str(search_params))
+        log.info(f"Searching subtitles: lang={search_params.language}, title={search_params.title}, imdb={search_params.imdb_id}")
 
         # Try cache first
         cached_results = await self.cache_client.get_search_results(search_params)
         if cached_results:
-            log.info(f"Using cached results ({len(cached_results)} subtitles)")
+            log.info(f"Cache hit: {len(cached_results)} subtitle(s)")
             results = cached_results
         else:
-            # Search via API
-            results = await self.subsource_client.search_subtitles(search_params)
+            log.info("Cache miss — querying Subsource API")
+            # Search via API — errors treated as "not found" so fallback can kick in
+            try:
+                results = await self.subsource_client.search_subtitles(search_params)
+                log.info(f"Subsource API returned {len(results)} result(s)")
+            except SubsourceClientError as e:
+                log.error(f"Subsource API error: {e}")
+                results = []
 
             # Cache results
             if results:
                 await self.cache_client.set_search_results(search_params, results)
 
         if not results:
+            log.warning(f"No subtitle found for lang={search_params.language}")
             return None
 
         # Return highest priority subtitle (already sorted)
         best = results[0]
         log.info(
-            f"Found {len(results)} subtitles, selected best",
-            name=best.name,
+            f"Best match: {best.name}",
             quality=best.quality_type,
+            score=best.priority_score,
         )
 
         return best
@@ -490,12 +515,29 @@ class SubtitleService:
             episode=metadata.episode_number,
         )
 
+        # Strategy 1: Search EN subtitle on Subsource
         en_subtitle = await self._find_best_subtitle_by_params(en_search_params, log)
-        if not en_subtitle:
-            log.warning("No English subtitle found for translation")
-            return None
+        plex_subtitle_path: Path | None = None
 
-        log.info(f"Found English subtitle: {en_subtitle.name}")
+        if en_subtitle:
+            log.info(f"Found English subtitle on Subsource: {en_subtitle.name}")
+        else:
+            # Strategy 2: Download existing EN subtitle from Plex
+            log.info("No EN subtitle on Subsource — checking Plex for existing EN subtitle")
+            dest_dir = self.temp_dir / metadata.rating_key
+            plex_subtitle_path = await asyncio.to_thread(
+                self.plex_client.download_existing_subtitle,
+                video,
+                "en",
+                dest_dir,
+            )
+            if plex_subtitle_path:
+                log.info(f"Found existing EN subtitle on Plex: {plex_subtitle_path}")
+            else:
+                log.warning("No English subtitle found (Subsource + Plex)")
+                return None
+
+        subtitle_source = en_subtitle.name if en_subtitle else "Plex existing subtitle"
 
         # Check if requires approval
         if self.runtime_config.translation_requires_approval:
@@ -507,32 +549,16 @@ class SubtitleService:
                 to_lang=self.runtime_config.default_language,
             )
 
-            # Send Telegram notification với approval link
             await self.telegram_client.send_message(
-                f"""
-🔔 *Translation Approval Required*
-
-📺 *Title:* {metadata}
-🌐 *Translation:* en → vi
-📄 *Subtitle:* {en_subtitle.name}
-
-⚠️ *Action Required:*
-Open Web UI to approve/reject:
-http://your-server:9000/#/translation/pending
-
-💰 *Estimate cost first:*
-```
-curl -X POST http://your-server:9000/api/translation/estimate \\
-  -d '{{"rating_key": "{metadata.rating_key}"}}'
-```
-""",
+                f"🔔 *Translation Approval Required*\n\n"
+                f"📺 *Title:* {metadata}\n"
+                f"🌐 *Translation:* en → vi\n"
+                f"📄 *Source:* {subtitle_source}\n\n"
+                f"Open Web UI to approve/reject.",
                 parse_mode="Markdown",
             )
 
-            log.warning(
-                "Translation requires approval. Added to pending queue. "
-                "User must approve via Web UI: http://localhost:9000/#/translation/pending"
-            )
+            log.warning("Translation requires approval — added to pending queue")
 
             return {
                 "status": "pending_approval",
@@ -548,6 +574,7 @@ curl -X POST http://your-server:9000/api/translation/estimate \\
             from_lang="en",
             to_lang="vi",
             log=log,
+            source_subtitle_path=plex_subtitle_path,
         )
 
     async def _find_best_subtitle_by_params(
@@ -570,7 +597,11 @@ curl -X POST http://your-server:9000/api/translation/estimate \\
         if cached_results:
             results = cached_results
         else:
-            results = await self.subsource_client.search_subtitles(params)
+            try:
+                results = await self.subsource_client.search_subtitles(params)
+            except SubsourceClientError as e:
+                log.warning(f"Subsource search failed: {e} — treating as no results")
+                results = []
             if results:
                 await self.cache_client.set_search_results(params, results)
 
@@ -632,6 +663,7 @@ curl -X POST http://your-server:9000/api/translation/estimate \\
         from_lang: str,
         to_lang: str,
         log: RequestContextLogger,
+        source_subtitle_path: Path | None = None,
     ) -> dict[str, str] | None:
         """
         Execute translation (called after approval).
@@ -642,30 +674,33 @@ curl -X POST http://your-server:9000/api/translation/estimate \\
             from_lang: Source language
             to_lang: Target language
             log: Logger instance
+            source_subtitle_path: Pre-downloaded subtitle path (e.g. from Plex).
+                                  If None, will search and download from Subsource.
 
         Returns:
             Dict với status nếu thành công
         """
-        # Search source language subtitle
-        search_params = SubtitleSearchParams(
-            language=from_lang,
-            title=metadata.search_title,
-            year=metadata.year,
-            imdb_id=metadata.imdb_id,
-            tmdb_id=metadata.tmdb_id,
-            season=metadata.season_number,
-            episode=metadata.episode_number,
-        )
+        if source_subtitle_path is None:
+            # Search and download from Subsource
+            search_params = SubtitleSearchParams(
+                language=from_lang,
+                title=metadata.search_title,
+                year=metadata.year,
+                imdb_id=metadata.imdb_id,
+                tmdb_id=metadata.tmdb_id,
+                season=metadata.season_number,
+                episode=metadata.episode_number,
+            )
 
-        source_subtitle = await self._find_best_subtitle_by_params(search_params, log)
-        if not source_subtitle:
-            log.warning(f"No {from_lang} subtitle found for translation")
-            return None
+            source_subtitle = await self._find_best_subtitle_by_params(search_params, log)
+            if not source_subtitle:
+                log.warning(f"No {from_lang} subtitle found for translation")
+                return None
 
-        log.info(f"Found {from_lang} subtitle: {source_subtitle.name}")
-
-        # Download source subtitle
-        source_subtitle_path = await self._download_subtitle(source_subtitle, metadata, log)
+            log.info(f"Found {from_lang} subtitle on Subsource: {source_subtitle.name}")
+            source_subtitle_path = await self._download_subtitle(source_subtitle, metadata, log)
+        else:
+            log.info(f"Using pre-downloaded subtitle: {source_subtitle_path}")
 
         # Notify translation started
         await self.telegram_client.notify_translation_started(

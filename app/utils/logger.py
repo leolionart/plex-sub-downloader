@@ -7,6 +7,10 @@ import sys
 from typing import Any
 
 from app.config import settings
+from app.utils.log_buffer import MemoryLogHandler
+
+# Global log buffer instance - shared with routes for SSE streaming
+log_buffer = MemoryLogHandler(maxlen=2000)
 
 
 class CustomFormatter(logging.Formatter):
@@ -46,6 +50,9 @@ def setup_logging() -> None:
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(CustomFormatter())
     root_logger.addHandler(console_handler)
+
+    # Memory buffer handler for web UI log viewer
+    root_logger.addHandler(log_buffer)
 
     # Suppress noisy third-party loggers
     logging.getLogger("httpx").setLevel(logging.WARNING)

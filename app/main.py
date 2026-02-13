@@ -23,6 +23,7 @@ from app.services.config_store import ConfigStore
 from app.utils.logger import setup_logging, get_logger
 from app.routes import translation
 from app.routes import setup
+from app.routes import logs
 
 # Setup logging
 setup_logging()
@@ -83,6 +84,7 @@ app.add_middleware(
 # Include routers
 app.include_router(translation.router)
 app.include_router(setup.router)
+app.include_router(logs.router)
 
 
 @app.middleware("http")
@@ -91,17 +93,23 @@ async def add_request_id(request: Request, call_next: Any) -> Any:
     request_id = str(uuid.uuid4())[:8]
     request.state.request_id = request_id
 
-    logger.info(
-        f"→ {request.method} {request.url.path}",
-        extra={"request_id": request_id},
-    )
+    # Skip logging for log-related endpoints to avoid noise/infinite loops
+    path = request.url.path
+    skip_log = path.startswith("/api/logs")
+
+    if not skip_log:
+        logger.info(
+            f"→ {request.method} {path}",
+            extra={"request_id": request_id},
+        )
 
     response = await call_next(request)
 
-    logger.info(
-        f"← {request.method} {request.url.path} - {response.status_code}",
-        extra={"request_id": request_id},
-    )
+    if not skip_log:
+        logger.info(
+            f"← {request.method} {path} - {response.status_code}",
+            extra={"request_id": request_id},
+        )
 
     return response
 
@@ -166,6 +174,16 @@ async def web_ui(request: Request) -> HTMLResponse:
     )
 
 
+@app.get("/logs", response_class=HTMLResponse)
+async def logs_ui(request: Request) -> HTMLResponse:
+    """Log viewer UI."""
+    configured = _is_configured(runtime_config)
+    return templates.TemplateResponse(
+        "logs.html",
+        {"request": request, "configured": configured},
+    )
+
+
 @app.get("/translation", response_class=HTMLResponse)
 async def translation_ui(request: Request) -> HTMLResponse:
     """Translation approval UI."""
@@ -208,10 +226,14 @@ async def get_settings() -> dict[str, Any]:
 @app.post("/api/settings")
 async def update_settings(settings_update: SubtitleSettings) -> dict[str, str]:
     """Update settings API."""
-    if not subtitle_service:
+    if not subtitle_service or not config_store or not runtime_config:
         raise HTTPException(status_code=503, detail="Service not initialized")
 
     subtitle_service.update_settings(settings_update)
+
+    # Persist to disk so settings survive restart
+    runtime_config.subtitle_settings = settings_update
+    config_store.save(runtime_config)
 
     return {
         "status": "success",
@@ -301,7 +323,7 @@ async def handle_webhook(
         )
 
     except Exception as e:
-        logger.error(f"[{request_id}] Webhook error: {e}")
+        logger.error(f"[{request_id}] Webhook error: {e}", exc_info=True)
         return JSONResponse(
             status_code=500,
             content={"error": str(e)},
@@ -352,16 +374,19 @@ def _should_process_event(event: str) -> bool:
     Check xem event có nên được xử lý không.
 
     Process:
-    - library.new - Media mới
-    - library.on.deck - (optional)
+    - library.new - Media mới thêm vào library
+    - library.on.deck - Media on deck
+    - media.play - User bắt đầu xem (controlled by auto_download_on_play setting)
 
     Ignore:
-    - media.play, media.pause, media.stop - playback events
+    - media.pause, media.stop, media.resume - other playback events
+    - media.scrobble - đã xem xong
     - admin.* - admin events
     """
     process_events = [
         "library.new",
         "library.on.deck",
+        "media.play",
     ]
 
     return event in process_events
@@ -384,14 +409,13 @@ async def _process_subtitle_task(rating_key: str, event: str, request_id: str) -
         result = await subtitle_service.process_webhook(rating_key, event, request_id)
 
         logger.info(
-            f"[{request_id}] Task completed: {result['status']}",
-            extra={"message": result["message"]},
+            f"[{request_id}] Task completed: {result['status']} — {result['message']}",
         )
 
     except SubtitleServiceError as e:
-        logger.error(f"[{request_id}] Task failed: {e}")
+        logger.error(f"[{request_id}] Task failed: {e}", exc_info=True)
     except Exception as e:
-        logger.error(f"[{request_id}] Unexpected error in task: {e}")
+        logger.error(f"[{request_id}] Unexpected error in task: {e}", exc_info=True)
 
 
 if __name__ == "__main__":

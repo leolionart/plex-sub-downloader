@@ -340,6 +340,78 @@ class PlexClient:
             logger.error(f"Failed to upload subtitle: {e}")
             raise PlexClientError(f"Upload failed: {e}") from e
 
+    def download_existing_subtitle(
+        self,
+        video: Video,
+        language: str,
+        dest_dir: Path,
+    ) -> Path | None:
+        """
+        Download subtitle hiện có trên Plex cho language chỉ định.
+
+        Chỉ hỗ trợ text-based subtitles (SRT, ASS, SSA).
+        Không hỗ trợ image-based (PGS, VobSub).
+
+        Args:
+            video: Plex Video object
+            language: Language code (e.g. 'en')
+            dest_dir: Directory to save subtitle
+
+        Returns:
+            Path to downloaded file, or None if not found
+        """
+        TEXT_CODECS = {"srt", "ass", "ssa", "subrip", "text", "mov_text", "webvtt"}
+
+        try:
+            for media in video.media:
+                for part in media.parts:
+                    for stream in part.streams:
+                        if stream.streamType != 3:
+                            continue
+                        if stream.languageCode != language:
+                            continue
+
+                        codec = getattr(stream, "codec", "") or ""
+                        if codec.lower() not in TEXT_CODECS:
+                            logger.debug(
+                                f"Skipping non-text subtitle: codec={codec}"
+                            )
+                            continue
+
+                        key = getattr(stream, "key", None)
+                        if not key:
+                            continue
+
+                        # Download from Plex server
+                        url = self.server.url(key)
+                        response = self.server._session.get(
+                            url,
+                            headers={"X-Plex-Token": self._config.plex_token},
+                        )
+
+                        if not response.ok:
+                            logger.warning(
+                                f"Failed to download subtitle stream: {response.status_code}"
+                            )
+                            continue
+
+                        dest_dir.mkdir(parents=True, exist_ok=True)
+                        dest_path = dest_dir / f"plex_existing.{language}.srt"
+                        dest_path.write_bytes(response.content)
+
+                        logger.info(
+                            f"Downloaded existing {language} subtitle from Plex: "
+                            f"{len(response.content)} bytes"
+                        )
+                        return dest_path
+
+            logger.debug(f"No downloadable {language} subtitle found on Plex")
+            return None
+
+        except Exception as e:
+            logger.warning(f"Error downloading subtitle from Plex: {e}")
+            return None
+
     def _refresh_metadata(self, video: Video) -> None:
         """
         Trigger Plex refresh metadata sau khi upload subtitle.

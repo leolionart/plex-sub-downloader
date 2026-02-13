@@ -1,0 +1,35 @@
+{
+  "plex_url": "https://172-16-0-18.2af96fafa4344c7c805c85d4123a08d9.plex.direct:32400",
+  "plex_token": "ADYQYZ79mNMyze2_B_g-",
+  "subsource_api_key": "sk_d7d185f43da1b58c4e25ceeceb0f37bb856f5449f84b645e3f973f278f2a0e30",
+  "subsource_base_url": "https://api.subsource.net/api",
+  "default_language": "vi",
+  "openai_api_key": "sk-dummy",
+  "openai_base_url": "https://proxy.naai.studio/v1",
+  "openai_model": "gpt-5-mini",
+  "translation_enabled": true,
+  "translation_requires_approval": false,
+  "telegram_bot_token": "7021204170:AAG-DmOA--BPaqVXMvUZM0_sC6of7p1STQI",
+  "telegram_chat_id": "-1002050746518",
+  "webhook_secret": null,
+  "cache_enabled": false,
+  "redis_url": null,
+  "cache_ttl_seconds": 3600,
+  "temp_dir": "/tmp/plex-subtitles",
+  "subtitle_settings": {
+    "languages": [
+      "vi"
+    ],
+    "language_priority": [
+      "vi"
+    ],
+    "auto_download_on_add": true,
+    "auto_download_on_play": true,
+    "skip_if_has_subtitle": true,
+    "replace_existing": false,
+    "replace_only_if_better_quality": true,
+    "min_quality_threshold": "translated",
+    "skip_forced_subtitles": true,
+    "skip_if_embedded": true
+  }
+}

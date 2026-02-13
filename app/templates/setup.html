@@ -93,6 +93,62 @@
         margin-top: 8px;
     }
 
+    /* Webhook URL display */
+    .webhook-url-box {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 16px;
+        background: var(--bg-deepest);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
+        margin-bottom: 16px;
+    }
+
+    .webhook-url-box code {
+        flex: 1;
+        font-family: 'IBM Plex Mono', 'Consolas', monospace;
+        font-size: 13px;
+        color: var(--plex-gold);
+        word-break: break-all;
+    }
+
+    .webhook-url-box .copy-btn {
+        padding: 5px 10px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-sm);
+        color: var(--text-secondary);
+        font-size: 11px;
+        font-weight: 600;
+        font-family: inherit;
+        cursor: pointer;
+        transition: all var(--transition-fast);
+        white-space: nowrap;
+    }
+
+    .webhook-url-box .copy-btn:hover {
+        background: var(--bg-surface-hover);
+        color: var(--text-primary);
+    }
+
+    .webhook-url-box .copy-btn.copied {
+        background: var(--success-dim);
+        border-color: var(--success);
+        color: var(--success);
+    }
+
+    .webhook-hint {
+        font-size: 12px;
+        color: var(--text-muted);
+        line-height: 1.5;
+        margin-bottom: 16px;
+    }
+
+    .webhook-hint strong {
+        color: var(--text-secondary);
+    }
+
     /* Secret field states */
     .form-group .secret-wrapper {
         position: relative;
@@ -131,33 +187,38 @@
         color: var(--success);
         opacity: 0.7;
     }
+
 </style>
 {% endblock %}
 
 {% block content %}
-<!-- 1) Plex -->
+<!-- 1) Plex Connection -->
 <div class="setup-section">
     <div class="setup-section-header">
         <span class="step-number">1</span>
-        <h2>Plex</h2>
+        <h2>Kết nối Plex</h2>
         <span id="plex-status"></span>
     </div>
     <div class="setup-section-body">
-        <p class="setup-hint">Bấm Plex PIN để nhận token, sau đó chọn server để tự điền URL. Bạn có thể thay đổi server bất kỳ lúc nào.</p>
+        <p class="setup-hint">Đăng nhập Plex hoặc nhập thủ công URL/Token. Service cần kết nối Plex để lấy thông tin media và upload subtitle.</p>
+
+        <!-- Plex Login -->
         <div class="pin-actions" style="margin-bottom:12px;">
-            <button id="btn-plex-pin" class="btn btn-secondary">Login with Plex PIN</button>
+            <button id="btn-plex-pin" class="btn btn-secondary">Login with Plex</button>
             <span id="pin-info" class="pin-info"></span>
         </div>
-        <div id="plex_server_row" class="form-row" style="display:block;">
-            <div class="form-group" style="flex:1;">
-                <label for="plex_server">Chọn Plex server</label>
-                <select id="plex_server" class="form-select" disabled>
-                    <option value="">Nhập/nhận token để tải server</option>
-                </select>
-            </div>
+
+        <!-- Server selection -->
+        <div class="form-group" style="margin-bottom: 12px;">
+            <label for="plex_server">Chọn Plex server</label>
+            <select id="plex_server" class="form-select" disabled>
+                <option value="">Đăng nhập Plex để tải danh sách server</option>
+            </select>
         </div>
-        <details style="margin-top:12px;">
-            <summary style="cursor:pointer; color: var(--text-muted);">Advanced: nhập thủ công URL/Token</summary>
+
+        <!-- Manual URL/Token -->
+        <details id="plex-advanced" style="margin-bottom: 12px;">
+            <summary style="cursor:pointer; color: var(--text-muted); font-size: 13px;">Nhập thủ công URL / Token</summary>
             <div class="form-row" style="margin-top:8px;">
                 <div class="form-group">
                     <label for="plex_url">Plex URL</label>
@@ -172,6 +233,15 @@
                 </div>
             </div>
         </details>
+
+        <!-- Webhook URL -->
+        <div style="font-size: 12px; color: var(--text-muted); line-height: 1.6;">
+            Webhook URL — thêm vào <strong style="color:var(--text-secondary);">Plex Settings → Webhooks</strong> hoặc <strong style="color:var(--text-secondary);">Tautulli → Notification Agents → Webhook</strong>:
+            <div class="webhook-url-box" style="margin-top: 6px; margin-bottom: 0;">
+                <code class="js-webhook-url">Loading...</code>
+                <button class="copy-btn" onclick="copyWebhookUrl(event)">Copy</button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -243,9 +313,10 @@
 <div class="setup-section">
     <div class="setup-section-header">
         <span class="step-number">4</span>
-        <h2>Webhook & Telegram</h2>
+        <h2>Notifications & Security</h2>
     </div>
     <div class="setup-section-body">
+        <p class="setup-hint" style="margin-bottom: 12px;">Cấu hình Telegram notification và webhook security. Hướng dẫn cài webhook nằm ở Step 1 sau khi kết nối Plex.</p>
         <div class="form-row">
             <div class="form-group">
                 <label for="webhook_secret">Webhook Secret (optional)</label>
@@ -307,15 +378,14 @@
 <script>
     const $ = (id) => document.getElementById(id);
 
-    // Track which secret fields are configured on the server
+    // ── Secret fields ──────────────────────────────────────
     const _secretFields = ['plex_token', 'subsource_api_key', 'openai_api_key', 'webhook_secret', 'telegram_bot_token'];
-    const _secretConfigured = {};  // id -> true if server has value
-    const _secretDirty = {};       // id -> true if user has typed new value
+    const _secretConfigured = {};
+    const _secretDirty = {};
 
     function markSecretConfigured(id, isConfigured) {
         _secretConfigured[id] = isConfigured;
-        const input = $(id);
-        const badge = $(id + '_badge');
+        const input = $(id), badge = $(id + '_badge');
         if (!input) return;
         if (isConfigured && !_secretDirty[id]) {
             input.classList.add('secret-configured');
@@ -327,20 +397,18 @@
         }
     }
 
-    // Listen for user input on secret fields to mark as dirty
     _secretFields.forEach(id => {
         const el = $(id);
-        if (el) {
-            el.addEventListener('input', () => {
-                _secretDirty[id] = true;
-                el.classList.remove('secret-configured');
-                const badge = $(id + '_badge');
-                if (badge) badge.classList.remove('visible');
-                el.placeholder = el.dataset.originalPlaceholder || '';
-            });
-        }
+        if (el) el.addEventListener('input', () => {
+            _secretDirty[id] = true;
+            el.classList.remove('secret-configured');
+            const badge = $(id + '_badge');
+            if (badge) badge.classList.remove('visible');
+            el.placeholder = el.dataset.originalPlaceholder || '';
+        });
     });
 
+    // ── Load config ────────────────────────────────────────
     async function loadConfig() {
         const res = await fetch('/api/setup/config');
         const data = await res.json();
@@ -354,21 +422,13 @@
         fill('cache_ttl_seconds', data.cache_ttl_seconds || 3600);
         fill('openai_base_url', data.openai_base_url || 'https://api.openai.com/v1');
 
-        // Handle secret fields: show "configured" state instead of empty
         _secretFields.forEach(id => {
             const val = data[id];
             const input = $(id);
             if (input) input.dataset.originalPlaceholder = input.placeholder;
-            if (val === '***') {
-                fill(id, '');
-                markSecretConfigured(id, true);
-            } else if (val) {
-                fill(id, val);
-                markSecretConfigured(id, true);
-            } else {
-                fill(id, '');
-                markSecretConfigured(id, false);
-            }
+            if (val === '***') { fill(id, ''); markSecretConfigured(id, true); }
+            else if (val)      { fill(id, val); markSecretConfigured(id, true); }
+            else               { fill(id, ''); markSecretConfigured(id, false); }
             _secretDirty[id] = false;
         });
 
@@ -377,7 +437,10 @@
         if (data.translation_requires_approval !== undefined) $('translation_requires_approval').value = String(data.translation_requires_approval);
         renderStatus(data);
 
-        // Auto-load server list if plex token is configured
+        // Update webhook URL with server-detected LAN IP
+        updateWebhookUrl(data.webhook_url);
+
+        // Auto-load server list if token exists
         if (data.plex_token === '***' || (data.plex_token && data.plex_token !== '')) {
             loadResourcesFromServer();
         }
@@ -387,12 +450,13 @@
         const hasToken = data.plex_token && data.plex_token !== '';
         const hasUrl = data.plex_url && data.plex_url !== '';
         const hasSubsource = data.subsource_api_key && data.subsource_api_key !== '';
-        const configured = hasUrl && hasToken && hasSubsource;
-        $('plex-status').innerHTML = configured
+        const ok = hasUrl && hasToken && hasSubsource;
+        $('plex-status').innerHTML = ok
             ? '<span class="status-badge ok"><span class="status-dot ok"></span>Connected</span>'
             : '<span class="status-badge missing"><span class="status-dot error"></span>Missing</span>';
     }
 
+    // ── Save config ────────────────────────────────────────
     async function saveConfig() {
         const payload = {
             plex_url: $('plex_url').value.trim() || null,
@@ -407,16 +471,10 @@
             translation_requires_approval: $('translation_requires_approval').value === 'true',
         };
 
-        // Only include secret fields if user actually typed a new value
         _secretFields.forEach(id => {
             const val = $(id).value.trim();
-            if (_secretDirty[id] && val) {
-                payload[id] = val;
-            } else if (_secretDirty[id] && !val) {
-                // User cleared the field intentionally -> set to null
-                payload[id] = null;
-            }
-            // If not dirty, don't include in payload -> backend keeps existing value
+            if (_secretDirty[id] && val)  payload[id] = val;
+            else if (_secretDirty[id])    payload[id] = null;
         });
 
         const res = await fetch('/api/setup/config', {
@@ -428,12 +486,12 @@
             showAlert('Failed to save configuration', 'error');
         } else {
             showAlert('Configuration saved successfully', 'success');
-            // Reset dirty flags and reload to show fresh state
             _secretFields.forEach(id => { _secretDirty[id] = false; });
             await loadConfig();
         }
     }
 
+    // ── Plex PIN login ─────────────────────────────────────
     async function requestPin() {
         const res = await fetch('/api/setup/plex/pin', { method: 'POST' });
         if (!res.ok) { showAlert('PIN request failed', 'error'); return; }
@@ -441,7 +499,6 @@
 
         const link = data.verification_url || 'https://app.plex.tv/auth';
         $('pin-info').innerHTML = `Code: <strong>${data.code}</strong> · <a href="${link}" target="_blank" rel="noopener">Open Plex login</a>`;
-        // Try to open automatically (may be blocked by popup blockers)
         try { window.open(link, '_blank'); } catch (e) {}
 
         const interval = setInterval(async () => {
@@ -452,46 +509,64 @@
                 $('plex_token').value = p.token;
                 _secretDirty['plex_token'] = true;
                 markSecretConfigured('plex_token', false);
+                $('pin-info').innerHTML = '<span style="color:var(--success);">Đã kết nối!</span>';
                 showAlert('Plex login successful!', 'success');
                 await loadResources(p.token);
             }
         }, 4000);
     }
 
+    // ── Server resources ───────────────────────────────────
     async function loadResourcesFromServer() {
-        // Load resources using server-side token (no token param needed)
         try {
             const res = await fetch('/api/setup/plex/resources');
             if (!res.ok) return;
-            const data = await res.json();
-            populateServerSelect(data);
-        } catch (e) {
-            console.warn('Load resources from server failed', e);
-        }
+            populateServerSelect(await res.json());
+        } catch (e) { console.warn('Load resources failed', e); }
+    }
+
+    async function loadResources(tokenOverride) {
+        const token = tokenOverride || $('plex_token').value.trim();
+        if (!token || token === '***') return;
+        try {
+            const res = await fetch(`/api/setup/plex/resources?token=${token}`);
+            if (!res.ok) return;
+            populateServerSelect(await res.json());
+        } catch (e) { console.warn('Load resources failed', e); }
     }
 
     function populateServerSelect(data) {
-        const select = document.getElementById('plex_server');
+        const select = $('plex_server');
         select.innerHTML = '';
-        data.servers.forEach((srv) => {
+        data.servers.forEach(srv => {
             const opt = document.createElement('option');
-            opt.value = srv.connections?.[0]?.uri || '';
+            const best = pickBestConnection(srv.connections || []);
+            opt.value = best?.uri || srv.connections?.[0]?.uri || '';
             opt.textContent = `${srv.name || 'Server'} (${srv.clientIdentifier || ''})`;
             opt.dataset.connections = JSON.stringify(srv.connections || []);
             select.appendChild(opt);
         });
         if (data.servers.length > 0) {
             select.disabled = false;
-            select.onchange = (e) => {
+            select.onchange = e => {
                 try {
                     const conns = JSON.parse(e.target.selectedOptions[0]?.dataset.connections || '[]');
                     const conn = pickBestConnection(conns);
                     if (conn) $('plex_url').value = conn.uri;
                 } catch (err) {}
             };
-            // Auto-select best connection from first server
+            // Match saved URL
             const currentUrl = $('plex_url').value.trim();
-            if (!currentUrl) {
+            let matched = false;
+            if (currentUrl) {
+                for (let i = 0; i < select.options.length; i++) {
+                    try {
+                        const conns = JSON.parse(select.options[i].dataset.connections || '[]');
+                        if (conns.some(c => c.uri === currentUrl)) { select.selectedIndex = i; matched = true; break; }
+                    } catch (e) {}
+                }
+            }
+            if (!matched && !currentUrl) {
                 const conn = pickBestConnection(data.servers[0].connections || []);
                 if (conn) $('plex_url').value = conn.uri;
             }
@@ -501,34 +576,36 @@
         }
     }
 
-    async function loadResources(tokenOverride) {
-        const token = tokenOverride || $('plex_token').value.trim();
-        if (!token || token === '***') return;
-        try {
-            const res = await fetch(`/api/setup/plex/resources?token=${token}`);
-            if (!res.ok) return;
-            const data = await res.json();
-            populateServerSelect(data);
-        } catch (e) {
-            console.warn('Load resources failed', e);
-        }
-    }
-
     function pickBestConnection(conns) {
-        if (!conns || conns.length === 0) return null;
-        // Prefer non-relay, https if available, then http
-        const sorted = [...conns].sort((a, b) => {
-            const score = (c) => (c.relay === '0' ? 2 : 0) + (c.protocol === 'https' ? 1 : 0);
-            return score(b) - score(a);
-        });
-        return sorted[0];
+        if (!conns?.length) return null;
+        return [...conns].sort((a, b) => {
+            const s = c => (c.relay === '0' ? 2 : 0) + (c.protocol === 'https' ? 1 : 0);
+            return s(b) - s(a);
+        })[0];
     }
 
+    // ── Webhook URL ────────────────────────────────────────
+    function updateWebhookUrl(serverUrl) {
+        // Prefer server-detected LAN IP, fall back to browser origin
+        const url = serverUrl || (window.location.origin + '/webhook');
+        document.querySelectorAll('.js-webhook-url').forEach(el => el.textContent = url);
+    }
+
+    function copyWebhookUrl(event) {
+        const btn = event?.target;
+        const url = btn?.parentElement.querySelector('code')?.textContent || (window.location.origin + '/webhook');
+        navigator.clipboard.writeText(url).then(() => {
+            if (!btn) return;
+            btn.textContent = 'Copied!'; btn.classList.add('copied');
+            setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+        });
+    }
+
+    // ── Init ───────────────────────────────────────────────
     $('btn-save').onclick = saveConfig;
     $('btn-plex-pin').onclick = requestPin;
-    loadConfig();
-
-    // Khi user tự dán token thủ công, thử load server
     $('plex_token').addEventListener('change', () => loadResources());
+    updateWebhookUrl();  // Show browser-origin URL immediately, then override after loadConfig
+    loadConfig();
 </script>
 {% endblock %}
