@@ -40,11 +40,11 @@ RUN mkdir -p /tmp/plex-subtitles && \
 USER appuser
 
 # Expose port
-EXPOSE 9000
+EXPOSE 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:9000/health').read()"
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"
 
 # Run application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "9000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
