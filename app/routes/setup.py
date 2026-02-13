@@ -30,11 +30,13 @@ class RuntimeConfigPayload(RuntimeConfig):
         populate_by_name = True
 
 
-def _get_services():
+def _get_services(require_subtitle_service: bool = False):
     """Lazy import to avoid circular imports."""
     from app.main import config_store, subtitle_service, runtime_config
-    if not config_store or not subtitle_service or not runtime_config:
+    if not config_store or not runtime_config:
         raise HTTPException(status_code=503, detail="Service not initialized")
+    if require_subtitle_service and not subtitle_service:
+        raise HTTPException(status_code=503, detail="Service not fully configured — complete setup first")
     return config_store, subtitle_service, runtime_config
 
 
@@ -72,10 +74,13 @@ async def update_runtime_config(payload: RuntimeConfigPayload) -> dict[str, str]
     updated = runtime_config.model_copy(update=partial)
 
     config_store.save(updated)
-    subtitle_service.update_runtime_config(updated)
-
-    # Update the global runtime_config so route guards see the new values
     main_module.runtime_config = updated
+
+    if subtitle_service:
+        subtitle_service.update_runtime_config(updated)
+    else:
+        # First-time setup — try to initialize service now that config is saved
+        main_module.reinit_service()
 
     return {"status": "ok"}
 
@@ -90,7 +95,7 @@ async def setup_status() -> dict[str, Any]:
 @router.post("/plex/pin")
 async def plex_pin_request() -> dict[str, Any]:
     """Request a real Plex PIN (no mock), return code + verification URL."""
-    _get_services()  # just to ensure initialized
+    _get_services()  # ensure config_store + runtime_config exist
 
     headers = {
         "X-Plex-Product": "Plex Subtitle Service",
@@ -150,8 +155,9 @@ async def plex_pin_poll(pin_id: str = Query(...)) -> dict[str, Any]:
                 import app.main as main_module
                 updated = runtime_config.model_copy(update={"plex_token": token})
                 config_store.save(updated)
-                subtitle_service.update_runtime_config(updated)
                 main_module.runtime_config = updated
+                if subtitle_service:
+                    subtitle_service.update_runtime_config(updated)
             return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Plex PIN poll failed: {e}")

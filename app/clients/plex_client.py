@@ -44,12 +44,15 @@ class PlexClient:
     """
 
     def __init__(self, config: RuntimeConfig, mock_mode: bool = False) -> None:
-        """Initialize Plex server connection."""
+        """Initialize Plex server connection (deferred if credentials missing)."""
         self._server: PlexServer | None = None
         self._config = config
         self._mock_mode = mock_mode
         if not self._mock_mode:
-            self._connect()
+            if self._config.plex_url and self._config.plex_token:
+                self._connect()
+            else:
+                logger.warning("Plex credentials not configured — will connect after setup")
 
     def _connect(self) -> None:
         """Establish connection to Plex server với retry logic."""

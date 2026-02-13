@@ -53,8 +53,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info(f"Default language: {runtime_config.default_language}")
     logger.info(f"Subsource API: {runtime_config.subsource_base_url}")
 
-    subtitle_service = SubtitleService(runtime_config)
-    logger.info("✓ Service initialized")
+    try:
+        subtitle_service = SubtitleService(runtime_config)
+        logger.info("✓ Service initialized")
+    except Exception as e:
+        logger.warning(f"Service partially initialized — setup required: {e}")
+        subtitle_service = None
 
     yield
 
@@ -63,6 +67,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if subtitle_service:
         await subtitle_service.close()
     logger.info("✓ Service stopped")
+
+
+def reinit_service() -> SubtitleService | None:
+    """Reinitialize SubtitleService after config changes (called by setup routes)."""
+    global subtitle_service
+    if runtime_config is None:
+        return None
+    try:
+        subtitle_service = SubtitleService(runtime_config)
+        logger.info("✓ Service reinitialized after config update")
+        return subtitle_service
+    except Exception as e:
+        logger.warning(f"Service reinit failed: {e}")
+        return None
 
 
 app = FastAPI(
@@ -412,7 +430,9 @@ async def _process_subtitle_task(rating_key: str, event: str, request_id: str) -
         event: Webhook event type
         request_id: Request ID cho logging
     """
-    assert subtitle_service is not None
+    if subtitle_service is None:
+        logger.error(f"[{request_id}] Service not initialized — configure via /setup first")
+        return
 
     try:
         logger.info(f"[{request_id}] Starting subtitle task for ratingKey: {rating_key}")
