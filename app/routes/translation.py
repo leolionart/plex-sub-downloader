@@ -82,27 +82,30 @@ async def estimate_translation_cost(request: TranslationRequest):
             episode=metadata.episode_number,
         )
 
-        subtitle = await subtitle_service._find_best_subtitle_by_params(
+        results = await subtitle_service._search_subtitles_by_params(
             search_params,
             subtitle_service._get_logger(request.rating_key[:8])
         )
 
-        if not subtitle:
+        if not results:
             raise HTTPException(
                 status_code=404,
                 detail=f"No {request.from_lang} subtitle found for translation"
             )
 
-        # Download subtitle temporarily
+        # Download subtitle temporarily (try each candidate)
         import tempfile
         from pathlib import Path
 
         temp_dir = Path(tempfile.mkdtemp())
-        subtitle_path = await subtitle_service._download_subtitle(
-            subtitle,
-            metadata,
-            subtitle_service._get_logger(request.rating_key[:8])
-        )
+        log = subtitle_service._get_logger(request.rating_key[:8])
+        downloaded = await subtitle_service._download_first_available(results, metadata, log)
+        if not downloaded:
+            raise HTTPException(
+                status_code=502,
+                detail=f"All {request.from_lang} subtitle downloads failed"
+            )
+        subtitle, subtitle_path = downloaded
 
         # Estimate cost
         estimate = await subtitle_service.translation_client.estimate_cost(subtitle_path)

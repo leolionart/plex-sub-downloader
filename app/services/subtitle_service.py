@@ -169,8 +169,8 @@ class SubtitleService:
 
             # Step 4: Search subtitle
             log.info(f"[Step 4/7] Searching {self.runtime_config.default_language} subtitle")
-            subtitle = await self._find_best_subtitle(metadata, log)
-            if not subtitle:
+            subtitles = await self._find_subtitles(metadata, log)
+            if not subtitles:
                 log.warning(f"[Step 4/7] ✗ No {self.runtime_config.default_language} subtitle found for: {metadata.title}")
 
                 # Try translation fallback if enabled
@@ -196,9 +196,10 @@ class SubtitleService:
                     "message": "No subtitle found",
                 }
 
-            log.info(f"[Step 4/7] ✓ Found subtitle: {subtitle.name}", score=subtitle.priority_score)
+            # Step 5: Quality threshold check on best match
+            subtitle = subtitles[0]
+            log.info(f"[Step 4/7] ✓ Found {len(subtitles)} subtitle(s). Best: {subtitle.name}", score=subtitle.priority_score)
 
-            # Step 5: Quality threshold check
             log.info(f"[Step 5/7] Checking quality threshold")
             if not self._meets_quality_threshold(subtitle):
                 log.info(
@@ -212,10 +213,29 @@ class SubtitleService:
                 }
             log.info(f"[Step 5/7] ✓ Quality OK: {subtitle.quality_type}")
 
-            # Step 6: Download subtitle
-            log.info(f"[Step 6/7] Downloading subtitle: {subtitle.name}")
-            subtitle_path = await self._download_subtitle(subtitle, metadata, log)
-            log.info(f"[Step 6/7] ✓ Downloaded to: {subtitle_path}")
+            # Step 6: Download subtitle (try each candidate on failure)
+            subtitle_path = None
+            for i, candidate in enumerate(subtitles):
+                if not self._meets_quality_threshold(candidate):
+                    continue
+                try:
+                    log.info(f"[Step 6/7] Downloading subtitle ({i+1}/{len(subtitles)}): {candidate.name}")
+                    subtitle_path = await self._download_subtitle(candidate, metadata, log)
+                    subtitle = candidate
+                    log.info(f"[Step 6/7] ✓ Downloaded to: {subtitle_path}")
+                    break
+                except Exception as e:
+                    log.warning(f"[Step 6/7] Download failed for '{candidate.name}': {e}")
+                    if i < len(subtitles) - 1:
+                        log.info(f"[Step 6/7] Trying next subtitle...")
+                    continue
+
+            if not subtitle_path:
+                log.error("[Step 6/7] ✗ All subtitle downloads failed")
+                return {
+                    "status": "download_failed",
+                    "message": "All subtitle download attempts failed",
+                }
 
             # Step 7: Upload to Plex
             log.info(f"[Step 7/7] Uploading subtitle to Plex")
@@ -347,23 +367,27 @@ class SubtitleService:
 
         return subtitle_rank >= threshold_rank
 
-    async def _find_best_subtitle(
+    async def _find_subtitles(
         self,
         metadata: MediaMetadata,
         log: RequestContextLogger,
-    ) -> SubtitleResult | None:
+        language: str | None = None,
+    ) -> list[SubtitleResult]:
         """
-        Search và chọn subtitle tốt nhất với cache support.
+        Search subtitles với cache support, trả về danh sách đã sorted.
 
         Args:
             metadata: MediaMetadata
             log: Logger instance
+            language: Override language (default: runtime default_language)
 
         Returns:
-            Best SubtitleResult hoặc None
+            List of SubtitleResult sorted by priority (best first)
         """
+        lang = language or self.runtime_config.default_language
+
         search_params = SubtitleSearchParams(
-            language=self.runtime_config.default_language,
+            language=lang,
             title=metadata.search_title,
             year=metadata.year,
             imdb_id=metadata.imdb_id,
@@ -378,33 +402,42 @@ class SubtitleService:
         cached_results = await self.cache_client.get_search_results(search_params)
         if cached_results:
             log.info(f"Cache hit: {len(cached_results)} subtitle(s)")
-            results = cached_results
-        else:
-            log.info("Cache miss — querying Subsource API")
-            # Search via API — errors treated as "not found" so fallback can kick in
-            try:
-                results = await self.subsource_client.search_subtitles(search_params)
-                log.info(f"Subsource API returned {len(results)} result(s)")
-            except SubsourceClientError as e:
-                log.error(f"Subsource API error: {e}")
-                results = []
+            return cached_results
 
-            # Cache results
-            if results:
-                await self.cache_client.set_search_results(search_params, results)
+        log.info("Cache miss — querying Subsource API")
+        # Search via API — errors treated as "not found" so fallback can kick in
+        try:
+            results = await self.subsource_client.search_subtitles(search_params)
+            log.info(f"Subsource API returned {len(results)} result(s)")
+        except SubsourceClientError as e:
+            log.error(f"Subsource API error: {e}")
+            results = []
+
+        # Cache results
+        if results:
+            await self.cache_client.set_search_results(search_params, results)
 
         if not results:
-            log.warning(f"No subtitle found for lang={search_params.language}")
+            log.warning(f"No subtitle found for lang={lang}")
+
+        return results
+
+    async def _find_best_subtitle(
+        self,
+        metadata: MediaMetadata,
+        log: RequestContextLogger,
+    ) -> SubtitleResult | None:
+        """Convenience wrapper: trả về best match hoặc None."""
+        results = await self._find_subtitles(metadata, log)
+        if not results:
             return None
 
-        # Return highest priority subtitle (already sorted)
         best = results[0]
         log.info(
             f"Best match: {best.name}",
             quality=best.quality_type,
             score=best.priority_score,
         )
-
         return best
 
     async def _download_subtitle(
@@ -516,11 +549,11 @@ class SubtitleService:
         )
 
         # Strategy 1: Search EN subtitle on Subsource
-        en_subtitle = await self._find_best_subtitle_by_params(en_search_params, log)
+        en_results = await self._search_subtitles_by_params(en_search_params, log)
         plex_subtitle_path: Path | None = None
 
-        if en_subtitle:
-            log.info(f"Found English subtitle on Subsource: {en_subtitle.name}")
+        if en_results:
+            log.info(f"Found {len(en_results)} English subtitle(s) on Subsource")
         else:
             # Strategy 2: Download existing EN subtitle from Plex
             log.info("No EN subtitle on Subsource — checking Plex for existing EN subtitle")
@@ -537,7 +570,7 @@ class SubtitleService:
                 log.warning("No English subtitle found (Subsource + Plex)")
                 return None
 
-        subtitle_source = en_subtitle.name if en_subtitle else "Plex existing subtitle"
+        subtitle_source = en_results[0].name if en_results else "Plex existing subtitle"
 
         # Check if requires approval
         if self.runtime_config.translation_requires_approval:
@@ -577,35 +610,56 @@ class SubtitleService:
             source_subtitle_path=plex_subtitle_path,
         )
 
-    async def _find_best_subtitle_by_params(
+    async def _search_subtitles_by_params(
         self,
         params: SubtitleSearchParams,
         log: RequestContextLogger,
-    ) -> SubtitleResult | None:
+    ) -> list[SubtitleResult]:
         """
-        Helper to search subtitle với custom params.
-
-        Args:
-            params: SubtitleSearchParams
-            log: Logger instance
+        Helper to search subtitles với custom params.
 
         Returns:
-            Best SubtitleResult hoặc None
+            List of SubtitleResult sorted by priority
         """
         # Try cache first
         cached_results = await self.cache_client.get_search_results(params)
         if cached_results:
-            results = cached_results
-        else:
-            try:
-                results = await self.subsource_client.search_subtitles(params)
-            except SubsourceClientError as e:
-                log.warning(f"Subsource search failed: {e} — treating as no results")
-                results = []
-            if results:
-                await self.cache_client.set_search_results(params, results)
+            return cached_results
 
-        return results[0] if results else None
+        try:
+            results = await self.subsource_client.search_subtitles(params)
+        except SubsourceClientError as e:
+            log.warning(f"Subsource search failed: {e} — treating as no results")
+            results = []
+
+        if results:
+            await self.cache_client.set_search_results(params, results)
+
+        return results
+
+    async def _download_first_available(
+        self,
+        subtitles: list[SubtitleResult],
+        metadata: MediaMetadata,
+        log: RequestContextLogger,
+    ) -> tuple[SubtitleResult, Path] | None:
+        """
+        Thử download lần lượt từng subtitle cho đến khi thành công.
+
+        Returns:
+            Tuple (subtitle, path) hoặc None nếu tất cả fail
+        """
+        for i, candidate in enumerate(subtitles):
+            try:
+                log.info(f"Downloading subtitle ({i+1}/{len(subtitles)}): {candidate.name}")
+                path = await self._download_subtitle(candidate, metadata, log)
+                return candidate, path
+            except Exception as e:
+                log.warning(f"Download failed for '{candidate.name}': {e}")
+                if i < len(subtitles) - 1:
+                    log.info("Trying next subtitle...")
+                continue
+        return None
 
     def add_pending_translation(
         self,
@@ -692,13 +746,18 @@ class SubtitleService:
                 episode=metadata.episode_number,
             )
 
-            source_subtitle = await self._find_best_subtitle_by_params(search_params, log)
-            if not source_subtitle:
+            results = await self._search_subtitles_by_params(search_params, log)
+            if not results:
                 log.warning(f"No {from_lang} subtitle found for translation")
                 return None
 
-            log.info(f"Found {from_lang} subtitle on Subsource: {source_subtitle.name}")
-            source_subtitle_path = await self._download_subtitle(source_subtitle, metadata, log)
+            downloaded = await self._download_first_available(results, metadata, log)
+            if not downloaded:
+                log.warning(f"All {from_lang} subtitle downloads failed")
+                return None
+
+            source_subtitle, source_subtitle_path = downloaded
+            log.info(f"Using {from_lang} subtitle: {source_subtitle.name}")
         else:
             log.info(f"Using pre-downloaded subtitle: {source_subtitle_path}")
 
