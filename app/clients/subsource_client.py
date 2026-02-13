@@ -1,6 +1,11 @@
 """
-Subsource API client for subtitle search and download.
+Subsource API v1 client for subtitle search and download.
 API Docs: https://subsource.net/api-docs
+
+Flow:
+1. Search movie by IMDb/TMDb ID or title → get movieId
+2. Search subtitles by movieId + language → get subtitleId
+3. Download subtitle by subtitleId → ZIP file
 """
 
 import logging
@@ -22,6 +27,44 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+# ISO 639-1 → Subsource full language name
+LANGUAGE_MAP = {
+    "vi": "vietnamese",
+    "en": "english",
+    "ar": "arabic",
+    "bg": "bulgarian",
+    "zh": "chinese",
+    "hr": "croatian",
+    "cs": "czech",
+    "da": "danish",
+    "nl": "dutch",
+    "fi": "finnish",
+    "fr": "french",
+    "de": "german",
+    "el": "greek",
+    "he": "hebrew",
+    "hu": "hungarian",
+    "id": "indonesian",
+    "it": "italian",
+    "ja": "japanese",
+    "ko": "korean",
+    "ms": "malay",
+    "no": "norwegian",
+    "fa": "persian",
+    "pl": "polish",
+    "pt": "portuguese",
+    "ro": "romanian",
+    "ru": "russian",
+    "sr": "serbian",
+    "sk": "slovak",
+    "sl": "slovenian",
+    "es": "spanish",
+    "sv": "swedish",
+    "th": "thai",
+    "tr": "turkish",
+    "uk": "ukrainian",
+}
+
 
 class SubsourceClientError(Exception):
     """Base exception for Subsource client errors."""
@@ -30,36 +73,138 @@ class SubsourceClientError(Exception):
 
 class SubsourceClient:
     """
-    Client để tương tác với Subsource API.
+    Client for Subsource API v1.
 
-    Features:
-    - Search subtitles bằng IMDb/TMDb ID hoặc title
-    - Filter theo language và quality
-    - Download và extract subtitle files
+    Two-step search flow:
+    1. Search movie → get movieId
+    2. Search subtitles for movieId + language
     """
 
     def __init__(self, config: RuntimeConfig) -> None:
-        """Initialize Subsource client."""
         self._config = config
-        self.base_url = config.subsource_base_url
+        self.base_url = config.subsource_base_url.rstrip("/")
         self.api_key = config.subsource_api_key
         self.timeout = httpx.Timeout(30.0, connect=10.0)
 
         self._client = httpx.AsyncClient(
             timeout=self.timeout,
             headers={
-                "Authorization": f"Bearer {self.api_key}" if self.api_key else "",
-                "User-Agent": "PlexSubtitleService/0.1.0",
+                "X-API-Key": self.api_key or "",
+                "User-Agent": "PlexSubtitleService/0.2.0",
             },
         )
 
     async def close(self) -> None:
-        """Close HTTP client."""
         await self._client.aclose()
 
+    def _to_subsource_lang(self, iso_code: str) -> str:
+        """Convert ISO 639-1 code to Subsource language name."""
+        return LANGUAGE_MAP.get(iso_code, iso_code)
+
+    # ── Movie search ──────────────────────────────────────────────
+
     @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=30),
+        stop=stop_after_attempt(2),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type((httpx.TimeoutException, httpx.NetworkError)),
+    )
+    async def _search_movie(self, params: SubtitleSearchParams) -> int | None:
+        """
+        Search for a movie on Subsource, return movieId.
+
+        Tries IMDb ID first, then title fallback.
+        """
+        # Strategy 1: Search by IMDb ID (most accurate)
+        if params.imdb_id:
+            movie_id = await self._search_movie_by_imdb(params.imdb_id)
+            if movie_id:
+                return movie_id
+
+        # Strategy 2: Search by title
+        if params.title:
+            movie_id = await self._search_movie_by_title(
+                params.title, params.year, params.season
+            )
+            if movie_id:
+                return movie_id
+
+        return None
+
+    async def _search_movie_by_imdb(self, imdb_id: str) -> int | None:
+        """Search movie by IMDb ID."""
+        try:
+            response = await self._client.get(
+                f"{self.base_url}/v1/movies/search",
+                params={"searchType": "imdb", "imdb": imdb_id},
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            movies = data.get("data", [])
+            if movies:
+                movie_id = movies[0]["movieId"]
+                logger.info(
+                    f"Found movie via IMDb: {movies[0]['title']} "
+                    f"(movieId={movie_id}, subs={movies[0].get('subtitleCount', 0)})"
+                )
+                return movie_id
+
+        except httpx.HTTPStatusError as e:
+            logger.warning(f"Movie search by IMDb failed: {e.response.status_code}")
+        except Exception as e:
+            logger.warning(f"Movie search by IMDb error: {e}")
+
+        return None
+
+    async def _search_movie_by_title(
+        self, title: str, year: int | None = None, season: int | None = None
+    ) -> int | None:
+        """Search movie by title, optionally filter by year and season."""
+        try:
+            query_params: dict[str, Any] = {"searchType": "text", "q": title}
+            if year:
+                query_params["year"] = year
+            if season:
+                query_params["season"] = season
+
+            response = await self._client.get(
+                f"{self.base_url}/v1/movies/search",
+                params=query_params,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            movies = data.get("data", [])
+            if movies:
+                # Pick best match (first result, optionally filter by year)
+                for movie in movies:
+                    if year and movie.get("releaseYear") == year:
+                        logger.info(
+                            f"Found movie via title+year: {movie['title']} "
+                            f"(movieId={movie['movieId']})"
+                        )
+                        return movie["movieId"]
+
+                # Fallback to first result
+                movie_id = movies[0]["movieId"]
+                logger.info(
+                    f"Found movie via title: {movies[0]['title']} "
+                    f"(movieId={movie_id})"
+                )
+                return movie_id
+
+        except httpx.HTTPStatusError as e:
+            logger.warning(f"Movie search by title failed: {e.response.status_code}")
+        except Exception as e:
+            logger.warning(f"Movie search by title error: {e}")
+
+        return None
+
+    # ── Subtitle search ───────────────────────────────────────────
+
+    @retry(
+        stop=stop_after_attempt(2),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
         retry=retry_if_exception_type((httpx.TimeoutException, httpx.NetworkError)),
     )
     async def search_subtitles(
@@ -67,166 +212,98 @@ class SubsourceClient:
         params: SubtitleSearchParams,
     ) -> list[SubtitleResult]:
         """
-        Search subtitles trên Subsource.
-
-        Strategy:
-        1. Nếu có IMDb/TMDb ID -> search by ID (accurate nhất)
-        2. Fallback: search by title + year + season/episode
+        Search subtitles: find movie first, then get subtitles.
 
         Args:
-            params: SubtitleSearchParams
+            params: SubtitleSearchParams with language, title, IDs, etc.
 
         Returns:
             List of SubtitleResult, sorted by priority
-
-        TODO: Update API endpoint và response parsing dựa trên actual Subsource API docs
         """
         logger.info(f"Searching subtitles for: {params}")
 
-        # Try search by external IDs first (most accurate)
-        if params.has_external_id:
-            results = await self._search_by_id(params)
-            if results:
-                logger.info(f"Found {len(results)} subtitles via ID search")
-                return self._rank_and_filter(results, params)
+        # Step 1: Find movie
+        movie_id = await self._search_movie(params)
+        if not movie_id:
+            logger.warning(f"Movie not found on Subsource: {params.title}")
+            return []
 
-        # Fallback: search by title
-        results = await self._search_by_title(params)
-        logger.info(f"Found {len(results)} subtitles via title search")
-        return self._rank_and_filter(results, params)
-
-    async def _search_by_id(self, params: SubtitleSearchParams) -> list[SubtitleResult]:
-        """
-        Search by IMDb or TMDb ID.
-
-        TODO: Implement actual Subsource API call
-        Endpoint might be: GET /subtitles?imdb_id={id}&language={lang}
-        """
-        search_params: dict[str, Any] = {"language": params.language}
-
-        if params.imdb_id:
-            search_params["imdb_id"] = params.imdb_id
-        elif params.tmdb_id:
-            search_params["tmdb_id"] = params.tmdb_id
-
-        # For TV episodes
-        if params.season:
-            search_params["season"] = params.season
-        if params.episode:
-            search_params["episode"] = params.episode
+        # Step 2: Get subtitles for this movie
+        language = self._to_subsource_lang(params.language)
 
         try:
-            logger.debug(f"ID search params: {search_params}")
+            query_params: dict[str, Any] = {
+                "movieId": movie_id,
+                "language": language,
+            }
+
             response = await self._client.get(
-                f"{self.base_url}/subtitles/search",
-                params=search_params,
+                f"{self.base_url}/v1/subtitles",
+                params=query_params,
             )
+
             if response.status_code == 401:
                 raise SubsourceClientError("Subsource API key invalid or missing")
             response.raise_for_status()
 
-            # TODO: Parse actual API response
-            # This is placeholder - adjust based on real API structure
             data = response.json()
-            return self._parse_search_results(data)
+            results = self._parse_subtitle_results(data)
+
+            logger.info(f"Found {len(results)} {language} subtitles for movieId={movie_id}")
+            return self._rank_and_filter(results, params)
 
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 404:
-                logger.debug("No subtitles found via ID search")
+                logger.debug("No subtitles found")
                 return []
-            raise SubsourceClientError(f"API error: {e}") from e
-        except Exception as e:
-            logger.error(f"ID search failed: {e}")
-            return []
+            raise SubsourceClientError(f"Subtitle search failed: {e}") from e
 
-    async def _search_by_title(self, params: SubtitleSearchParams) -> list[SubtitleResult]:
-        """
-        Search by title + year + season/episode.
-
-        TODO: Implement actual Subsource API call
-        Endpoint might be: GET /subtitles?query={title}&year={year}&language={lang}
-        """
-        if not params.title:
-            logger.warning("Cannot search by title - no title provided")
-            return []
-
-        search_params: dict[str, Any] = {
-            "query": params.title,
-            "language": params.language,
-        }
-
-        if params.year:
-            search_params["year"] = params.year
-        if params.season:
-            search_params["season"] = params.season
-        if params.episode:
-            search_params["episode"] = params.episode
-
-        try:
-            logger.debug(f"Title search params: {search_params}")
-            response = await self._client.get(
-                f"{self.base_url}/subtitles/search",
-                params=search_params,
-            )
-            if response.status_code == 401:
-                raise SubsourceClientError("Subsource API key invalid or missing")
-            response.raise_for_status()
-
-            # TODO: Parse actual API response
-            data = response.json()
-            return self._parse_search_results(data)
-
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 404:
-                logger.debug("No subtitles found via title search")
-                return []
-            raise SubsourceClientError(f"API error: {e}") from e
-
-    def _parse_search_results(self, data: dict[str, Any]) -> list[SubtitleResult]:
-        """
-        Parse API response thành SubtitleResult objects.
-
-        TODO: Implement actual parsing logic based on Subsource API response structure
-
-        Expected structure (example):
-        {
-            "results": [
-                {
-                    "id": "12345",
-                    "name": "Movie.Name.2024.WEB-DL.Vi.srt",
-                    "language": "vi",
-                    "download_url": "https://...",
-                    "release_info": "WEB-DL",
-                    "rating": 8.5,
-                    "downloads": 1234,
-                    ...
-                }
-            ]
-        }
-        """
+    def _parse_subtitle_results(self, data: dict[str, Any]) -> list[SubtitleResult]:
+        """Parse Subsource API v1 subtitle response."""
         results: list[SubtitleResult] = []
 
-        # TODO: Replace with actual parsing
-        # This is placeholder code
-        for item in data.get("results", []):
+        for item in data.get("data", []):
             try:
-                # Detect quality type from release_info or filename
-                quality_type = self._detect_quality_type(item)
+                subtitle_id = str(item["subtitleId"])
+                release_info_list = item.get("releaseInfo", [])
+                release_info = release_info_list[0] if release_info_list else ""
+
+                # Build name from release info or fallback
+                name = release_info or f"subtitle-{subtitle_id}"
+
+                # Map productionType to quality_type
+                production_type = (item.get("productionType") or "").lower()
+                quality_map = {
+                    "retail": "retail",
+                    "translated": "translated",
+                    "ai": "ai",
+                    "machine": "ai",
+                }
+                quality_type = quality_map.get(production_type, "unknown")
+
+                # Rating: use total or compute from good/bad
+                rating_data = item.get("rating", {})
+                good = rating_data.get("good", 0)
+                total = rating_data.get("total", 0)
+                rating = (good / total * 10) if total > 0 else None
+
+                # Uploader
+                contributors = item.get("contributors", [])
+                uploader = contributors[0]["displayname"] if contributors else None
+
+                # Download URL
+                download_url = f"{self.base_url}/v1/subtitles/{subtitle_id}/download"
 
                 result = SubtitleResult(
-                    id=item["id"],
-                    name=item["name"],
-                    language=item["language"],
-                    download_url=item["download_url"],
-                    release_info=item.get("release_info"),
-                    uploader=item.get("uploader"),
-                    rating=item.get("rating"),
-                    downloads=item.get("downloads"),
+                    id=subtitle_id,
+                    name=name,
+                    language=item.get("language", ""),
+                    download_url=download_url,
+                    release_info=release_info,
+                    uploader=uploader,
+                    rating=rating,
+                    downloads=item.get("downloads", 0),
                     quality_type=quality_type,
-                    imdb_id=item.get("imdb_id"),
-                    tmdb_id=item.get("tmdb_id"),
-                    season=item.get("season"),
-                    episode=item.get("episode"),
                 )
                 results.append(result)
 
@@ -236,51 +313,26 @@ class SubsourceClient:
 
         return results
 
-    def _detect_quality_type(self, item: dict[str, Any]) -> str:
-        """
-        Detect subtitle quality type từ metadata.
-
-        Heuristics:
-        - "retail" keywords: BluRay, Retail, Official
-        - "ai" keywords: AI, Auto-generated, Machine
-        - Default: "translated"
-        """
-        text = f"{item.get('name', '')} {item.get('release_info', '')}".lower()
-
-        if any(kw in text for kw in ["bluray", "retail", "official", "web-dl"]):
-            return "retail"
-        elif any(kw in text for kw in ["ai", "auto", "machine"]):
-            return "ai"
-        else:
-            return "translated"
-
     def _rank_and_filter(
         self,
         results: list[SubtitleResult],
         params: SubtitleSearchParams,
     ) -> list[SubtitleResult]:
-        """
-        Filter và sort subtitles theo priority.
-
-        1. Filter: chỉ giữ language match
-        2. Sort: theo priority_score (retail > translated > ai > unknown)
-        """
-        # Filter by language
-        filtered = [r for r in results if r.language == params.language]
-
-        if not filtered:
-            logger.warning(f"No subtitles found for language: {params.language}")
+        """Sort subtitles by priority score."""
+        if not results:
             return []
 
-        # Sort by priority (SubtitleResult.__lt__ handles this)
-        sorted_results = sorted(filtered)
+        sorted_results = sorted(results)
 
         logger.info(
             f"Ranked {len(sorted_results)} subtitles. "
-            f"Top result: {sorted_results[0].name} (score={sorted_results[0].priority_score})"
+            f"Top: {sorted_results[0].name} "
+            f"(quality={sorted_results[0].quality_type}, score={sorted_results[0].priority_score})"
         )
 
         return sorted_results
+
+    # ── Download ──────────────────────────────────────────────────
 
     @retry(
         stop=stop_after_attempt(3),
@@ -293,90 +345,61 @@ class SubsourceClient:
         dest_dir: Path,
     ) -> Path:
         """
-        Download subtitle file.
-
-        Handles:
-        - Direct .srt download
-        - ZIP archive extraction
+        Download subtitle file (usually a ZIP containing .srt).
 
         Args:
-            subtitle: SubtitleResult
-            dest_dir: Directory để lưu file
+            subtitle: SubtitleResult with download_url
+            dest_dir: Directory to save file
 
         Returns:
             Path to downloaded .srt file
-
-        Raises:
-            SubsourceClientError: Nếu download fail
         """
         dest_dir.mkdir(parents=True, exist_ok=True)
 
-        logger.info(f"Downloading subtitle: {subtitle.name}")
-        logger.debug(f"Download URL: {subtitle.download_url}")
+        logger.info(f"Downloading subtitle: {subtitle.name} (id={subtitle.id})")
 
         try:
             response = await self._client.get(str(subtitle.download_url))
             response.raise_for_status()
 
-            # Detect file type from content-type or filename
             content_type = response.headers.get("content-type", "")
-            is_zip = "zip" in content_type or subtitle.name.endswith(".zip")
+            is_zip = "zip" in content_type or "octet-stream" in content_type
 
             if is_zip:
-                # Handle ZIP archive
                 zip_path = dest_dir / f"{subtitle.id}.zip"
                 zip_path.write_bytes(response.content)
-
                 logger.debug(f"Extracting ZIP: {zip_path}")
                 return self._extract_subtitle_from_zip(zip_path, dest_dir)
             else:
-                # Direct .srt file
                 srt_path = dest_dir / f"{subtitle.id}.srt"
                 srt_path.write_bytes(response.content)
-
-                logger.info(f"✓ Downloaded subtitle to: {srt_path}")
+                logger.info(f"Downloaded subtitle to: {srt_path}")
                 return srt_path
 
         except httpx.HTTPStatusError as e:
             raise SubsourceClientError(f"Download failed: {e}") from e
+        except SubsourceClientError:
+            raise
         except Exception as e:
-            logger.error(f"Download error: {e}")
             raise SubsourceClientError(f"Download error: {e}") from e
 
     def _extract_subtitle_from_zip(self, zip_path: Path, dest_dir: Path) -> Path:
-        """
-        Extract .srt file từ ZIP archive.
-
-        Args:
-            zip_path: Path to ZIP file
-            dest_dir: Destination directory
-
-        Returns:
-            Path to extracted .srt file
-
-        Raises:
-            SubsourceClientError: Nếu không tìm thấy .srt trong ZIP
-        """
+        """Extract .srt file from ZIP archive."""
         try:
             with zipfile.ZipFile(zip_path, "r") as zip_ref:
-                # Find .srt files in archive
-                srt_files = [f for f in zip_ref.namelist() if f.endswith(".srt")]
+                srt_files = [f for f in zip_ref.namelist() if f.lower().endswith(".srt")]
 
                 if not srt_files:
                     raise SubsourceClientError("No .srt file found in ZIP archive")
 
-                # Extract first .srt file (usually there's only one)
                 srt_filename = srt_files[0]
-                logger.debug(f"Extracting: {srt_filename}")
-
                 zip_ref.extract(srt_filename, dest_dir)
                 extracted_path = dest_dir / srt_filename
 
-                logger.info(f"✓ Extracted subtitle to: {extracted_path}")
+                logger.info(f"Extracted subtitle: {extracted_path}")
                 return extracted_path
 
         except zipfile.BadZipFile as e:
             raise SubsourceClientError("Invalid ZIP file") from e
         finally:
-            # Cleanup ZIP file
             zip_path.unlink(missing_ok=True)

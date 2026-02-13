@@ -175,12 +175,29 @@ class PlexClient:
         logger.info(f"Extracted metadata: {metadata}")
         return metadata
 
+    @staticmethod
+    def _stream_matches_language(stream, language: str) -> bool:
+        """
+        Check if a subtitle stream matches the given language code.
+
+        Plex exposes multiple language fields:
+        - languageTag: ISO 639-1 (2-letter, e.g. "vi", "en")
+        - languageCode: ISO 639-2 (3-letter, e.g. "vie", "eng")
+
+        The service uses ISO 639-1 codes, so prefer languageTag for matching.
+        """
+        tag = getattr(stream, "languageTag", None)
+        code = getattr(stream, "languageCode", None)
+        return tag == language or code == language
+
     def _get_existing_subtitle_languages(self, video: Video) -> list[str]:
         """
         Extract danh sách subtitle languages đã có sẵn.
 
         Plex structure: Video -> Media -> Part -> Stream
         Subtitle streams có streamType=3
+
+        Returns ISO 639-1 (languageTag) codes when available.
         """
         languages: set[str] = set()
 
@@ -188,9 +205,13 @@ class PlexClient:
             for media in video.media:
                 for part in media.parts:
                     for stream in part.streams:
-                        # streamType=3 = Subtitle
-                        if stream.streamType == 3 and stream.languageCode:
-                            languages.add(stream.languageCode)
+                        if stream.streamType == 3:
+                            # Prefer languageTag (ISO 639-1: "vi") over languageCode (ISO 639-2: "vie")
+                            tag = getattr(stream, "languageTag", None)
+                            code = getattr(stream, "languageCode", None)
+                            lang = tag or code
+                            if lang:
+                                languages.add(lang)
 
             logger.debug(f"Found existing subtitles: {languages}")
             return list(languages)
@@ -203,11 +224,14 @@ class PlexClient:
         """
         Lấy thông tin chi tiết về subtitles đã có.
 
+        Args:
+            language: ISO 639-1 code (e.g. "vi", "en")
+
         Returns:
             Dict với info về subtitles:
             - has_subtitle: bool
             - subtitle_count: int
-            - subtitle_info: list of {codec, forced, title}
+            - subtitle_info: list of {codec, forced, title, format}
         """
         subtitle_info = []
 
@@ -215,7 +239,7 @@ class PlexClient:
             for media in video.media:
                 for part in media.parts:
                     for stream in part.streams:
-                        if stream.streamType == 3 and stream.languageCode == language:
+                        if stream.streamType == 3 and self._stream_matches_language(stream, language):
                             subtitle_info.append({
                                 "codec": getattr(stream, "codec", "unknown"),
                                 "forced": getattr(stream, "forced", False),
@@ -223,7 +247,7 @@ class PlexClient:
                                 "format": getattr(stream, "format", ""),
                             })
 
-            logger.debug(f"Subtitle details for {language}: {subtitle_info}")
+            logger.debug(f"Subtitle details for '{language}': {len(subtitle_info)} found")
             return {
                 "has_subtitle": len(subtitle_info) > 0,
                 "subtitle_count": len(subtitle_info),
@@ -368,7 +392,7 @@ class PlexClient:
                     for stream in part.streams:
                         if stream.streamType != 3:
                             continue
-                        if stream.languageCode != language:
+                        if not self._stream_matches_language(stream, language):
                             continue
 
                         codec = getattr(stream, "codec", "") or ""
