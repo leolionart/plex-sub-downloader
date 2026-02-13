@@ -94,6 +94,39 @@ class TelegramClient:
             logger.error(f"Failed to send Telegram message: {e}")
             return False
 
+    async def notify_processing_started(
+        self,
+        title: str,
+        language: str,
+    ) -> None:
+        """Notify khi bắt đầu xử lý subtitle cho media mới."""
+        message = (
+            f"🎬 *New Media Detected*\n\n"
+            f"📺 *Title:* {title}\n"
+            f"🌍 *Language:* {language}\n"
+            f"🔍 *Status:* Searching subtitle..."
+        )
+        await self.send_message(message, disable_notification=True)
+
+    async def notify_subtitle_found(
+        self,
+        title: str,
+        subtitle_name: str,
+        language: str,
+        quality: str,
+        total_results: int,
+    ) -> None:
+        """Notify khi tìm thấy subtitle."""
+        message = (
+            f"🔎 *Subtitle Found*\n\n"
+            f"📺 *Title:* {title}\n"
+            f"🌍 *Language:* {language}\n"
+            f"📄 *Best match:* `{subtitle_name}`\n"
+            f"⭐ *Quality:* {quality}\n"
+            f"📊 *Results:* {total_results} subtitle(s)"
+        )
+        await self.send_message(message, disable_notification=True)
+
     async def notify_subtitle_downloaded(
         self,
         title: str,
@@ -101,15 +134,14 @@ class TelegramClient:
         language: str,
         quality: str,
     ) -> None:
-        """Notify về subtitle download thành công."""
-        message = f"""
-✅ *Subtitle Downloaded*
-
-📺 *Title:* {title}
-🌍 *Language:* {language}
-⭐ *Quality:* {quality}
-📄 *File:* `{subtitle_name}`
-"""
+        """Notify về subtitle download và upload thành công."""
+        message = (
+            f"✅ *Subtitle Uploaded to Plex*\n\n"
+            f"📺 *Title:* {title}\n"
+            f"🌍 *Language:* {language}\n"
+            f"⭐ *Quality:* {quality}\n"
+            f"📄 *File:* `{subtitle_name}`"
+        )
         await self.send_message(message, disable_notification=True)
 
     async def notify_subtitle_not_found(

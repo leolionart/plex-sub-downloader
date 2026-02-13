@@ -167,6 +167,12 @@ class SubtitleService:
                 }
             log.info(f"[Step 3/7] ✓ Download needed: {reason}")
 
+            # Notify: new media detected
+            await self.telegram_client.notify_processing_started(
+                title=str(metadata),
+                language=self.runtime_config.default_language,
+            )
+
             # Step 4: Search subtitle
             log.info(f"[Step 4/7] Searching {self.runtime_config.default_language} subtitle")
             subtitles = await self._find_subtitles(metadata, log)
@@ -199,6 +205,15 @@ class SubtitleService:
             # Step 5: Quality threshold check on best match
             subtitle = subtitles[0]
             log.info(f"[Step 4/7] ✓ Found {len(subtitles)} subtitle(s). Best: {subtitle.name}", score=subtitle.priority_score)
+
+            # Notify: subtitle found
+            await self.telegram_client.notify_subtitle_found(
+                title=str(metadata),
+                subtitle_name=subtitle.name,
+                language=self.runtime_config.default_language,
+                quality=subtitle.quality_type,
+                total_results=len(subtitles),
+            )
 
             log.info(f"[Step 5/7] Checking quality threshold")
             if not self._meets_quality_threshold(subtitle):
