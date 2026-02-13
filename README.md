@@ -30,24 +30,17 @@ Plex/Tautulli ──webhook──▸ Subtitle Service ──▸ Subsource (tìm 
 - Docker & Docker Compose
 - Plex Media Server
 - Subsource API key — [đăng ký tại subsource.net](https://subsource.net)
-- Plex token — [hướng dẫn lấy token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/)
+- Plex token — [hướng dẫn lấy token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/) (hoặc login qua Setup wizard)
 
 > **Webhook:** Plex yêu cầu Plex Pass để gửi webhook. Nếu không có Plex Pass, dùng [Tautulli](https://tautulli.com/) (miễn phí) làm trung gian.
 
-### 1. Tạo file cấu hình
+### 1. Tạo docker-compose.yml
 
 ```bash
 mkdir plex-subtitle-service && cd plex-subtitle-service
-
-# Tạo .env
-cat > .env << 'EOF'
-PLEX_URL=http://192.168.1.100:32400
-PLEX_TOKEN=your-plex-token
-SUBSOURCE_API_KEY=your-subsource-key
-EOF
 ```
 
-### 2. Tạo docker-compose.yml
+Tạo file `docker-compose.yml`:
 
 ```yaml
 services:
@@ -57,9 +50,8 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
-    env_file: .env
     volumes:
-      - subtitle-temp:/tmp/plex-subtitles
+      - ./data:/app/data
 
   # Optional: Redis cache (giảm API calls)
   redis:
@@ -68,20 +60,26 @@ services:
     restart: unless-stopped
     command: redis-server --appendonly yes
     volumes:
-      - redis-data:/data
-
-volumes:
-  subtitle-temp:
-  redis-data:
+      - ./data/redis:/data
 ```
 
-### 3. Khởi chạy
+### 2. Khởi chạy
 
 ```bash
 docker compose up -d
 ```
 
-Mở `http://<ip-máy>:8000/setup` để hoàn tất cấu hình qua Web UI.
+### 3. Cấu hình qua Web UI
+
+Mở `http://<ip-máy>:8000/setup` — wizard sẽ hướng dẫn cấu hình:
+
+1. **Kết nối Plex** — login bằng Plex account hoặc nhập URL + token thủ công
+2. **Subsource API** — nhập API key
+3. **OpenAI Translation** — (tùy chọn) API key và model để dịch sub
+4. **Notifications** — (tùy chọn) Telegram bot token và chat ID
+5. **Cache** — (tùy chọn) Redis URL
+
+Toàn bộ cấu hình được lưu tại `./data/config.json` trong thư mục triển khai.
 
 ### 4. Cấu hình webhook
 
@@ -133,52 +131,31 @@ Service có 4 trang web tại `http://<ip>:8000`:
 | Translation | `/translation` | Xem và duyệt các bản dịch đang chờ (khi bật approval mode) |
 | Logs | `/logs` | Xem log real-time với filter và search |
 
-## Cấu hình
+## Lưu trữ dữ liệu
 
-Cấu hình qua biến môi trường hoặc Web UI Setup (`/setup`).
+Toàn bộ dữ liệu nằm trong thư mục `./data` cạnh `docker-compose.yml`:
 
-### Bắt buộc
+```
+plex-subtitle-service/
+├── docker-compose.yml
+└── data/
+    ├── config.json          ← cấu hình service (từ Setup wizard)
+    └── redis/               ← Redis data (cache)
+```
 
-| Biến | Mô tả |
-|------|-------|
-| `PLEX_URL` | URL Plex server (e.g., `http://192.168.1.100:32400`) |
-| `PLEX_TOKEN` | Plex authentication token |
-| `SUBSOURCE_API_KEY` | Subsource API key |
+Backup: chỉ cần copy thư mục `data/`. Di chuyển máy: copy cả thư mục `plex-subtitle-service/`.
 
-### Tùy chọn
+## Biến môi trường (nâng cao)
+
+Cấu hình chính được quản lý qua Web UI. Các biến môi trường dưới đây chỉ dành cho infrastructure — hiếm khi cần thay đổi:
 
 | Biến | Mặc định | Mô tả |
 |------|----------|-------|
-| `DEFAULT_LANGUAGE` | `vi` | Ngôn ngữ subtitle cần tải |
+| `APP_PORT` | `8000` | Port bind của service |
 | `LOG_LEVEL` | `INFO` | Mức log (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
-| `WEBHOOK_SECRET` | — | Secret để xác thực webhook (header `X-Webhook-Secret`) |
 | `MAX_RETRIES` | `3` | Số lần retry khi API lỗi |
 | `RETRY_DELAY` | `2` | Delay giữa các lần retry (giây) |
-
-### Telegram (thông báo)
-
-| Biến | Mô tả |
-|------|-------|
-| `TELEGRAM_BOT_TOKEN` | Bot token từ [@BotFather](https://t.me/BotFather) |
-| `TELEGRAM_CHAT_ID` | Chat ID nhận thông báo |
-
-### Redis (cache)
-
-| Biến | Mặc định | Mô tả |
-|------|----------|-------|
-| `CACHE_ENABLED` | `true` | Bật/tắt cache |
-| `REDIS_URL` | `redis://redis:6379/0` | Redis connection URL |
-| `CACHE_TTL_SECONDS` | `3600` | Thời gian cache (giây) |
-
-### OpenAI Translation (dịch thuật)
-
-| Biến | Mặc định | Mô tả |
-|------|----------|-------|
-| `TRANSLATION_ENABLED` | `false` | Bật fallback dịch khi không tìm được sub |
-| `OPENAI_API_KEY` | — | OpenAI API key |
-| `OPENAI_MODEL` | `gpt-4o-mini` | Model dùng để dịch |
-| `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Base URL (hỗ trợ proxy/custom endpoint) |
-| `TRANSLATION_REQUIRES_APPROVAL` | `true` | Yêu cầu duyệt trước khi dịch |
+| `CONFIG_FILE` | `data/config.json` | Đường dẫn file config |
 
 ## Cách hoạt động
 
@@ -208,7 +185,6 @@ pip install poetry
 poetry install
 
 # Chạy dev server
-cp .env.example .env  # rồi sửa values
 poetry run uvicorn app.main:app --reload --port 8000
 
 # Tests
@@ -224,7 +200,6 @@ poetry run mypy app/
 
 ```bash
 docker build -t plex-subtitle-service .
-docker compose up -d
 ```
 
 > Trong `docker-compose.yml`, uncomment phần `build:` và comment `image:` để dùng bản build local.

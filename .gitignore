@@ -68,5 +68,8 @@ dmypy.json
 # Ruff
 .ruff_cache/
 
+# Runtime data
+data/
+
 # Playwright MCP
 .playwright-mcp/
