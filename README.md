@@ -1,347 +1,257 @@
 # Plex Subtitle Service
 
-🇻🇳 **Tự động tải và upload phụ đề tiếng Việt cho Plex Media Server**
+Tự động tải phụ đề tiếng Việt cho Plex Media Server. Nhận webhook từ Plex hoặc Tautulli, tìm subtitle trên Subsource, upload thẳng vào Plex — không cần mount thư viện media.
 
-Service chạy ngầm, lắng nghe webhook từ Plex, tự động tìm và upload subtitle tiếng Việt từ Subsource khi có media mới.
-
-## ✨ Features
-
-- ✅ **Tự động hoàn toàn** - Không cần thao tác thủ công
-- ✅ **Upload trực tiếp** - Không cần mount thư viện media
-- ✅ **Ưu tiên chất lượng** - Retail > Translated > AI subtitles
-- ✅ **Multi-language** - Hỗ trợ nhiều ngôn ngữ subtitle
-- ✅ **Smart duplicate detection** - Tránh download trùng lặp
-- ✅ **Web UI configuration** - Giao diện cài đặt không cần login
-- ✅ **Async & Fast** - FastAPI với asyncio
-- ✅ **Docker ready** - Deploy trong 2 phút
-- ✅ **Dễ mở rộng** - Provider pattern cho nhiều nguồn subtitle
-
-### 🎉 **NEW in v0.3.0:**
-- ✅ **📱 Telegram Notifications** - Alerts cho downloads, errors, translations
-- ✅ **🚀 Redis Cache** - Giảm 80% API calls với caching
-- ✅ **🤖 OpenAI Translation** - Auto-translate EN → VI khi không tìm thấy subtitle
-
-> **See:** [NEW_FEATURES.md](NEW_FEATURES.md) for detailed setup guide
-
-## 🏗️ Architecture
+Khi không tìm được sub tiếng Việt, service có thể tự dịch từ sub tiếng Anh bằng OpenAI.
 
 ```
-Plex Server → Webhook → Subtitle Service → Subsource API
-                            ↓
-                      Upload subtitle ← Download .srt
+Plex/Tautulli ──webhook──▸ Subtitle Service ──▸ Subsource (tìm + tải sub)
+                                │                       │
+                                ▾                       ▾
+                          Plex API (upload)      OpenAI (dịch EN→VI)
 ```
 
-**Stack:**
-- Python 3.11+ với FastAPI
-- python-plexapi cho Plex integration
-- httpx cho async HTTP requests
-- Pydantic cho data validation
-- Tenacity cho retry logic
+## Tính năng
 
-## 🚀 Quick Start
+- **Tự động hoàn toàn** — subtitle được tải và upload khi có media mới hoặc khi bấm play
+- **Dịch thuật AI** — fallback dịch EN → VI bằng OpenAI khi không tìm được sub Việt
+- **Web UI** — setup wizard, cài đặt, quản lý dịch thuật, xem log real-time
+- **Telegram notifications** — thông báo khi tìm thấy, tải xong, hoặc lỗi
+- **Redis cache** — cache kết quả tìm kiếm, giảm API calls
+- **Multi-format** — hỗ trợ .srt, .vtt, .ass, .ssa, .sub (tự convert về SRT)
+- **Download retry** — thử nhiều subtitle candidates nếu bản đầu lỗi
+- **Ưu tiên chất lượng** — Retail > Translated > AI, có threshold tùy chỉnh
+- **Multi-platform Docker** — image sẵn cho cả amd64 và arm64
 
-### 1. Prerequisites
+## Cài đặt
 
-- Plex Media Server (Plex Pass required cho webhooks)
+### Yêu cầu
+
 - Docker & Docker Compose
-- Subsource API key ([đăng ký tại đây](https://subsource.net/api-docs))
-- Plex authentication token ([lấy token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/))
+- Plex Media Server
+- Subsource API key — [đăng ký tại subsource.net](https://subsource.net)
+- Plex token — [hướng dẫn lấy token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/)
 
-### 2. Setup
+> **Webhook:** Plex yêu cầu Plex Pass để gửi webhook. Nếu không có Plex Pass, dùng [Tautulli](https://tautulli.com/) (miễn phí) làm trung gian.
+
+### 1. Tạo file cấu hình
 
 ```bash
-# Clone repository
-git clone <repo-url>
-cd plex-subtitle-service
+mkdir plex-subtitle-service && cd plex-subtitle-service
 
-# Copy environment template
-cp .env.example .env
-
-# Chỉnh sửa .env với values của bạn
-nano .env
-```
-
-**Cấu hình `.env`:**
-
-```env
+# Tạo .env
+cat > .env << 'EOF'
 PLEX_URL=http://192.168.1.100:32400
-PLEX_TOKEN=your-plex-token-here
-SUBSOURCE_API_KEY=your-subsource-api-key-here
-DEFAULT_LANGUAGE=vi
-LOG_LEVEL=INFO
+PLEX_TOKEN=your-plex-token
+SUBSOURCE_API_KEY=your-subsource-key
+EOF
 ```
 
-### 3. Deploy với Docker
+### 2. Tạo docker-compose.yml
+
+```yaml
+services:
+  subtitle-service:
+    image: ghcr.io/leolionart/plex-sub-downloader:latest
+    container_name: plex-subtitle-service
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file: .env
+    volumes:
+      - subtitle-temp:/tmp/plex-subtitles
+
+  # Optional: Redis cache (giảm API calls)
+  redis:
+    image: redis:7-alpine
+    container_name: plex-subtitle-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+
+volumes:
+  subtitle-temp:
+  redis-data:
+```
+
+### 3. Khởi chạy
 
 ```bash
-# Build và start service
-docker-compose up -d
-
-# Check logs
-docker-compose logs -f subtitle-service
-
-# Health check
-curl http://localhost:9000/health
+docker compose up -d
 ```
 
-### 4. Cấu hình Plex Webhook
+Mở `http://<ip-máy>:8000/setup` để hoàn tất cấu hình qua Web UI.
 
-**Trong Plex Web UI:**
+### 4. Cấu hình webhook
 
-1. Settings → Webhooks → Add Webhook
-2. URL: `http://<subtitle-service-host>:9000/webhook`
-   - Nếu cùng Docker network: `http://subtitle-service:9000/webhook`
-   - Nếu khác máy: `http://192.168.1.x:9000/webhook`
-3. (Optional) Nếu set `WEBHOOK_SECRET`, thêm header:
-   - Header: `X-Webhook-Secret`
-   - Value: `<your-secret>`
+#### Plex (cần Plex Pass)
 
-**Test webhook:**
+1. Plex Web → Settings → Webhooks → Add Webhook
+2. URL: `http://<ip-máy-chạy-service>:8000/webhook`
 
-Thêm một video mới vào Plex library → Check logs để thấy workflow:
+#### Tautulli (miễn phí)
 
-```
-INFO - Received webhook
-INFO - Webhook event: library.new
-INFO - Fetched video: Breaking Bad S01E01
-INFO - Searching subtitles...
-INFO - Found 5 subtitles, selected best
-INFO - Downloading subtitle...
-INFO - Uploading subtitle to Plex
-INFO - ✓ Subtitle workflow completed successfully
+1. Tautulli → Settings → Notification Agents → Add → Webhook
+2. URL: `http://<ip-máy-chạy-service>:8000/webhook`
+3. Method: `POST`
+4. Triggers: bật **Recently Added** và/hoặc **Playback Start**
+5. Tab Data → Recently Added → paste:
+
+```json
+{
+  "event": "library.new",
+  "rating_key": "{rating_key}",
+  "media_type": "{media_type}"
+}
 ```
 
-## 📖 Usage
+### 5. Auto-update với Watchtower (tùy chọn)
 
-### Automatic Mode (Recommended)
+Thêm Watchtower vào docker-compose để tự động cập nhật khi có version mới:
 
-Service tự động chạy khi có event từ Plex:
-- ✅ `library.new` - Media mới được thêm
-- ✅ `library.on.deck` - Media sẵn sàng xem
+```yaml
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --interval 300 plex-subtitle-service
+```
 
-### Manual Trigger (API)
+Watchtower sẽ kiểm tra GHCR mỗi 5 phút và tự restart container khi có image mới.
+
+## Web UI
+
+Service có 4 trang web tại `http://<ip>:8000`:
+
+| Trang | Đường dẫn | Mô tả |
+|-------|-----------|-------|
+| Settings | `/` | Cài đặt hành vi subtitle (auto-download, quality threshold, replace) |
+| Setup | `/setup` | Wizard cấu hình Plex, Subsource, OpenAI, Telegram, Redis |
+| Translation | `/translation` | Xem và duyệt các bản dịch đang chờ (khi bật approval mode) |
+| Logs | `/logs` | Xem log real-time với filter và search |
+
+## Cấu hình
+
+Cấu hình qua biến môi trường hoặc Web UI Setup (`/setup`).
+
+### Bắt buộc
+
+| Biến | Mô tả |
+|------|-------|
+| `PLEX_URL` | URL Plex server (e.g., `http://192.168.1.100:32400`) |
+| `PLEX_TOKEN` | Plex authentication token |
+| `SUBSOURCE_API_KEY` | Subsource API key |
+
+### Tùy chọn
+
+| Biến | Mặc định | Mô tả |
+|------|----------|-------|
+| `DEFAULT_LANGUAGE` | `vi` | Ngôn ngữ subtitle cần tải |
+| `LOG_LEVEL` | `INFO` | Mức log (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
+| `WEBHOOK_SECRET` | — | Secret để xác thực webhook (header `X-Webhook-Secret`) |
+| `MAX_RETRIES` | `3` | Số lần retry khi API lỗi |
+| `RETRY_DELAY` | `2` | Delay giữa các lần retry (giây) |
+
+### Telegram (thông báo)
+
+| Biến | Mô tả |
+|------|-------|
+| `TELEGRAM_BOT_TOKEN` | Bot token từ [@BotFather](https://t.me/BotFather) |
+| `TELEGRAM_CHAT_ID` | Chat ID nhận thông báo |
+
+### Redis (cache)
+
+| Biến | Mặc định | Mô tả |
+|------|----------|-------|
+| `CACHE_ENABLED` | `true` | Bật/tắt cache |
+| `REDIS_URL` | `redis://redis:6379/0` | Redis connection URL |
+| `CACHE_TTL_SECONDS` | `3600` | Thời gian cache (giây) |
+
+### OpenAI Translation (dịch thuật)
+
+| Biến | Mặc định | Mô tả |
+|------|----------|-------|
+| `TRANSLATION_ENABLED` | `false` | Bật fallback dịch khi không tìm được sub |
+| `OPENAI_API_KEY` | — | OpenAI API key |
+| `OPENAI_MODEL` | `gpt-4o-mini` | Model dùng để dịch |
+| `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Base URL (hỗ trợ proxy/custom endpoint) |
+| `TRANSLATION_REQUIRES_APPROVAL` | `true` | Yêu cầu duyệt trước khi dịch |
+
+## Cách hoạt động
+
+Xem [HOW_IT_WORKS.md](HOW_IT_WORKS.md) cho sơ đồ chi tiết toàn bộ luồng xử lý.
+
+Tóm tắt:
+
+1. Nhận webhook event (`library.new`, `media.play`)
+2. Lấy metadata từ Plex (title, year, IMDb ID)
+3. Kiểm tra đã có subtitle chưa (skip nếu có, tùy setting)
+4. Tìm subtitle tiếng Việt trên Subsource
+5. Nếu không tìm được + translation enabled → dịch từ sub tiếng Anh
+6. Kiểm tra quality threshold
+7. Download subtitle (retry với candidates khác nếu lỗi)
+8. Upload lên Plex
+9. Gửi Telegram notification
+
+## Development
 
 ```bash
-# Manually trigger subtitle download cho ratingKey
-curl -X POST http://localhost:9000/webhook \
-  -H "Content-Type: application/json" \
-  -d '{"event": "library.new", "rating_key": "12345"}'
-```
-
-### API Documentation
-
-FastAPI tự động generate OpenAPI docs:
-- Swagger UI: http://localhost:9000/docs
-- ReDoc: http://localhost:9000/redoc
-
-## 🔧 Configuration
-
-### Environment Variables
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `PLEX_URL` | ✅ | - | Plex server URL |
-| `PLEX_TOKEN` | ✅ | - | Plex auth token |
-| `SUBSOURCE_API_KEY` | ✅ | - | Subsource API key |
-| `SUBSOURCE_BASE_URL` | ❌ | `https://api.subsource.net/api` | API base URL |
-| `DEFAULT_LANGUAGE` | ❌ | `vi` | Subtitle language |
-| `WEBHOOK_SECRET` | ❌ | - | Webhook authentication |
-| `LOG_LEVEL` | ❌ | `INFO` | Logging level |
-| `MAX_RETRIES` | ❌ | `3` | Max API retries |
-| `RETRY_DELAY` | ❌ | `2` | Initial retry delay (seconds) |
-
-### Subtitle Priority
-
-Service tự động chọn subtitle tốt nhất theo thứ tự:
-
-1. **Retail** - Official subtitles từ BluRay/WEB-DL
-2. **Translated** - Fan-translated subtitles
-3. **AI** - AI-generated subtitles
-
-Trong cùng category, ưu tiên theo:
-- Rating cao hơn
-- Download count nhiều hơn
-
-## 🛠️ Development
-
-### Local Setup
-
-```bash
-# Install Poetry
-curl -sSL https://install.python-poetry.org | python3 -
+# Clone
+git clone https://github.com/leolionart/plex-sub-downloader.git
+cd plex-sub-downloader
 
 # Install dependencies
+pip install poetry
 poetry install
 
-# Activate virtual environment
-poetry shell
+# Chạy dev server
+cp .env.example .env  # rồi sửa values
+poetry run uvicorn app.main:app --reload --port 8000
 
-# Run development server
-python -m app.main
-
-# Hoặc với uvicorn reload
-uvicorn app.main:app --reload --port 9000
-```
-
-### Run Tests
-
-```bash
-# Run all tests
+# Tests
 poetry run pytest
-
-# With coverage
-poetry run pytest --cov=app --cov-report=html
-
-# Run specific test file
-poetry run pytest tests/test_plex_client.py -v
-```
-
-### Code Quality
-
-```bash
-# Format code
-poetry run black app/ tests/
+poetry run pytest --cov=app
 
 # Lint
-poetry run ruff check app/ tests/
-
-# Type check
+poetry run ruff check app/
 poetry run mypy app/
 ```
 
-## 📁 Project Structure
+### Build Docker image locally
 
-```
-plex-subtitle-service/
-├── app/
-│   ├── clients/
-│   │   ├── plex_client.py          # Plex API wrapper
-│   │   └── subsource_client.py     # Subsource API client
-│   ├── models/
-│   │   ├── webhook.py              # Webhook payload models
-│   │   └── subtitle.py             # Subtitle models
-│   ├── services/
-│   │   └── subtitle_service.py     # Business logic
-│   ├── utils/
-│   │   └── logger.py               # Logging utilities
-│   ├── config.py                   # Configuration
-│   └── main.py                     # FastAPI app
-├── tests/                          # Unit tests
-├── Dockerfile                      # Docker image
-├── docker-compose.yml              # Docker Compose config
-├── pyproject.toml                  # Poetry dependencies
-└── README.md
-```
-
-## 🔍 Troubleshooting
-
-### Webhook không hoạt động
-
-**Check:**
-1. Plex có thể reach được service URL?
-   ```bash
-   # Từ Plex server
-   curl http://subtitle-service:9000/health
-   ```
-2. Firewall có block port 9000?
-3. Docker network có đúng không?
-4. Webhook secret có khớp không?
-
-**Logs:**
 ```bash
-docker-compose logs -f subtitle-service
+docker build -t plex-subtitle-service .
+docker compose up -d
 ```
 
-### Subtitle không tìm thấy
+> Trong `docker-compose.yml`, uncomment phần `build:` và comment `image:` để dùng bản build local.
 
-**Có thể:**
-- Media chưa có IMDb/TMDb ID → Plex cần refresh metadata
-- Subsource chưa có subtitle cho media này
-- Search query không chính xác
+## Troubleshooting
 
-**Check metadata:**
-```python
-from plexapi.server import PlexServer
-plex = PlexServer('http://localhost:32400', 'token')
-video = plex.fetchItem(12345)
-print(video.guids)  # Check external IDs
-```
+**Webhook không hoạt động:**
+- Kiểm tra service có chạy: `curl http://<ip>:8000/health`
+- Kiểm tra firewall không block port 8000
+- Xem log tại `/logs` hoặc `docker compose logs -f subtitle-service`
+- Nếu dùng Tautulli: kiểm tra JSON payload đúng format
 
-### Upload subtitle fail
+**Không tìm được subtitle:**
+- Media cần có IMDb/TMDb ID — refresh metadata trong Plex nếu thiếu
+- Subsource có thể chưa có sub cho media này
+- Thử hạ `min_quality_threshold` trong Settings
 
-**Kiểm tra:**
-- Plex token có quyền write?
-- File .srt có valid format?
-- Disk space còn trống?
+**Upload lỗi:**
+- Plex token cần quyền write
+- Set `LOG_LEVEL=DEBUG` để xem chi tiết
 
-**Debug:**
-Set `LOG_LEVEL=DEBUG` trong `.env` để xem chi tiết.
+## Credits
 
-## 🗺️ Roadmap
+Rewrite từ [mjvotaw/plex-sub-downloader](https://github.com/mjvotaw/plex-sub-downloader).
 
-### v0.4.0 (Next)
-- [ ] **Web UI improvements** - Translation approval UI, manual search
-- [ ] **Database** - SQLite tracking history, persistent settings
-- [ ] **Scheduled tasks** - Daily stats, cache cleanup
-- [ ] **More providers** - OpenSubtitles, SubDL integration
+Sử dụng [FastAPI](https://fastapi.tiangolo.com/), [python-plexapi](https://github.com/pkkid/python-plexapi), [Subsource](https://subsource.net/), [OpenAI API](https://platform.openai.com/).
 
-### Future
-- [ ] **Advanced features** - Subtitle editing, timing fix, encoding conversion
-- [ ] **Statistics dashboard** - Charts, graphs, trends
-- [ ] **Notifications** - Discord webhooks, Email alerts
-- [ ] **Mobile app** - Companion app cho iOS/Android
+## License
 
-## 🤝 Contributing
-
-Contributions welcome! Please:
-
-1. Fork repository
-2. Create feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open Pull Request
-
-## 📄 License
-
-MIT License - xem file `LICENSE` để biết thêm chi tiết.
-
-## 🙏 Acknowledgments
-
-**This project is a complete rewrite inspired by:**
-- [mjvotaw/plex-sub-downloader](https://github.com/mjvotaw/plex-sub-downloader) - Original concept and inspiration
-
-**Built with:**
-- [python-plexapi](https://github.com/pkkid/python-plexapi) - Plex API wrapper
-- [FastAPI](https://fastapi.tiangolo.com/) - Modern async Python web framework
-- [Subsource](https://subsource.net/) - Vietnamese subtitle provider
-- [Pydantic](https://docs.pydantic.dev/) - Data validation
-
-**Why a rewrite?**
-
-The original `plex-sub-downloader` by mjvotaw is an excellent tool but:
-- ❌ No longer maintained (archived)
-- ❌ Flask-based (synchronous, slower)
-- ❌ OpenSubtitles only
-- ❌ Single language support
-- ❌ No Web UI
-- ❌ Basic duplicate detection
-
-This v2 brings:
-- ✅ Modern FastAPI (async, 10x faster)
-- ✅ Multi-language support
-- ✅ Subsource provider (Vietnamese focus)
-- ✅ Web UI configuration
-- ✅ Smart duplicate detection
-- ✅ Extensible provider pattern
-- ✅ Active development
-
-## 📞 Support
-
-- GitHub Issues: [Report bugs](https://github.com/leolionart/plex-sub-downloader/issues)
-- Discussions: [Ask questions](https://github.com/leolionart/plex-sub-downloader/discussions)
-
----
-
-**Forked from:** [mjvotaw/plex-sub-downloader](https://github.com/mjvotaw/plex-sub-downloader)
-**Rewritten by:** leolionart with Claude Opus 4.6
-Made with ❤️ for multilingual Plex users 🌍
+MIT
