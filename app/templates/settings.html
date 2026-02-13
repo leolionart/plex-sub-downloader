@@ -1,468 +1,246 @@
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Plex Subtitle Service - Settings</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+{% extends "base.html" %}
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
+{% block title %}Settings - Plex Subtitle Service{% endblock %}
+{% block nav_settings %}active{% endblock %}
+{% block page_title %}Settings{% endblock %}
+{% block page_description %}Cấu hình subtitle download và xử lý tự động{% endblock %}
 
-        .container {
-            max-width: 900px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 16px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            overflow: hidden;
-        }
+{% block content %}
+<!-- Stats -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-value">{{ stats.total_downloads }}</div>
+        <div class="stat-label">Subtitles Downloaded</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ stats.total_skipped }}</div>
+        <div class="stat-label">Tasks Skipped</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ stats.success_rate }}%</div>
+        <div class="stat-label">Success Rate</div>
+    </div>
+</div>
 
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 30px;
-            text-align: center;
-        }
-
-        .header h1 {
-            font-size: 32px;
-            margin-bottom: 10px;
-        }
-
-        .header p {
-            opacity: 0.9;
-            font-size: 16px;
-        }
-
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            padding: 30px;
-            background: #f8f9fa;
-            border-bottom: 2px solid #e9ecef;
-        }
-
-        .stat-card {
-            background: white;
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-            text-align: center;
-        }
-
-        .stat-card .number {
-            font-size: 36px;
-            font-weight: bold;
-            color: #667eea;
-            margin-bottom: 5px;
-        }
-
-        .stat-card .label {
-            color: #6c757d;
-            font-size: 14px;
-        }
-
-        .content {
-            padding: 30px;
-        }
-
-        .section {
-            margin-bottom: 30px;
-        }
-
-        .section-title {
-            font-size: 20px;
-            font-weight: 600;
-            color: #2d3748;
-            margin-bottom: 15px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #e9ecef;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        .form-group label {
-            display: block;
-            font-weight: 500;
-            color: #4a5568;
-            margin-bottom: 8px;
-            font-size: 14px;
-        }
-
-        .form-group input[type="text"],
-        .form-group select {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #e2e8f0;
-            border-radius: 8px;
-            font-size: 14px;
-            transition: border-color 0.3s;
-        }
-
-        .form-group input[type="text"]:focus,
-        .form-group select:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        .checkbox-group {
-            display: flex;
-            align-items: center;
-            padding: 12px;
-            background: #f7fafc;
-            border-radius: 8px;
-            margin-bottom: 10px;
-        }
-
-        .checkbox-group input[type="checkbox"] {
-            width: 20px;
-            height: 20px;
-            margin-right: 12px;
-            cursor: pointer;
-        }
-
-        .checkbox-group label {
-            flex: 1;
-            cursor: pointer;
-            margin: 0;
-            font-weight: 400;
-        }
-
-        .checkbox-group .description {
-            font-size: 12px;
-            color: #718096;
-            display: block;
-            margin-top: 4px;
-        }
-
-        .button-group {
-            display: flex;
-            gap: 15px;
-            margin-top: 30px;
-        }
-
-        .btn {
-            padding: 14px 32px;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            flex: 1;
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 16px rgba(102, 126, 234, 0.4);
-        }
-
-        .btn-secondary {
-            background: #e2e8f0;
-            color: #4a5568;
-        }
-
-        .btn-secondary:hover {
-            background: #cbd5e0;
-        }
-
-        .alert {
-            padding: 15px 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            display: none;
-        }
-
-        .alert-success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-
-        .alert-error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-
-        .language-tags {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-top: 10px;
-        }
-
-        .language-tag {
-            background: #667eea;
-            color: white;
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 13px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .language-tag .remove {
-            cursor: pointer;
-            font-weight: bold;
-            opacity: 0.8;
-        }
-
-        .language-tag .remove:hover {
-            opacity: 1;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🎬 Plex Subtitle Service</h1>
-            <p>Tự động tải subtitle tiếng Việt cho Plex Media Server</p>
+<form id="settings-form">
+    <!-- Language Settings -->
+    <div class="card" style="margin-bottom: 20px;">
+        <div class="card-header">
+            <h2>Language Settings</h2>
         </div>
-
-        <div class="stats">
-            <div class="stat-card">
-                <div class="number">{{ stats.total_downloads }}</div>
-                <div class="label">Subtitles Downloaded</div>
+        <div class="card-body">
+            <div class="form-group">
+                <label for="language-input">Subtitle Languages</label>
+                <input type="text" id="language-input" class="form-input"
+                       placeholder="Nhập language code (vd: vi, en, ko) rồi nhấn Enter">
+                <div class="form-hint">Nhấn Enter để thêm ngôn ngữ. Click x để xóa.</div>
+                <div id="language-tags" style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px;"></div>
+                <input type="hidden" name="languages" id="languages-hidden">
             </div>
-            <div class="stat-card">
-                <div class="number">{{ stats.total_skipped }}</div>
-                <div class="label">Tasks Skipped</div>
-            </div>
-            <div class="stat-card">
-                <div class="number">{{ stats.success_rate }}%</div>
-                <div class="label">Success Rate</div>
-            </div>
-        </div>
-
-        <div class="content">
-            <div id="alert" class="alert"></div>
-
-            <form id="settings-form">
-                <!-- Language Settings -->
-                <div class="section">
-                    <h3 class="section-title">🌍 Language Settings</h3>
-
-                    <div class="form-group">
-                        <label>Subtitle Languages</label>
-                        <input type="text" id="language-input" placeholder="Nhập language code (ví dụ: vi, en, ko) và Enter">
-                        <div class="language-tags" id="language-tags"></div>
-                        <input type="hidden" name="languages" id="languages-hidden">
-                    </div>
-                </div>
-
-                <!-- Download Conditions -->
-                <div class="section">
-                    <h3 class="section-title">⚙️ Download Conditions</h3>
-
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="auto_download_on_add" name="auto_download_on_add" checked>
-                        <label for="auto_download_on_add">
-                            Auto-download when media added
-                            <span class="description">Tự động tải subtitle khi thêm phim/tập mới vào thư viện</span>
-                        </label>
-                    </div>
-
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="auto_download_on_play" name="auto_download_on_play">
-                        <label for="auto_download_on_play">
-                            Auto-download on playback
-                            <span class="description">Tải subtitle khi user bắt đầu xem (nếu chưa có)</span>
-                        </label>
-                    </div>
-                </div>
-
-                <!-- Duplicate Prevention -->
-                <div class="section">
-                    <h3 class="section-title">🔄 Duplicate Prevention</h3>
-
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="skip_if_has_subtitle" name="skip_if_has_subtitle" checked>
-                        <label for="skip_if_has_subtitle">
-                            Skip if subtitle exists
-                            <span class="description">Bỏ qua nếu đã có subtitle cùng ngôn ngữ</span>
-                        </label>
-                    </div>
-
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="replace_existing" name="replace_existing">
-                        <label for="replace_existing">
-                            Replace existing subtitles
-                            <span class="description">Thay thế subtitle cũ bằng subtitle mới (nếu quality tốt hơn)</span>
-                        </label>
-                    </div>
-
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="skip_forced_subtitles" name="skip_forced_subtitles" checked>
-                        <label for="skip_forced_subtitles">
-                            Skip forced subtitles
-                            <span class="description">Không download nếu đã có forced subtitle</span>
-                        </label>
-                    </div>
-
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="skip_if_embedded" name="skip_if_embedded" checked>
-                        <label for="skip_if_embedded">
-                            Skip embedded subtitles
-                            <span class="description">Không download nếu video có embedded subtitle (PGS, VobSub)</span>
-                        </label>
-                    </div>
-                </div>
-
-                <!-- Quality Settings -->
-                <div class="section">
-                    <h3 class="section-title">⭐ Quality Settings</h3>
-
-                    <div class="form-group">
-                        <label for="min_quality_threshold">Minimum Quality Threshold</label>
-                        <select id="min_quality_threshold" name="min_quality_threshold">
-                            <option value="any">Any quality</option>
-                            <option value="translated" selected>Translated or better</option>
-                            <option value="retail">Retail only</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="button-group">
-                    <button type="submit" class="btn btn-primary">💾 Save Settings</button>
-                    <button type="button" class="btn btn-secondary" onclick="loadSettings()">🔄 Reset</button>
-                </div>
-            </form>
         </div>
     </div>
 
-    <script>
-        let languages = {{ languages | tojson }};
+    <!-- Download Conditions -->
+    <div class="card" style="margin-bottom: 20px;">
+        <div class="card-header">
+            <h2>Download Conditions</h2>
+        </div>
+        <div class="card-body">
+            <label class="toggle-group" for="auto_download_on_add">
+                <div class="toggle-switch">
+                    <input type="checkbox" id="auto_download_on_add" name="auto_download_on_add" checked>
+                    <span class="toggle-slider"></span>
+                </div>
+                <div class="toggle-label">
+                    <div class="toggle-title">Auto-download when media added</div>
+                    <div class="toggle-desc">Tự động tải subtitle khi thêm phim/tập mới vào thư viện</div>
+                </div>
+            </label>
 
-        // Render language tags
-        function renderLanguageTags() {
-            const container = document.getElementById('language-tags');
-            container.innerHTML = '';
+            <label class="toggle-group" for="auto_download_on_play">
+                <div class="toggle-switch">
+                    <input type="checkbox" id="auto_download_on_play" name="auto_download_on_play">
+                    <span class="toggle-slider"></span>
+                </div>
+                <div class="toggle-label">
+                    <div class="toggle-title">Auto-download on playback</div>
+                    <div class="toggle-desc">Tải subtitle khi user bắt đầu xem (nếu chưa có)</div>
+                </div>
+            </label>
+        </div>
+    </div>
 
-            languages.forEach(lang => {
-                const tag = document.createElement('div');
-                tag.className = 'language-tag';
-                tag.innerHTML = `
-                    <span>${lang}</span>
-                    <span class="remove" onclick="removeLanguage('${lang}')">✕</span>
-                `;
-                container.appendChild(tag);
+    <!-- Duplicate Prevention -->
+    <div class="card" style="margin-bottom: 20px;">
+        <div class="card-header">
+            <h2>Duplicate Prevention</h2>
+        </div>
+        <div class="card-body">
+            <label class="toggle-group" for="skip_if_has_subtitle">
+                <div class="toggle-switch">
+                    <input type="checkbox" id="skip_if_has_subtitle" name="skip_if_has_subtitle" checked>
+                    <span class="toggle-slider"></span>
+                </div>
+                <div class="toggle-label">
+                    <div class="toggle-title">Skip if subtitle exists</div>
+                    <div class="toggle-desc">Bỏ qua nếu đã có subtitle cùng ngôn ngữ</div>
+                </div>
+            </label>
+
+            <label class="toggle-group" for="replace_existing">
+                <div class="toggle-switch">
+                    <input type="checkbox" id="replace_existing" name="replace_existing">
+                    <span class="toggle-slider"></span>
+                </div>
+                <div class="toggle-label">
+                    <div class="toggle-title">Replace existing subtitles</div>
+                    <div class="toggle-desc">Thay thế subtitle cũ bằng subtitle mới (nếu quality tốt hơn)</div>
+                </div>
+            </label>
+
+            <label class="toggle-group" for="skip_forced_subtitles">
+                <div class="toggle-switch">
+                    <input type="checkbox" id="skip_forced_subtitles" name="skip_forced_subtitles" checked>
+                    <span class="toggle-slider"></span>
+                </div>
+                <div class="toggle-label">
+                    <div class="toggle-title">Skip forced subtitles</div>
+                    <div class="toggle-desc">Không download nếu đã có forced subtitle</div>
+                </div>
+            </label>
+
+            <label class="toggle-group" for="skip_if_embedded">
+                <div class="toggle-switch">
+                    <input type="checkbox" id="skip_if_embedded" name="skip_if_embedded" checked>
+                    <span class="toggle-slider"></span>
+                </div>
+                <div class="toggle-label">
+                    <div class="toggle-title">Skip embedded subtitles</div>
+                    <div class="toggle-desc">Không download nếu video có embedded subtitle (PGS, VobSub)</div>
+                </div>
+            </label>
+        </div>
+    </div>
+
+    <!-- Quality Settings -->
+    <div class="card" style="margin-bottom: 24px;">
+        <div class="card-header">
+            <h2>Quality Settings</h2>
+        </div>
+        <div class="card-body">
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="min_quality_threshold">Minimum Quality Threshold</label>
+                <select id="min_quality_threshold" name="min_quality_threshold" class="form-select">
+                    <option value="any">Any quality</option>
+                    <option value="translated" selected>Translated or better</option>
+                    <option value="retail">Retail only</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="btn-group">
+        <button type="submit" class="btn btn-primary">Save Settings</button>
+        <button type="button" class="btn btn-ghost" onclick="loadSettings()">Reset</button>
+    </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let languages = {{ languages | tojson }};
+
+    function renderLanguageTags() {
+        const container = document.getElementById('language-tags');
+        container.innerHTML = '';
+
+        languages.forEach(lang => {
+            const tag = document.createElement('span');
+            tag.className = 'tag tag-gold';
+            tag.innerHTML = `
+                <span>${lang.toUpperCase()}</span>
+                <span class="tag-remove" onclick="event.stopPropagation(); removeLanguage('${lang}')">&#10005;</span>
+            `;
+            container.appendChild(tag);
+        });
+
+        document.getElementById('languages-hidden').value = JSON.stringify(languages);
+    }
+
+    document.getElementById('language-input').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const input = e.target;
+            const lang = input.value.trim().toLowerCase();
+
+            if (lang && !languages.includes(lang)) {
+                languages.push(lang);
+                renderLanguageTags();
+                input.value = '';
+            }
+        }
+    });
+
+    function removeLanguage(lang) {
+        languages = languages.filter(l => l !== lang);
+        renderLanguageTags();
+    }
+
+    async function loadSettings() {
+        try {
+            const response = await fetch('/api/settings');
+            const data = await response.json();
+            const settings = data.subtitle_settings;
+
+            languages = settings.languages || ['vi'];
+            renderLanguageTags();
+
+            document.getElementById('auto_download_on_add').checked = settings.auto_download_on_add;
+            document.getElementById('auto_download_on_play').checked = settings.auto_download_on_play;
+            document.getElementById('skip_if_has_subtitle').checked = settings.skip_if_has_subtitle;
+            document.getElementById('replace_existing').checked = settings.replace_existing;
+            document.getElementById('skip_forced_subtitles').checked = settings.skip_forced_subtitles;
+            document.getElementById('skip_if_embedded').checked = settings.skip_if_embedded;
+            document.getElementById('min_quality_threshold').value = settings.min_quality_threshold;
+        } catch (error) {
+            showAlert('Error loading settings: ' + error.message, 'error');
+        }
+    }
+
+    document.getElementById('settings-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const formData = new FormData(e.target);
+        const settings = {
+            languages: languages,
+            language_priority: languages,
+            auto_download_on_add: formData.get('auto_download_on_add') === 'on',
+            auto_download_on_play: formData.get('auto_download_on_play') === 'on',
+            skip_if_has_subtitle: formData.get('skip_if_has_subtitle') === 'on',
+            replace_existing: formData.get('replace_existing') === 'on',
+            skip_forced_subtitles: formData.get('skip_forced_subtitles') === 'on',
+            skip_if_embedded: formData.get('skip_if_embedded') === 'on',
+            min_quality_threshold: formData.get('min_quality_threshold'),
+        };
+
+        try {
+            const response = await fetch('/api/settings', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(settings)
             });
 
-            document.getElementById('languages-hidden').value = JSON.stringify(languages);
-        }
-
-        // Add language
-        document.getElementById('language-input').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                const input = e.target;
-                const lang = input.value.trim().toLowerCase();
-
-                if (lang && !languages.includes(lang)) {
-                    languages.push(lang);
-                    renderLanguageTags();
-                    input.value = '';
-                }
+            if (response.ok) {
+                showAlert('Settings saved successfully!', 'success');
+            } else {
+                showAlert('Failed to save settings', 'error');
             }
-        });
-
-        // Remove language
-        function removeLanguage(lang) {
-            languages = languages.filter(l => l !== lang);
-            renderLanguageTags();
+        } catch (error) {
+            showAlert('Error: ' + error.message, 'error');
         }
+    });
 
-        // Load settings
-        async function loadSettings() {
-            try {
-                const response = await fetch('/api/settings');
-                const data = await response.json();
-
-                // Update form fields
-                const settings = data.subtitle_settings;
-                languages = settings.languages || ['vi'];
-                renderLanguageTags();
-
-                document.getElementById('auto_download_on_add').checked = settings.auto_download_on_add;
-                document.getElementById('auto_download_on_play').checked = settings.auto_download_on_play;
-                document.getElementById('skip_if_has_subtitle').checked = settings.skip_if_has_subtitle;
-                document.getElementById('replace_existing').checked = settings.replace_existing;
-                document.getElementById('skip_forced_subtitles').checked = settings.skip_forced_subtitles;
-                document.getElementById('skip_if_embedded').checked = settings.skip_if_embedded;
-                document.getElementById('min_quality_threshold').value = settings.min_quality_threshold;
-            } catch (error) {
-                showAlert('Error loading settings: ' + error.message, 'error');
-            }
-        }
-
-        // Save settings
-        document.getElementById('settings-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-
-            const formData = new FormData(e.target);
-            const settings = {
-                languages: languages,
-                language_priority: languages,
-                auto_download_on_add: formData.get('auto_download_on_add') === 'on',
-                auto_download_on_play: formData.get('auto_download_on_play') === 'on',
-                skip_if_has_subtitle: formData.get('skip_if_has_subtitle') === 'on',
-                replace_existing: formData.get('replace_existing') === 'on',
-                skip_forced_subtitles: formData.get('skip_forced_subtitles') === 'on',
-                skip_if_embedded: formData.get('skip_if_embedded') === 'on',
-                min_quality_threshold: formData.get('min_quality_threshold'),
-            };
-
-            try {
-                const response = await fetch('/api/settings', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(settings)
-                });
-
-                if (response.ok) {
-                    showAlert('✓ Settings saved successfully!', 'success');
-                } else {
-                    showAlert('Failed to save settings', 'error');
-                }
-            } catch (error) {
-                showAlert('Error: ' + error.message, 'error');
-            }
-        });
-
-        // Show alert
-        function showAlert(message, type) {
-            const alert = document.getElementById('alert');
-            alert.className = `alert alert-${type}`;
-            alert.textContent = message;
-            alert.style.display = 'block';
-
-            setTimeout(() => {
-                alert.style.display = 'none';
-            }, 5000);
-        }
-
-        // Initialize
-        renderLanguageTags();
-    </script>
-</body>
-</html>
+    renderLanguageTags();
+</script>
+{% endblock %}

@@ -16,7 +16,7 @@ from tenacity import (
     retry_if_exception_type,
 )
 
-from app.config import settings
+from app.models.runtime_config import RuntimeConfig
 from app.models.subtitle import SubtitleResult, SubtitleSearchParams
 from app.utils.logger import get_logger
 
@@ -38,16 +38,17 @@ class SubsourceClient:
     - Download và extract subtitle files
     """
 
-    def __init__(self) -> None:
+    def __init__(self, config: RuntimeConfig) -> None:
         """Initialize Subsource client."""
-        self.base_url = settings.subsource_base_url
-        self.api_key = settings.subsource_api_key
+        self._config = config
+        self.base_url = config.subsource_base_url
+        self.api_key = config.subsource_api_key
         self.timeout = httpx.Timeout(30.0, connect=10.0)
 
         self._client = httpx.AsyncClient(
             timeout=self.timeout,
             headers={
-                "Authorization": f"Bearer {self.api_key}",
+                "Authorization": f"Bearer {self.api_key}" if self.api_key else "",
                 "User-Agent": "PlexSubtitleService/0.1.0",
             },
         )
@@ -57,8 +58,8 @@ class SubsourceClient:
         await self._client.aclose()
 
     @retry(
-        stop=stop_after_attempt(settings.max_retries),
-        wait=wait_exponential(multiplier=1, min=settings.retry_delay, max=30),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=30),
         retry=retry_if_exception_type((httpx.TimeoutException, httpx.NetworkError)),
     )
     async def search_subtitles(
@@ -120,6 +121,8 @@ class SubsourceClient:
                 f"{self.base_url}/subtitles/search",
                 params=search_params,
             )
+            if response.status_code == 401:
+                raise SubsourceClientError("Subsource API key invalid or missing")
             response.raise_for_status()
 
             # TODO: Parse actual API response
@@ -165,6 +168,8 @@ class SubsourceClient:
                 f"{self.base_url}/subtitles/search",
                 params=search_params,
             )
+            if response.status_code == 401:
+                raise SubsourceClientError("Subsource API key invalid or missing")
             response.raise_for_status()
 
             # TODO: Parse actual API response
@@ -278,8 +283,8 @@ class SubsourceClient:
         return sorted_results
 
     @retry(
-        stop=stop_after_attempt(settings.max_retries),
-        wait=wait_exponential(multiplier=1, min=settings.retry_delay, max=30),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=30),
         retry=retry_if_exception_type((httpx.TimeoutException, httpx.NetworkError)),
     )
     async def download_subtitle(

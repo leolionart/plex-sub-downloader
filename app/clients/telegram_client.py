@@ -9,7 +9,7 @@ from typing import Any
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from app.config import settings
+from app.models.runtime_config import RuntimeConfig
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -31,10 +31,11 @@ class TelegramClient:
        https://api.telegram.org/bot<TOKEN>/getUpdates
     """
 
-    def __init__(self, bot_token: str | None = None, chat_id: str | None = None) -> None:
+    def __init__(self, config: RuntimeConfig, bot_token: str | None = None, chat_id: str | None = None) -> None:
         """Initialize Telegram client."""
-        self.bot_token = bot_token or getattr(settings, "telegram_bot_token", None)
-        self.chat_id = chat_id or getattr(settings, "telegram_chat_id", None)
+        self._config = config
+        self.bot_token = bot_token or config.telegram_bot_token
+        self.chat_id = chat_id or config.telegram_chat_id
         self.enabled = bool(self.bot_token and self.chat_id)
 
         if not self.enabled:

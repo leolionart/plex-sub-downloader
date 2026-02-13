@@ -11,7 +11,7 @@ from typing import Any
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from app.config import settings
+from app.models.runtime_config import RuntimeConfig
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -35,6 +35,7 @@ class OpenAITranslationClient:
 
     def __init__(
         self,
+        config: RuntimeConfig,
         api_key: str | None = None,
         base_url: str | None = None,
         model: str | None = None,
@@ -43,13 +44,15 @@ class OpenAITranslationClient:
         Initialize translation client.
 
         Args:
+            config: RuntimeConfig
             api_key: OpenAI API key
             base_url: Custom base URL (e.g., https://api.openai.com/v1)
             model: Model name (e.g., gpt-4o-mini, gpt-3.5-turbo)
         """
-        self.api_key = api_key or getattr(settings, "openai_api_key", None)
-        self.base_url = base_url or getattr(settings, "openai_base_url", "https://api.openai.com/v1")
-        self.model = model or getattr(settings, "openai_model", "gpt-4o-mini")
+        self._config = config
+        self.api_key = api_key or config.openai_api_key
+        self.base_url = base_url or config.openai_base_url
+        self.model = model or config.openai_model
 
         self.enabled = bool(self.api_key)
 

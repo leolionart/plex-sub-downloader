@@ -17,7 +17,10 @@ from tenacity import (
     retry_if_exception_type,
 )
 
-from app.config import settings
+# Note: tenacity decorators are static; we wrap the underlying connect method
+# inside a retry-enabled wrapper that reads runtime config values at call time.
+
+from app.models.runtime_config import RuntimeConfig
 from app.models.webhook import MediaMetadata
 from app.utils.logger import get_logger
 
@@ -40,27 +43,49 @@ class PlexClient:
     - Refresh metadata sau khi upload
     """
 
-    def __init__(self) -> None:
+    def __init__(self, config: RuntimeConfig, mock_mode: bool = False) -> None:
         """Initialize Plex server connection."""
         self._server: PlexServer | None = None
-        self._connect()
+        self._config = config
+        self._mock_mode = mock_mode
+        if not self._mock_mode:
+            self._connect()
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type((ConnectionError, TimeoutError)),
-    )
     def _connect(self) -> None:
         """Establish connection to Plex server với retry logic."""
-        try:
-            logger.info(f"Connecting to Plex server at {settings.plex_url}")
-            self._server = PlexServer(settings.plex_url, settings.plex_token)
-            logger.info(f"Connected to Plex server: {self._server.friendlyName}")
-        except Unauthorized:
-            raise PlexClientError("Invalid Plex token - check PLEX_TOKEN environment variable")
-        except Exception as e:
-            logger.error(f"Failed to connect to Plex: {e}")
-            raise PlexClientError(f"Cannot connect to Plex server: {e}") from e
+        max_attempts = getattr(self._config, "max_retries", 3)
+        retry_delay = getattr(self._config, "retry_delay", 2)
+
+        @retry(
+            stop=stop_after_attempt(max_attempts),
+            wait=wait_exponential(multiplier=1, min=retry_delay, max=30),
+            retry=retry_if_exception_type((ConnectionError, TimeoutError)),
+        )
+        def _do_connect() -> None:
+            try:
+                logger.info(f"Connecting to Plex server at {self._config.plex_url}")
+                if not self._config.plex_url or not self._config.plex_token:
+                    raise PlexClientError("Plex URL/token missing in runtime config")
+                self._server = PlexServer(self._config.plex_url, self._config.plex_token)
+                # Log server identity
+                try:
+                    machine_id = getattr(self._server, "machineIdentifier", None)
+                    logger.info(
+                        "Connected to Plex server",
+                        extra={
+                            "friendlyName": self._server.friendlyName,
+                            "machineIdentifier": machine_id,
+                        },
+                    )
+                except Exception:
+                    logger.info(f"Connected to Plex server: {self._server.friendlyName}")
+            except Unauthorized:
+                raise PlexClientError("Invalid Plex token - check Plex credentials in setup")
+            except Exception as e:
+                logger.error(f"Failed to connect to Plex: {e}")
+                raise
+
+        _do_connect()
 
     @property
     def server(self) -> PlexServer:
@@ -257,8 +282,8 @@ class PlexClient:
         return has_sub
 
     @retry(
-        stop=stop_after_attempt(settings.max_retries),
-        wait=wait_exponential(multiplier=1, min=settings.retry_delay, max=30),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=30),
         retry=retry_if_exception_type((ConnectionError, TimeoutError)),
     )
     def upload_subtitle(

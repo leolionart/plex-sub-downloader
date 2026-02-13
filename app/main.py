@@ -15,11 +15,14 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
+from app.models.runtime_config import RuntimeConfig
 from app.models.webhook import PlexWebhookPayload, TautulliWebhookPayload
 from app.models.settings import SubtitleSettings
 from app.services.subtitle_service import SubtitleService, SubtitleServiceError
+from app.services.config_store import ConfigStore
 from app.utils.logger import setup_logging, get_logger
 from app.routes import translation
+from app.routes import setup
 
 # Setup logging
 setup_logging()
@@ -27,6 +30,8 @@ logger = get_logger(__name__)
 
 # Global service instance
 subtitle_service: SubtitleService | None = None
+runtime_config: RuntimeConfig | None = None
+config_store: ConfigStore | None = None
 
 # Templates
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -35,15 +40,19 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Lifespan context manager for startup/shutdown."""
-    global subtitle_service
+    global subtitle_service, runtime_config, config_store
 
     # Startup
     logger.info("🚀 Starting Plex Subtitle Service")
-    logger.info(f"Plex URL: {settings.plex_url}")
-    logger.info(f"Default language: {settings.default_language}")
-    logger.info(f"Subsource API: {settings.subsource_base_url}")
 
-    subtitle_service = SubtitleService()
+    # Load runtime config from JSON (seed env if missing)
+    config_store = ConfigStore(settings.config_file)
+    runtime_config = config_store.load()
+
+    logger.info(f"Default language: {runtime_config.default_language}")
+    logger.info(f"Subsource API: {runtime_config.subsource_base_url}")
+
+    subtitle_service = SubtitleService(runtime_config)
     logger.info("✓ Service initialized")
 
     yield
@@ -73,6 +82,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(translation.router)
+app.include_router(setup.router)
 
 
 @app.middleware("http")
@@ -102,35 +112,56 @@ def verify_webhook_secret(x_webhook_secret: str | None = Header(None)) -> None:
 
     Plex/Tautulli có thể gửi custom header để authenticate.
     """
-    if settings.webhook_secret:
-        if not x_webhook_secret or x_webhook_secret != settings.webhook_secret:
+    if runtime_config and runtime_config.webhook_secret:
+        if not x_webhook_secret or x_webhook_secret != runtime_config.webhook_secret:
             logger.warning("Webhook authentication failed - invalid secret")
             raise HTTPException(status_code=403, detail="Invalid webhook secret")
+
+
+def _is_configured(rc: RuntimeConfig | None) -> bool:
+    return bool(rc and rc.plex_url and rc.plex_token and rc.subsource_api_key)
+
+
+@app.get("/setup", response_class=HTMLResponse)
+async def setup_ui(request: Request) -> HTMLResponse:
+    if not runtime_config:
+        return HTMLResponse("Service not initialized", status_code=503)
+    configured = _is_configured(runtime_config)
+    return templates.TemplateResponse("setup.html", {"request": request, "configured": configured})
 
 
 @app.get("/", response_class=HTMLResponse)
 async def web_ui(request: Request) -> HTMLResponse:
     """Web UI - Settings page."""
-    config = subtitle_service.get_config() if subtitle_service else None
+    if not subtitle_service or not runtime_config:
+        return HTMLResponse("Service not initialized", status_code=503)
 
-    stats = {
-        "total_downloads": config.total_downloads if config else 0,
-        "total_skipped": config.total_skipped if config else 0,
-        "success_rate": (
-            round(config.total_downloads / (config.total_downloads + config.total_skipped) * 100)
-            if config and (config.total_downloads + config.total_skipped) > 0
-            else 0
-        ),
-    }
+    configured = _is_configured(runtime_config)
 
-    settings_data = config.subtitle_settings if config else SubtitleSettings()
+    if configured:
+        config = subtitle_service.get_config()
+        stats = {
+            "total_downloads": config.total_downloads,
+            "total_skipped": config.total_skipped,
+            "success_rate": (
+                round(config.total_downloads / (config.total_downloads + config.total_skipped) * 100)
+                if (config.total_downloads + config.total_skipped) > 0
+                else 0
+            ),
+        }
+        settings_data = config.subtitle_settings
+        languages = settings_data.languages
+    else:
+        stats = {"total_downloads": 0, "total_skipped": 0, "success_rate": 0}
+        languages = ["vi"]
 
     return templates.TemplateResponse(
         "settings.html",
         {
             "request": request,
             "stats": stats,
-            "languages": settings_data.languages,
+            "languages": languages,
+            "configured": configured,
         },
     )
 
@@ -138,7 +169,13 @@ async def web_ui(request: Request) -> HTMLResponse:
 @app.get("/translation", response_class=HTMLResponse)
 async def translation_ui(request: Request) -> HTMLResponse:
     """Translation approval UI."""
-    return templates.TemplateResponse("translation.html", {"request": request})
+    if not subtitle_service or not runtime_config:
+        return HTMLResponse("Service not initialized", status_code=503)
+    configured = _is_configured(runtime_config)
+    return templates.TemplateResponse(
+        "translation.html",
+        {"request": request, "configured": configured},
+    )
 
 
 @app.get("/api/info")

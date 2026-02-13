@@ -10,7 +10,7 @@ from datetime import timedelta
 
 import httpx
 
-from app.config import settings
+from app.models.runtime_config import RuntimeConfig
 from app.models.subtitle import SubtitleResult, SubtitleSearchParams
 from app.utils.logger import get_logger
 
@@ -28,11 +28,12 @@ class CacheClient:
     - Graceful degradation nếu Redis unavailable
     """
 
-    def __init__(self) -> None:
+    def __init__(self, config: RuntimeConfig) -> None:
         """Initialize cache client."""
-        self.redis_url = getattr(settings, "redis_url", None)
-        self.cache_ttl = getattr(settings, "cache_ttl_seconds", 3600)  # 1 hour default
-        self.enabled = getattr(settings, "cache_enabled", True)
+        self._config = config
+        self.redis_url = config.redis_url
+        self.cache_ttl = getattr(config, "cache_ttl_seconds", 3600)  # 1 hour default
+        self.enabled = getattr(config, "cache_enabled", True)
 
         # In-memory cache fallback
         self._memory_cache: dict[str, tuple[Any, float]] = {}

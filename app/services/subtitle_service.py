@@ -10,12 +10,12 @@ from datetime import datetime
 
 from plexapi.video import Video
 
-from app.config import settings
 from app.clients.plex_client import PlexClient, PlexClientError
 from app.clients.subsource_client import SubsourceClient, SubsourceClientError
 from app.clients.telegram_client import TelegramClient
 from app.clients.cache_client import CacheClient
 from app.clients.openai_translation_client import OpenAITranslationClient, TranslationClientError
+from app.models.runtime_config import RuntimeConfig
 from app.models.webhook import MediaMetadata
 from app.models.subtitle import SubtitleSearchParams, SubtitleResult
 from app.models.settings import ServiceConfig, SubtitleSettings
@@ -42,19 +42,22 @@ class SubtitleService:
     6. Upload subtitle lên Plex
     """
 
-    def __init__(self, service_config: ServiceConfig | None = None) -> None:
-        """Initialize service with clients."""
-        self.plex_client = PlexClient()
-        self.subsource_client = SubsourceClient()
-        self.telegram_client = TelegramClient()
-        self.cache_client = CacheClient()
-        self.translation_client = OpenAITranslationClient()
+    def __init__(self, runtime_config: RuntimeConfig, service_config: ServiceConfig | None = None) -> None:
+        """Initialize service with clients and runtime config."""
+        self.runtime_config = runtime_config
 
-        self.temp_dir = Path(settings.temp_dir)
+        from app.config import settings as infra_settings
+        self.plex_client = PlexClient(runtime_config, mock_mode=infra_settings.mock_mode)
+        self.subsource_client = SubsourceClient(runtime_config)
+        self.telegram_client = TelegramClient(runtime_config)
+        self.cache_client = CacheClient(runtime_config)
+        self.translation_client = OpenAITranslationClient(runtime_config)
+
+        self.temp_dir = Path(runtime_config.temp_dir)
         self.temp_dir.mkdir(parents=True, exist_ok=True)
 
-        # Runtime configuration
-        self.config = service_config or ServiceConfig()
+        # Runtime configuration/state
+        self.config = service_config or ServiceConfig(subtitle_settings=runtime_config.subtitle_settings)
 
         # Pending translation queue (for approval mode)
         self._pending_translations: dict[str, dict] = {}
@@ -74,11 +77,31 @@ class SubtitleService:
     def update_settings(self, new_settings: SubtitleSettings) -> None:
         """Update subtitle settings từ Web UI."""
         self.config.subtitle_settings = new_settings
+        self.runtime_config.subtitle_settings = new_settings
         logger.info("Subtitle settings updated", extra={"settings": new_settings.model_dump()})
 
     def get_config(self) -> ServiceConfig:
         """Get current configuration."""
         return self.config
+
+    def update_runtime_config(self, new_runtime: RuntimeConfig) -> None:
+        """Hot-reload runtime config and refresh clients."""
+        self.runtime_config = new_runtime
+        self.config.subtitle_settings = new_runtime.subtitle_settings
+
+        # Re-init clients with new credentials
+        from app.config import settings as infra_settings
+        self.plex_client = PlexClient(new_runtime, mock_mode=infra_settings.mock_mode)
+        self.subsource_client = SubsourceClient(new_runtime)
+        self.telegram_client = TelegramClient(new_runtime)
+        self.cache_client = CacheClient(new_runtime)
+        self.translation_client = OpenAITranslationClient(new_runtime)
+
+        # Ensure temp dir exists
+        self.temp_dir = Path(new_runtime.temp_dir)
+        self.temp_dir.mkdir(parents=True, exist_ok=True)
+
+        logger.info("Runtime config hot-reloaded")
 
     async def process_webhook(
         self,
@@ -142,7 +165,7 @@ class SubtitleService:
                 log.warning("No suitable subtitle found", title=metadata.title)
 
                 # Try translation fallback if enabled
-                if settings.translation_enabled:
+                if self.runtime_config.translation_enabled:
                     log.info("Attempting translation fallback (en → vi)")
                     translation_result = await self._try_translation_fallback(
                         metadata,
@@ -155,7 +178,7 @@ class SubtitleService:
                 # Send Telegram notification
                 await self.telegram_client.notify_subtitle_not_found(
                     title=str(metadata),
-                    language=settings.default_language,
+                    language=self.runtime_config.default_language,
                 )
 
                 return {
@@ -191,7 +214,7 @@ class SubtitleService:
             await self.telegram_client.notify_subtitle_downloaded(
                 title=str(metadata),
                 subtitle_name=subtitle.name,
-                language=settings.default_language,
+                language=self.runtime_config.default_language,
                 quality=subtitle.quality_type,
             )
 
@@ -244,28 +267,30 @@ class SubtitleService:
         sub_details = await asyncio.to_thread(
             self.plex_client.get_subtitle_details,
             video,
-            settings.default_language,
+            self.runtime_config.default_language,
         )
 
+        runtime_settings = self.config.subtitle_settings
+
         # Check 1: Đã có subtitle và setting là skip
-        if sub_details["has_subtitle"] and settings.skip_if_has_subtitle:
-            if not settings.replace_existing:
+        if sub_details["has_subtitle"] and runtime_settings.skip_if_has_subtitle:
+            if not runtime_settings.replace_existing:
                 return False, f"Already has {sub_details['subtitle_count']} subtitle(s) and skip_if_has_subtitle=True"
 
         # Check 2: Có forced subtitle và setting là skip forced
-        if settings.skip_forced_subtitles:
+        if runtime_settings.skip_forced_subtitles:
             for sub_info in sub_details["subtitle_info"]:
                 if sub_info.get("forced"):
                     return False, "Has forced subtitle and skip_forced_subtitles=True"
 
         # Check 3: Có embedded subtitle
-        if settings.skip_if_embedded:
+        if runtime_settings.skip_if_embedded:
             for sub_info in sub_details["subtitle_info"]:
                 if sub_info.get("format") in ["pgs", "vobsub", "dvdsub"]:
                     return False, "Has embedded subtitle and skip_if_embedded=True"
 
         # Check 4: Replace mode - chỉ download nếu có subtitle mới tốt hơn
-        if sub_details["has_subtitle"] and settings.replace_existing:
+        if sub_details["has_subtitle"] and runtime_settings.replace_existing:
             # TODO: Implement quality comparison với existing subtitle
             # For now, cho phép replace
             log.info("Replace mode enabled - will replace existing subtitle if better quality found")
@@ -320,7 +345,7 @@ class SubtitleService:
             Best SubtitleResult hoặc None
         """
         search_params = SubtitleSearchParams(
-            language=settings.default_language,
+            language=self.runtime_config.default_language,
             title=metadata.search_title,
             year=metadata.year,
             imdb_id=metadata.imdb_id,
@@ -408,7 +433,7 @@ class SubtitleService:
             self.plex_client.upload_subtitle,
             video,
             subtitle_path,
-            settings.default_language,
+            self.runtime_config.default_language,
         )
 
         if not success:
@@ -449,7 +474,7 @@ class SubtitleService:
         Returns:
             Dict với status nếu thành công, None nếu fail
         """
-        if not settings.translation_enabled:
+        if not self.runtime_config.translation_enabled:
             return None
 
         log.info("Translation fallback: Searching English subtitle")
@@ -473,13 +498,13 @@ class SubtitleService:
         log.info(f"Found English subtitle: {en_subtitle.name}")
 
         # Check if requires approval
-        if settings.translation_requires_approval:
+        if self.runtime_config.translation_requires_approval:
             # Add to pending queue
             self.add_pending_translation(
                 rating_key=metadata.rating_key,
                 metadata=metadata,
                 from_lang="en",
-                to_lang="vi",
+                to_lang=self.runtime_config.default_language,
             )
 
             # Send Telegram notification với approval link

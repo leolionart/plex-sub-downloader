@@ -5,8 +5,6 @@ Translation approval routes cho Web UI.
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.config import settings
-from app.services.subtitle_service import subtitle_service
 from app.models.webhook import MediaMetadata
 
 router = APIRouter(prefix="/api/translation", tags=["translation"])
@@ -30,6 +28,14 @@ class TranslationEstimateResponse(BaseModel):
     model: str
 
 
+def get_subtitle_service():
+    """Get subtitle service instance từ main app."""
+    from app.main import subtitle_service
+    if not subtitle_service:
+        raise HTTPException(status_code=503, detail="Service not initialized")
+    return subtitle_service
+
+
 @router.get("/pending")
 async def get_pending_translations():
     """
@@ -37,8 +43,7 @@ async def get_pending_translations():
 
     Returns list of videos waiting for translation approval.
     """
-    if not subtitle_service:
-        raise HTTPException(status_code=503, detail="Service not initialized")
+    subtitle_service = get_subtitle_service()
 
     # Get from pending queue
     pending = subtitle_service.get_pending_translations()
@@ -53,19 +58,10 @@ async def get_pending_translations():
 async def estimate_translation_cost(request: TranslationRequest):
     """
     Estimate translation cost trước khi approve.
-
-    Args:
-        rating_key: Plex ratingKey
-        from_lang: Source language (default: en)
-        to_lang: Target language (default: vi)
-
-    Returns:
-        Cost estimation details
     """
-    if not subtitle_service:
-        raise HTTPException(status_code=503, detail="Service not initialized")
+    subtitle_service = get_subtitle_service()
 
-    if not settings.translation_enabled:
+    if not subtitle_service.runtime_config.translation_enabled:
         raise HTTPException(status_code=400, detail="Translation disabled")
 
     try:
@@ -130,15 +126,10 @@ async def estimate_translation_cost(request: TranslationRequest):
 
 @router.post("/approve")
 async def approve_translation(request: TranslationRequest):
-    """
-    Approve và execute translation.
+    """Approve và execute translation."""
+    subtitle_service = get_subtitle_service()
 
-    User đã review cost estimate và approve translation.
-    """
-    if not subtitle_service:
-        raise HTTPException(status_code=503, detail="Service not initialized")
-
-    if not settings.translation_enabled:
+    if not subtitle_service.runtime_config.translation_enabled:
         raise HTTPException(status_code=400, detail="Translation disabled")
 
     try:
@@ -177,8 +168,7 @@ async def reject_translation(request: TranslationRequest):
 
     User decided not to translate.
     """
-    if not subtitle_service:
-        raise HTTPException(status_code=503, detail="Service not initialized")
+    subtitle_service = get_subtitle_service()
 
     # Remove from pending queue
     subtitle_service.remove_pending_translation(request.rating_key)
@@ -199,8 +189,7 @@ async def get_translation_stats():
         - Total cost
         - Average cost per translation
     """
-    if not subtitle_service:
-        raise HTTPException(status_code=503, detail="Service not initialized")
+    subtitle_service = get_subtitle_service()
 
     stats = subtitle_service.get_translation_stats()
 

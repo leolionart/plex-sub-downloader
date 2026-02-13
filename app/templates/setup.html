@@ -1,0 +1,534 @@
+{% extends "base.html" %}
+
+{% block title %}Setup - Plex Subtitle Service{% endblock %}
+{% block nav_setup %}active{% endblock %}
+{% block page_title %}Setup{% endblock %}
+{% block page_description %}Cấu hình kết nối Plex, Subsource, OpenAI và các dịch vụ khác{% endblock %}
+
+{% block extra_styles %}
+<style>
+    .setup-section {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        margin-bottom: 16px;
+        overflow: hidden;
+    }
+
+    .setup-section-header {
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--border-subtle);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .setup-section-header .step-number {
+        width: 28px;
+        height: 28px;
+        background: var(--plex-gold-dim);
+        color: var(--plex-gold);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        font-weight: 700;
+        flex-shrink: 0;
+    }
+
+    .setup-section-header h2 {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text-primary);
+        flex: 1;
+    }
+
+    .setup-section-body {
+        padding: 20px;
+    }
+
+    .setup-hint {
+        font-size: 13px;
+        color: var(--text-muted);
+        margin-bottom: 16px;
+        line-height: 1.5;
+    }
+
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .status-badge.ok {
+        background: var(--success-dim);
+        color: var(--success);
+    }
+
+    .status-badge.missing {
+        background: var(--error-dim);
+        color: var(--error);
+    }
+
+    .pin-actions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 12px;
+    }
+
+    .pin-info {
+        font-size: 13px;
+        color: var(--text-secondary);
+    }
+
+    .setup-footer {
+        display: flex;
+        gap: 10px;
+        margin-top: 8px;
+    }
+
+    /* Secret field states */
+    .form-group .secret-wrapper {
+        position: relative;
+    }
+
+    .form-group .secret-wrapper .form-input {
+        padding-right: 100px;
+    }
+
+    .form-group .secret-badge {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        display: none;
+        align-items: center;
+        gap: 5px;
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-size: 11px;
+        font-weight: 600;
+        background: var(--success-dim);
+        color: var(--success);
+        pointer-events: none;
+    }
+
+    .form-group .secret-badge.visible {
+        display: inline-flex;
+    }
+
+    .form-input.secret-configured {
+        border-color: var(--success) !important;
+    }
+
+    .form-input.secret-configured::placeholder {
+        color: var(--success);
+        opacity: 0.7;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- 1) Plex -->
+<div class="setup-section">
+    <div class="setup-section-header">
+        <span class="step-number">1</span>
+        <h2>Plex</h2>
+        <span id="plex-status"></span>
+    </div>
+    <div class="setup-section-body">
+        <p class="setup-hint">Bấm Plex PIN để nhận token, sau đó chọn server để tự điền URL. Bạn có thể thay đổi server bất kỳ lúc nào.</p>
+        <div class="pin-actions" style="margin-bottom:12px;">
+            <button id="btn-plex-pin" class="btn btn-secondary">Login with Plex PIN</button>
+            <span id="pin-info" class="pin-info"></span>
+        </div>
+        <div id="plex_server_row" class="form-row" style="display:block;">
+            <div class="form-group" style="flex:1;">
+                <label for="plex_server">Chọn Plex server</label>
+                <select id="plex_server" class="form-select" disabled>
+                    <option value="">Nhập/nhận token để tải server</option>
+                </select>
+            </div>
+        </div>
+        <details style="margin-top:12px;">
+            <summary style="cursor:pointer; color: var(--text-muted);">Advanced: nhập thủ công URL/Token</summary>
+            <div class="form-row" style="margin-top:8px;">
+                <div class="form-group">
+                    <label for="plex_url">Plex URL</label>
+                    <input id="plex_url" class="form-input" placeholder="http://localhost:32400">
+                </div>
+                <div class="form-group">
+                    <label for="plex_token">Plex Token</label>
+                    <div class="secret-wrapper">
+                        <input id="plex_token" class="form-input" placeholder="token">
+                        <span id="plex_token_badge" class="secret-badge">Configured</span>
+                    </div>
+                </div>
+            </div>
+        </details>
+    </div>
+</div>
+
+<!-- 2) Subsource API -->
+<div class="setup-section">
+    <div class="setup-section-header">
+        <span class="step-number">2</span>
+        <h2>Subsource API</h2>
+    </div>
+    <div class="setup-section-body">
+        <div class="form-group" style="margin-bottom: 0;">
+            <label for="subsource_api_key">Subsource API Key</label>
+            <div class="secret-wrapper">
+                <input id="subsource_api_key" class="form-input" placeholder="Subsource API key">
+                <span id="subsource_api_key_badge" class="secret-badge">Configured</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 3) OpenAI Translation -->
+<div class="setup-section">
+    <div class="setup-section-header">
+        <span class="step-number">3</span>
+        <h2>OpenAI Translation</h2>
+    </div>
+    <div class="setup-section-body">
+        <div class="form-row">
+            <div class="form-group">
+                <label for="openai_api_key">OpenAI API Key</label>
+                <div class="secret-wrapper">
+                    <input id="openai_api_key" class="form-input" placeholder="sk-...">
+                    <span id="openai_api_key_badge" class="secret-badge">Configured</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="openai_model">OpenAI Model</label>
+                <input id="openai_model" class="form-input" value="gpt-4o-mini">
+            </div>
+            <div class="form-group">
+                <label for="openai_base_url">OpenAI Base URL</label>
+                <input id="openai_base_url" class="form-input" value="https://api.openai.com/v1">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="translation_enabled">Enable translation</label>
+                <select id="translation_enabled" class="form-select">
+                    <option value="true">On</option>
+                    <option value="false">Off</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="translation_requires_approval">Require approval</label>
+                <select id="translation_requires_approval" class="form-select">
+                    <option value="true">Yes</option>
+                    <option value="false">No</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="default_language">Default language</label>
+                <input id="default_language" class="form-input" value="vi">
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 4) Webhook & Telegram -->
+<div class="setup-section">
+    <div class="setup-section-header">
+        <span class="step-number">4</span>
+        <h2>Webhook & Telegram</h2>
+    </div>
+    <div class="setup-section-body">
+        <div class="form-row">
+            <div class="form-group">
+                <label for="webhook_secret">Webhook Secret (optional)</label>
+                <div class="secret-wrapper">
+                    <input id="webhook_secret" class="form-input" placeholder="shared secret">
+                    <span id="webhook_secret_badge" class="secret-badge">Configured</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="telegram_bot_token">Telegram Bot Token</label>
+                <div class="secret-wrapper">
+                    <input id="telegram_bot_token" class="form-input" placeholder="">
+                    <span id="telegram_bot_token_badge" class="secret-badge">Configured</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="telegram_chat_id">Telegram Chat ID</label>
+                <input id="telegram_chat_id" class="form-input" placeholder="">
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 5) Cache -->
+<div class="setup-section">
+    <div class="setup-section-header">
+        <span class="step-number">5</span>
+        <h2>Cache</h2>
+    </div>
+    <div class="setup-section-body">
+        <div class="form-row">
+            <div class="form-group">
+                <label for="cache_enabled">Enable cache</label>
+                <select id="cache_enabled" class="form-select">
+                    <option value="true">On</option>
+                    <option value="false">Off</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="redis_url">Redis URL (optional)</label>
+                <input id="redis_url" class="form-input" placeholder="redis://localhost:6379/0">
+            </div>
+            <div class="form-group">
+                <label for="cache_ttl_seconds">Cache TTL (seconds)</label>
+                <input id="cache_ttl_seconds" class="form-input" type="number" value="3600">
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Actions -->
+<div class="setup-footer">
+    <button id="btn-save" class="btn btn-primary">Save Configuration</button>
+    <a href="/" class="btn btn-ghost">Back to Settings</a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const $ = (id) => document.getElementById(id);
+
+    // Track which secret fields are configured on the server
+    const _secretFields = ['plex_token', 'subsource_api_key', 'openai_api_key', 'webhook_secret', 'telegram_bot_token'];
+    const _secretConfigured = {};  // id -> true if server has value
+    const _secretDirty = {};       // id -> true if user has typed new value
+
+    function markSecretConfigured(id, isConfigured) {
+        _secretConfigured[id] = isConfigured;
+        const input = $(id);
+        const badge = $(id + '_badge');
+        if (!input) return;
+        if (isConfigured && !_secretDirty[id]) {
+            input.classList.add('secret-configured');
+            input.placeholder = '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022 (saved)';
+            if (badge) badge.classList.add('visible');
+        } else {
+            input.classList.remove('secret-configured');
+            if (badge) badge.classList.remove('visible');
+        }
+    }
+
+    // Listen for user input on secret fields to mark as dirty
+    _secretFields.forEach(id => {
+        const el = $(id);
+        if (el) {
+            el.addEventListener('input', () => {
+                _secretDirty[id] = true;
+                el.classList.remove('secret-configured');
+                const badge = $(id + '_badge');
+                if (badge) badge.classList.remove('visible');
+                el.placeholder = el.dataset.originalPlaceholder || '';
+            });
+        }
+    });
+
+    async function loadConfig() {
+        const res = await fetch('/api/setup/config');
+        const data = await res.json();
+        const fill = (id, val) => { if ($(id)) $(id).value = val ?? ''; };
+
+        fill('plex_url', data.plex_url);
+        fill('openai_model', data.openai_model || 'gpt-4o-mini');
+        fill('default_language', data.default_language || 'vi');
+        fill('telegram_chat_id', data.telegram_chat_id || '');
+        fill('redis_url', data.redis_url || '');
+        fill('cache_ttl_seconds', data.cache_ttl_seconds || 3600);
+        fill('openai_base_url', data.openai_base_url || 'https://api.openai.com/v1');
+
+        // Handle secret fields: show "configured" state instead of empty
+        _secretFields.forEach(id => {
+            const val = data[id];
+            const input = $(id);
+            if (input) input.dataset.originalPlaceholder = input.placeholder;
+            if (val === '***') {
+                fill(id, '');
+                markSecretConfigured(id, true);
+            } else if (val) {
+                fill(id, val);
+                markSecretConfigured(id, true);
+            } else {
+                fill(id, '');
+                markSecretConfigured(id, false);
+            }
+            _secretDirty[id] = false;
+        });
+
+        if (data.cache_enabled !== undefined) $('cache_enabled').value = String(data.cache_enabled);
+        if (data.translation_enabled !== undefined) $('translation_enabled').value = String(data.translation_enabled);
+        if (data.translation_requires_approval !== undefined) $('translation_requires_approval').value = String(data.translation_requires_approval);
+        renderStatus(data);
+
+        // Auto-load server list if plex token is configured
+        if (data.plex_token === '***' || (data.plex_token && data.plex_token !== '')) {
+            loadResourcesFromServer();
+        }
+    }
+
+    function renderStatus(data) {
+        const hasToken = data.plex_token && data.plex_token !== '';
+        const hasUrl = data.plex_url && data.plex_url !== '';
+        const hasSubsource = data.subsource_api_key && data.subsource_api_key !== '';
+        const configured = hasUrl && hasToken && hasSubsource;
+        $('plex-status').innerHTML = configured
+            ? '<span class="status-badge ok"><span class="status-dot ok"></span>Connected</span>'
+            : '<span class="status-badge missing"><span class="status-dot error"></span>Missing</span>';
+    }
+
+    async function saveConfig() {
+        const payload = {
+            plex_url: $('plex_url').value.trim() || null,
+            openai_model: $('openai_model').value.trim() || 'gpt-4o-mini',
+            openai_base_url: $('openai_base_url').value.trim() || 'https://api.openai.com/v1',
+            default_language: $('default_language').value.trim() || 'vi',
+            telegram_chat_id: $('telegram_chat_id').value.trim() || null,
+            cache_enabled: $('cache_enabled').value === 'true',
+            redis_url: $('redis_url').value.trim() || null,
+            cache_ttl_seconds: Number($('cache_ttl_seconds').value) || 3600,
+            translation_enabled: $('translation_enabled').value === 'true',
+            translation_requires_approval: $('translation_requires_approval').value === 'true',
+        };
+
+        // Only include secret fields if user actually typed a new value
+        _secretFields.forEach(id => {
+            const val = $(id).value.trim();
+            if (_secretDirty[id] && val) {
+                payload[id] = val;
+            } else if (_secretDirty[id] && !val) {
+                // User cleared the field intentionally -> set to null
+                payload[id] = null;
+            }
+            // If not dirty, don't include in payload -> backend keeps existing value
+        });
+
+        const res = await fetch('/api/setup/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+            showAlert('Failed to save configuration', 'error');
+        } else {
+            showAlert('Configuration saved successfully', 'success');
+            // Reset dirty flags and reload to show fresh state
+            _secretFields.forEach(id => { _secretDirty[id] = false; });
+            await loadConfig();
+        }
+    }
+
+    async function requestPin() {
+        const res = await fetch('/api/setup/plex/pin', { method: 'POST' });
+        if (!res.ok) { showAlert('PIN request failed', 'error'); return; }
+        const data = await res.json();
+
+        const link = data.verification_url || 'https://app.plex.tv/auth';
+        $('pin-info').innerHTML = `Code: <strong>${data.code}</strong> · <a href="${link}" target="_blank" rel="noopener">Open Plex login</a>`;
+        // Try to open automatically (may be blocked by popup blockers)
+        try { window.open(link, '_blank'); } catch (e) {}
+
+        const interval = setInterval(async () => {
+            const poll = await fetch(`/api/setup/plex/poll?pin_id=${data.pin_id}`);
+            const p = await poll.json();
+            if (p.token) {
+                clearInterval(interval);
+                $('plex_token').value = p.token;
+                _secretDirty['plex_token'] = true;
+                markSecretConfigured('plex_token', false);
+                showAlert('Plex login successful!', 'success');
+                await loadResources(p.token);
+            }
+        }, 4000);
+    }
+
+    async function loadResourcesFromServer() {
+        // Load resources using server-side token (no token param needed)
+        try {
+            const res = await fetch('/api/setup/plex/resources');
+            if (!res.ok) return;
+            const data = await res.json();
+            populateServerSelect(data);
+        } catch (e) {
+            console.warn('Load resources from server failed', e);
+        }
+    }
+
+    function populateServerSelect(data) {
+        const select = document.getElementById('plex_server');
+        select.innerHTML = '';
+        data.servers.forEach((srv) => {
+            const opt = document.createElement('option');
+            opt.value = srv.connections?.[0]?.uri || '';
+            opt.textContent = `${srv.name || 'Server'} (${srv.clientIdentifier || ''})`;
+            opt.dataset.connections = JSON.stringify(srv.connections || []);
+            select.appendChild(opt);
+        });
+        if (data.servers.length > 0) {
+            select.disabled = false;
+            select.onchange = (e) => {
+                try {
+                    const conns = JSON.parse(e.target.selectedOptions[0]?.dataset.connections || '[]');
+                    const conn = pickBestConnection(conns);
+                    if (conn) $('plex_url').value = conn.uri;
+                } catch (err) {}
+            };
+            // Auto-select best connection from first server
+            const currentUrl = $('plex_url').value.trim();
+            if (!currentUrl) {
+                const conn = pickBestConnection(data.servers[0].connections || []);
+                if (conn) $('plex_url').value = conn.uri;
+            }
+        } else {
+            select.disabled = true;
+            select.innerHTML = '<option value="">Không tìm thấy server</option>';
+        }
+    }
+
+    async function loadResources(tokenOverride) {
+        const token = tokenOverride || $('plex_token').value.trim();
+        if (!token || token === '***') return;
+        try {
+            const res = await fetch(`/api/setup/plex/resources?token=${token}`);
+            if (!res.ok) return;
+            const data = await res.json();
+            populateServerSelect(data);
+        } catch (e) {
+            console.warn('Load resources failed', e);
+        }
+    }
+
+    function pickBestConnection(conns) {
+        if (!conns || conns.length === 0) return null;
+        // Prefer non-relay, https if available, then http
+        const sorted = [...conns].sort((a, b) => {
+            const score = (c) => (c.relay === '0' ? 2 : 0) + (c.protocol === 'https' ? 1 : 0);
+            return score(b) - score(a);
+        });
+        return sorted[0];
+    }
+
+    $('btn-save').onclick = saveConfig;
+    $('btn-plex-pin').onclick = requestPin;
+    loadConfig();
+
+    // Khi user tự dán token thủ công, thử load server
+    $('plex_token').addEventListener('change', () => loadResources());
+</script>
+{% endblock %}
