@@ -384,22 +384,141 @@ class SubsourceClient:
             raise SubsourceClientError(f"Download error: {e}") from e
 
     def _extract_subtitle_from_zip(self, zip_path: Path, dest_dir: Path) -> Path:
-        """Extract .srt file from ZIP archive."""
+        """Extract subtitle file from ZIP archive. Supports .srt, .vtt, .ass, .ssa, .sub."""
+        SUBTITLE_EXTS = {".srt", ".vtt", ".ass", ".ssa", ".sub"}
+
         try:
             with zipfile.ZipFile(zip_path, "r") as zip_ref:
-                srt_files = [f for f in zip_ref.namelist() if f.lower().endswith(".srt")]
+                # Find subtitle files, prefer .srt
+                all_subs = [
+                    f for f in zip_ref.namelist()
+                    if Path(f).suffix.lower() in SUBTITLE_EXTS
+                ]
 
-                if not srt_files:
-                    raise SubsourceClientError("No .srt file found in ZIP archive")
+                if not all_subs:
+                    raise SubsourceClientError(
+                        f"No subtitle file found in ZIP (files: {zip_ref.namelist()})"
+                    )
 
-                srt_filename = srt_files[0]
-                zip_ref.extract(srt_filename, dest_dir)
-                extracted_path = dest_dir / srt_filename
+                # Prefer .srt, then others
+                srt_files = [f for f in all_subs if f.lower().endswith(".srt")]
+
+                chosen = srt_files[0] if srt_files else all_subs[0]
+                zip_ref.extract(chosen, dest_dir)
+                extracted_path = dest_dir / chosen
 
                 logger.info(f"Extracted subtitle: {extracted_path}")
+
+                # Convert non-SRT to SRT (Plex only accepts .srt)
+                if extracted_path.suffix.lower() != ".srt":
+                    extracted_path = self._convert_to_srt(extracted_path)
+
                 return extracted_path
 
         except zipfile.BadZipFile as e:
             raise SubsourceClientError("Invalid ZIP file") from e
         finally:
             zip_path.unlink(missing_ok=True)
+
+    @staticmethod
+    def _convert_to_srt(source_path: Path) -> Path:
+        """Convert VTT/ASS/SSA subtitle to SRT format."""
+        import re
+
+        ext = source_path.suffix.lower()
+        srt_path = source_path.with_suffix(".srt")
+
+        try:
+            content = source_path.read_text(encoding="utf-8", errors="replace")
+
+            if ext == ".vtt":
+                srt_content = SubsourceClient._vtt_to_srt(content)
+            else:
+                # For .ass/.ssa/.sub — just wrap as-is with basic SRT structure
+                # Plex can handle these natively, but we convert for safety
+                logger.warning(f"No converter for {ext}, renaming to .srt")
+                srt_path.write_text(content, encoding="utf-8")
+                source_path.unlink(missing_ok=True)
+                return srt_path
+
+            srt_path.write_text(srt_content, encoding="utf-8")
+            source_path.unlink(missing_ok=True)
+            logger.info(f"Converted {ext} → .srt: {srt_path}")
+            return srt_path
+
+        except Exception as e:
+            raise SubsourceClientError(f"Failed to convert {ext} to SRT: {e}") from e
+
+    @staticmethod
+    def _vtt_to_srt(vtt_content: str) -> str:
+        """Convert WebVTT content to SRT format."""
+        import re
+
+        lines = vtt_content.strip().splitlines()
+
+        # Skip VTT header (WEBVTT and any metadata before first blank line)
+        start_idx = 0
+        for i, line in enumerate(lines):
+            if line.strip() == "" and i > 0:
+                start_idx = i + 1
+                break
+
+        # Parse cues
+        srt_blocks: list[str] = []
+        counter = 0
+        i = start_idx
+
+        while i < len(lines):
+            line = lines[i].strip()
+
+            # Skip empty lines
+            if not line:
+                i += 1
+                continue
+
+            # Skip cue identifiers (lines before timestamp that aren't timestamps)
+            if "-->" not in line:
+                # Check if next line has timestamp
+                if i + 1 < len(lines) and "-->" in lines[i + 1]:
+                    i += 1
+                    continue
+                # Could be text continuation, skip
+                i += 1
+                continue
+
+            # Timestamp line
+            timestamp_line = line
+            # Convert VTT timestamps: 00:01:23.456 → 00:01:23,456
+            timestamp_line = re.sub(
+                r"(\d{2}:\d{2}:\d{2})\.(\d{3})",
+                r"\1,\2",
+                timestamp_line,
+            )
+            # Handle short timestamps: 01:23.456 → 00:01:23,456
+            timestamp_line = re.sub(
+                r"(\d{2}:\d{2})\.(\d{3})",
+                lambda m: f"00:{m.group(1)},{m.group(2)}",
+                timestamp_line,
+            )
+            # Strip position/alignment metadata after timestamps
+            timestamp_line = re.sub(
+                r"([\d:,]+\s*-->\s*[\d:,]+)\s+.*",
+                r"\1",
+                timestamp_line,
+            )
+
+            i += 1
+            # Collect text lines
+            text_lines: list[str] = []
+            while i < len(lines) and lines[i].strip():
+                # Strip VTT tags like <c>, </c>, <b>, etc.
+                cleaned = re.sub(r"<[^>]+>", "", lines[i])
+                text_lines.append(cleaned)
+                i += 1
+
+            if text_lines:
+                counter += 1
+                block = f"{counter}\n{timestamp_line}\n" + "\n".join(text_lines)
+                srt_blocks.append(block)
+
+        return "\n\n".join(srt_blocks) + "\n"
