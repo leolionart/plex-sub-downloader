@@ -173,12 +173,42 @@ async def reject_translation(request: TranslationRequest):
     """
     subtitle_service = get_subtitle_service()
 
+    # Lấy thông tin pending trước khi xóa (để ghi history)
+    pending = subtitle_service._pending_translations.get(request.rating_key)
+    title = pending["title"] if pending else f"ratingKey:{request.rating_key}"
+
+    # Ghi history
+    subtitle_service.add_history_entry(
+        rating_key=request.rating_key,
+        title=title,
+        from_lang=request.from_lang,
+        to_lang=request.to_lang,
+        status="rejected",
+    )
+
     # Remove from pending queue
     subtitle_service.remove_pending_translation(request.rating_key)
 
     return {
         "status": "rejected",
         "message": "Translation request rejected",
+    }
+
+
+@router.get("/history")
+async def get_translation_history(limit: int = 50):
+    """
+    Lấy lịch sử translation (approved, auto_approved, rejected).
+
+    Returns list of history entries, mới nhất trước.
+    """
+    subtitle_service = get_subtitle_service()
+
+    history = subtitle_service.get_translation_history(limit=min(limit, 200))
+
+    return {
+        "count": len(history),
+        "items": history,
     }
 
 

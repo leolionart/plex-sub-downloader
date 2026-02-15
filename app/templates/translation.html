@@ -90,12 +90,134 @@
         padding: 9px 16px;
     }
 
+    /* ── History Section ── */
+    .section-divider {
+        margin: 40px 0 24px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+    }
+
+    .section-divider h2 {
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--text-primary);
+        white-space: nowrap;
+    }
+
+    .section-divider::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--border-subtle);
+    }
+
+    .history-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .history-table th {
+        text-align: left;
+        padding: 10px 12px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .history-table td {
+        padding: 12px;
+        font-size: 14px;
+        color: var(--text-secondary);
+        border-bottom: 1px solid var(--border-subtle);
+        vertical-align: middle;
+    }
+
+    .history-table tr:last-child td {
+        border-bottom: none;
+    }
+
+    .history-table tr:hover td {
+        background: var(--bg-surface);
+    }
+
+    .history-title {
+        color: var(--text-primary);
+        font-weight: 500;
+    }
+
+    .history-meta {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-top: 2px;
+    }
+
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 3px 10px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .status-approved {
+        background: var(--success-dim);
+        color: var(--success);
+    }
+
+    .status-auto_approved {
+        background: var(--info-dim);
+        color: var(--info);
+    }
+
+    .status-rejected {
+        background: var(--error-dim);
+        color: var(--error);
+    }
+
+    .history-empty {
+        text-align: center;
+        padding: 32px;
+        color: var(--text-muted);
+        font-size: 14px;
+    }
+
+    .history-stats {
+        display: flex;
+        gap: 24px;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+    }
+
+    .history-stat {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        font-size: 13px;
+        color: var(--text-muted);
+    }
+
+    .history-stat strong {
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+
     @media (max-width: 768px) {
         .pending-item-header {
             flex-direction: column;
         }
         .pending-actions {
             flex-direction: column;
+        }
+        .history-table th:nth-child(3),
+        .history-table td:nth-child(3) {
+            display: none;
         }
     }
 </style>
@@ -107,6 +229,17 @@
         <div class="empty-icon"><span class="spinner" style="width:32px;height:32px;border-width:3px;"></span></div>
         <h2>Loading...</h2>
     </div>
+</div>
+
+<!-- Translation History -->
+<div class="section-divider">
+    <h2>Translation History</h2>
+</div>
+
+<div id="history-stats" class="history-stats" style="display:none;"></div>
+
+<div id="history-section">
+    <div class="history-empty">Loading history...</div>
 </div>
 {% endblock %}
 
@@ -261,7 +394,7 @@
             const result = await response.json();
             showAlert(result.message, 'success');
 
-            setTimeout(() => loadPending(), 2000);
+            setTimeout(() => { loadPending(); loadHistory(); }, 2000);
 
         } catch (error) {
             showAlert('Translation failed: ' + error.message, 'error');
@@ -289,13 +422,120 @@
 
             showAlert('Translation request rejected', 'success');
             loadPending();
+            loadHistory();
 
         } catch (error) {
             showAlert('Error: ' + error.message, 'error');
         }
     }
 
+    // ── History ──────────────────────────────────────────────────────
+
+    const statusLabels = {
+        approved: 'Approved',
+        auto_approved: 'Auto',
+        rejected: 'Rejected',
+    };
+
+    const statusIcons = {
+        approved: '&#10003;',
+        auto_approved: '&#9889;',
+        rejected: '&#10007;',
+    };
+
+    async function loadHistory() {
+        try {
+            const response = await fetch('/api/translation/history?limit=50');
+            const data = await response.json();
+            renderHistory(data.items);
+        } catch (error) {
+            document.getElementById('history-section').innerHTML =
+                '<div class="history-empty">Failed to load history</div>';
+        }
+    }
+
+    function renderHistory(items) {
+        const section = document.getElementById('history-section');
+        const statsEl = document.getElementById('history-stats');
+
+        if (!items || items.length === 0) {
+            section.innerHTML = '<div class="history-empty">No translation history yet</div>';
+            statsEl.style.display = 'none';
+            return;
+        }
+
+        // Stats summary
+        const approved = items.filter(i => i.status === 'approved').length;
+        const auto = items.filter(i => i.status === 'auto_approved').length;
+        const rejected = items.filter(i => i.status === 'rejected').length;
+        const totalLines = items.reduce((s, i) => s + (i.lines_translated || 0), 0);
+
+        statsEl.style.display = 'flex';
+        statsEl.innerHTML = `
+            <div class="history-stat"><strong>${approved + auto}</strong> translated</div>
+            <div class="history-stat"><strong>${auto}</strong> auto</div>
+            <div class="history-stat"><strong>${rejected}</strong> rejected</div>
+            <div class="history-stat"><strong>${totalLines.toLocaleString()}</strong> lines</div>
+        `;
+
+        section.innerHTML = `
+            <table class="history-table">
+                <thead>
+                    <tr>
+                        <th>Title</th>
+                        <th>Status</th>
+                        <th>Lines</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${items.map(item => `
+                        <tr>
+                            <td>
+                                <div class="history-title">${item.title}</div>
+                                <div class="history-meta">${item.from_lang.toUpperCase()} &rarr; ${item.to_lang.toUpperCase()}${item.model ? ' &middot; ' + item.model : ''}</div>
+                            </td>
+                            <td>
+                                <span class="status-badge status-${item.status}">
+                                    ${statusIcons[item.status] || ''} ${statusLabels[item.status] || item.status}
+                                </span>
+                            </td>
+                            <td>${item.lines_translated ? item.lines_translated.toLocaleString() : '—'}</td>
+                            <td>${formatDate(item.timestamp)}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+    }
+
+    function formatDate(iso) {
+        if (!iso) return '—';
+        const d = new Date(iso);
+        const now = new Date();
+        const diff = now - d;
+
+        // Trong vòng 24h → hiện "x giờ trước"
+        if (diff < 86400000) {
+            const hours = Math.floor(diff / 3600000);
+            if (hours < 1) {
+                const mins = Math.floor(diff / 60000);
+                return mins <= 0 ? 'Just now' : `${mins}m ago`;
+            }
+            return `${hours}h ago`;
+        }
+
+        // Trong vòng 7 ngày → hiện "x ngày trước"
+        if (diff < 604800000) {
+            const days = Math.floor(diff / 86400000);
+            return `${days}d ago`;
+        }
+
+        return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    }
+
     setInterval(loadPending, 30000);
     loadPending();
+    loadHistory();
 </script>
 {% endblock %}

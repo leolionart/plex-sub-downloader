@@ -3,8 +3,10 @@ Subtitle service - orchestrates subtitle search và upload workflow.
 """
 
 import asyncio
+import json
 import logging
 from pathlib import Path
+from threading import RLock
 from typing import Any, cast
 from datetime import datetime
 
@@ -68,6 +70,11 @@ class SubtitleService:
             "total_lines": 0,
             "total_cost": 0.0,
         }
+
+        # Translation history (persisted to JSON)
+        self._history_path = Path("data") / "translation_history.json"
+        self._history_lock = RLock()
+        self._translation_history: list[dict] = self._load_history()
 
     async def close(self) -> None:
         """Cleanup resources."""
@@ -1095,6 +1102,7 @@ class SubtitleService:
             to_lang="vi",
             log=log,
             source_subtitle_path=plex_subtitle_path,
+            approval_type="auto_approved",
         )
 
     async def _search_subtitles_by_params(
@@ -1193,6 +1201,71 @@ class SubtitleService:
             ),
         }
 
+    # ── Translation History ─────────────────────────────────────────────
+
+    def _load_history(self) -> list[dict]:
+        """Load translation history từ JSON file."""
+        try:
+            if self._history_path.exists():
+                data = json.loads(self._history_path.read_text(encoding="utf-8"))
+                if isinstance(data, list):
+                    return data
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning(f"Failed to load translation history: {e}")
+        return []
+
+    def _save_history(self) -> None:
+        """Persist translation history to JSON file."""
+        try:
+            self._history_path.parent.mkdir(parents=True, exist_ok=True)
+            self._history_path.write_text(
+                json.dumps(self._translation_history, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+        except OSError as e:
+            logger.warning(f"Failed to save translation history: {e}")
+
+    def add_history_entry(
+        self,
+        *,
+        rating_key: str,
+        title: str,
+        from_lang: str,
+        to_lang: str,
+        status: str,
+        lines_translated: int = 0,
+        cost_usd: float = 0.0,
+        model: str = "",
+    ) -> None:
+        """
+        Ghi một entry vào translation history.
+
+        Args:
+            status: "approved" | "auto_approved" | "rejected"
+        """
+        entry = {
+            "rating_key": rating_key,
+            "title": title,
+            "from_lang": from_lang,
+            "to_lang": to_lang,
+            "status": status,
+            "lines_translated": lines_translated,
+            "cost_usd": cost_usd,
+            "model": model,
+            "timestamp": datetime.now().isoformat(),
+        }
+        with self._history_lock:
+            self._translation_history.insert(0, entry)
+            # Giới hạn 200 entries để tránh file quá lớn
+            self._translation_history = self._translation_history[:200]
+            self._save_history()
+        logger.info(f"Translation history: [{status}] {title} ({from_lang}→{to_lang})")
+
+    def get_translation_history(self, limit: int = 50) -> list[dict]:
+        """Get translation history, mới nhất trước."""
+        with self._history_lock:
+            return self._translation_history[:limit]
+
     def _get_logger(self, request_id: str) -> RequestContextLogger:
         """Create logger với request ID."""
         return RequestContextLogger(logger, request_id)
@@ -1205,6 +1278,7 @@ class SubtitleService:
         to_lang: str,
         log: RequestContextLogger,
         source_subtitle_path: Path | None = None,
+        approval_type: str = "approved",
     ) -> dict[str, str] | None:
         """
         Execute translation (called after approval).
@@ -1217,6 +1291,7 @@ class SubtitleService:
             log: Logger instance
             source_subtitle_path: Pre-downloaded subtitle path (e.g. from Plex).
                                   If None, will search and download from Subsource.
+            approval_type: "approved" (manual) or "auto_approved" (auto mode)
 
         Returns:
             Dict với status nếu thành công
@@ -1284,7 +1359,18 @@ class SubtitleService:
             self.config.increment_downloads()
             self._translation_stats["total_translations"] += 1
             self._translation_stats["total_lines"] += stats["lines_translated"]
-            # Note: Actual cost would need to be calculated from API response
+
+            # Record translation history
+            self.add_history_entry(
+                rating_key=metadata.rating_key,
+                title=str(metadata),
+                from_lang=from_lang,
+                to_lang=to_lang,
+                status=approval_type,
+                lines_translated=stats["lines_translated"],
+                cost_usd=stats.get("cost_usd", 0.0),
+                model=stats.get("model", ""),
+            )
 
             # Remove from pending queue if exists
             self.remove_pending_translation(metadata.rating_key)
