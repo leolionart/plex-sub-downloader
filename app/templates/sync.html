@@ -490,32 +490,52 @@
 
     function renderPreview(data) {
         const area = document.getElementById('results-area');
-        const hasViSub = data.has_vi_on_plex || data.vi_candidates.length > 0;
+        const en = data.en_status || {};
+        const vi = data.vi_status || {};
 
         // Build subtitle info section
         let subInfoHtml = '';
 
-        // English sub status
-        subInfoHtml += `
-            <div class="sub-info">
-                <span class="icon ${data.has_en_on_plex ? 'ok' : 'missing'}"></span>
-                <span>English subtitle: ${data.has_en_on_plex ? 'Available on Plex' : 'Not found'}</span>
-            </div>
-        `;
+        // English sub status (detailed)
+        if (en.available) {
+            const src = en.source === 'plex' ? 'Plex (text-based)' : 'Subsource';
+            subInfoHtml += `
+                <div class="sub-info">
+                    <span class="icon ok"></span>
+                    <span>English subtitle: ${src}</span>
+                </div>
+            `;
+        } else {
+            subInfoHtml += `
+                <div class="sub-info">
+                    <span class="icon missing"></span>
+                    <span>English subtitle: ${en.detail || 'Not found (Plex & Subsource)'}</span>
+                </div>
+            `;
+        }
 
-        // Vietnamese sub status
+        // Vietnamese sub status (detailed)
         if (data.has_vi_on_plex) {
             subInfoHtml += `
                 <div class="sub-info">
                     <span class="icon ok"></span>
-                    <span>Vietnamese subtitle: Available on Plex (sync timing sẽ dùng sub này)</span>
+                    <span>Vietnamese subtitle: Plex (text-based, sẽ dùng cho sync)</span>
                 </div>
             `;
-        } else if (data.vi_candidates.length > 0) {
+        } else if (vi.detail) {
+            subInfoHtml += `
+                <div class="sub-info">
+                    <span class="icon missing"></span>
+                    <span>Vietnamese subtitle: ${vi.detail}</span>
+                </div>
+            `;
+        }
+
+        if (!data.has_vi_on_plex && data.vi_candidates.length > 0) {
             subInfoHtml += `
                 <div class="sub-info">
                     <span class="icon ok"></span>
-                    <span>Vietnamese subtitle: ${data.vi_candidates.length} bản tìm thấy trên Subsource</span>
+                    <span>${data.vi_candidates.length} bản Vietsub tìm thấy trên Subsource</span>
                 </div>
                 <select class="sub-select" id="vi-sub-select" onchange="onSubSelect(this.value)">
                     ${data.vi_candidates.map((c, i) => `
@@ -526,7 +546,7 @@
                 </select>
             `;
             selectedSubtitleId = data.vi_candidates[0].id;
-        } else {
+        } else if (!data.has_vi_on_plex && data.vi_candidates.length === 0 && !vi.detail) {
             subInfoHtml += `
                 <div class="sub-info">
                     <span class="icon missing"></span>
@@ -552,7 +572,7 @@
             `;
         }
 
-        if (data.has_en_on_plex && data.can_translate) {
+        if (en.available && data.can_translate) {
             actionsHtml += `
                 <button class="btn btn-info" onclick="executeTranslate()" id="btn-translate">
                     AI Translate (EN &rarr; VI)
