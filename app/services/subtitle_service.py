@@ -5,7 +5,7 @@ Subtitle service - orchestrates subtitle search và upload workflow.
 import asyncio
 import logging
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 from datetime import datetime
 
 from plexapi.video import Video
