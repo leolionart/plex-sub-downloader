@@ -243,6 +243,12 @@
         transform: scale(0.97);
     }
 
+    .media-card.selected {
+        border-color: var(--plex-gold);
+        box-shadow: 0 0 0 1px var(--plex-gold);
+        background: var(--plex-gold-dim);
+    }
+
     .media-card .media-thumb {
         width: 100%;
         aspect-ratio: 2/3;
@@ -407,6 +413,7 @@
     let currentRatingKey = '';
     let selectedSubtitleId = null;
     let previewData = null;
+    let autoSelected = false;
 
     // Load sync status
     async function loadStatus() {
@@ -782,8 +789,14 @@
             const container = document.getElementById('now-playing-cards');
 
             if (data.sessions && data.sessions.length > 0) {
-                container.innerHTML = data.sessions.map(renderMediaCard).join('');
+                container.innerHTML = data.sessions.map((item, i) => renderMediaCard(item, i === 0 && !autoSelected)).join('');
                 section.style.display = 'block';
+
+                // Auto-select item đầu tiên (chỉ lần đầu, không ghi đè thao tác user)
+                if (!autoSelected && !currentRatingKey) {
+                    autoSelected = true;
+                    selectMedia(data.sessions[0].rating_key);
+                }
             } else {
                 container.innerHTML = '<p class="empty-state">Không có phim nào đang phát</p>';
                 section.style.display = 'block';
@@ -793,7 +806,7 @@
         }
     }
 
-    function renderMediaCard(item) {
+    function renderMediaCard(item, isSelected = false) {
         const thumbSrc = `/api/sync/thumb/${item.rating_key}`;
         const thumbHtml = item.thumb
             ? `<img src="${thumbSrc}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='<div style=\\'display:flex;align-items:center;justify-content:center;height:100%;font-size:28px;color:var(--text-muted)\\'>&#127910;</div>'">`
@@ -807,19 +820,25 @@
             ? `<div class="progress-mini"><div class="progress-mini-fill" style="width:${item.progress}%"></div></div>`
             : '';
 
+        const selectedClass = isSelected ? ' selected' : '';
+
         return `
-            <div class="media-card" onclick="selectMedia('${item.rating_key}')">
+            <div class="media-card${selectedClass}" data-key="${item.rating_key}" onclick="selectMedia('${item.rating_key}')">
                 <div class="media-thumb">${thumbHtml}</div>
                 <div class="media-title">${item.title}</div>
                 <div class="media-meta">${item.media_type}${item.year ? ' &middot; ' + item.year : ''}</div>
                 ${playerHtml}
                 ${progressHtml}
-                <button class="btn btn-secondary" style="width:100%;padding:6px 0;font-size:12px;margin-top:4px;">Chọn &rarr;</button>
             </div>
         `;
     }
 
     function selectMedia(ratingKey) {
+        // Highlight selected card
+        document.querySelectorAll('.media-card').forEach(c => c.classList.remove('selected'));
+        const card = document.querySelector(`.media-card[data-key="${ratingKey}"]`);
+        if (card) card.classList.add('selected');
+
         document.getElementById('rating-key').value = ratingKey;
         previewSync();
         // Scroll to results
