@@ -1,0 +1,642 @@
+{% extends "base.html" %}
+
+{% block title %}Subtitle Sync - Plex Subtitle Service{% endblock %}
+{% block nav_sync %}active{% endblock %}
+{% block page_title %}Subtitle Sync{% endblock %}
+{% block page_description %}Đồng bộ timing Vietsub hoặc dịch sub chủ động{% endblock %}
+
+{% block extra_styles %}
+<style>
+    .sync-form {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        padding: 24px;
+        margin-bottom: 24px;
+    }
+
+    .sync-form h3 {
+        font-size: 16px;
+        font-weight: 600;
+        margin-bottom: 16px;
+        color: var(--text-primary);
+    }
+
+    .sync-input-row {
+        display: flex;
+        gap: 12px;
+        align-items: flex-end;
+    }
+
+    .sync-input-row .form-group {
+        flex: 1;
+        margin-bottom: 0;
+    }
+
+    .sync-input-row .btn {
+        flex-shrink: 0;
+        height: 42px;
+    }
+
+    .result-card {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        margin-bottom: 16px;
+        animation: fadeIn 0.3s ease;
+    }
+
+    .result-header {
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--border-subtle);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .result-header h3 {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .result-body {
+        padding: 16px 20px;
+    }
+
+    .sync-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 12px;
+    }
+
+    .sync-stat {
+        text-align: center;
+        padding: 12px;
+        background: var(--bg-input);
+        border-radius: var(--radius-md);
+    }
+
+    .sync-stat .value {
+        font-size: 24px;
+        font-weight: 700;
+        color: var(--plex-gold);
+        line-height: 1;
+        margin-bottom: 4px;
+    }
+
+    .sync-stat .label {
+        font-size: 11px;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .sub-info {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        background: var(--bg-input);
+        border-radius: var(--radius-md);
+        margin-bottom: 8px;
+        font-size: 13px;
+        color: var(--text-secondary);
+    }
+
+    .sub-info .icon {
+        flex-shrink: 0;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+    }
+
+    .sub-info .icon.ok { background: var(--success); }
+    .sub-info .icon.missing { background: var(--error); }
+
+    .sub-select {
+        width: 100%;
+        padding: 10px 14px;
+        background: var(--bg-input);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
+        color: var(--text-primary);
+        font-size: 13px;
+        cursor: pointer;
+        margin-bottom: 12px;
+    }
+
+    .sub-select:focus {
+        border-color: var(--plex-gold);
+        outline: none;
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 10px;
+        margin-top: 16px;
+    }
+
+    .action-buttons .btn {
+        flex: 1;
+        padding: 12px 16px;
+    }
+
+    .progress-bar-container {
+        margin: 16px 0;
+        display: none;
+    }
+
+    .progress-bar-bg {
+        height: 6px;
+        background: var(--bg-elevated);
+        border-radius: 3px;
+        overflow: hidden;
+    }
+
+    .progress-bar-fill {
+        height: 100%;
+        background: var(--plex-gold);
+        border-radius: 3px;
+        width: 0%;
+        transition: width 0.5s ease;
+    }
+
+    .progress-label {
+        font-size: 13px;
+        color: var(--text-muted);
+        margin-top: 6px;
+    }
+
+    .how-it-works {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        padding: 24px;
+    }
+
+    .how-it-works h3 {
+        font-size: 16px;
+        font-weight: 600;
+        margin-bottom: 16px;
+        color: var(--text-primary);
+    }
+
+    .step-list {
+        list-style: none;
+        padding: 0;
+    }
+
+    .step-list li {
+        display: flex;
+        gap: 12px;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--border-subtle);
+        font-size: 14px;
+        color: var(--text-secondary);
+    }
+
+    .step-list li:last-child {
+        border-bottom: none;
+    }
+
+    .step-num {
+        width: 28px;
+        height: 28px;
+        background: var(--plex-gold-dim);
+        color: var(--plex-gold);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        font-weight: 700;
+        flex-shrink: 0;
+    }
+
+    @media (max-width: 768px) {
+        .sync-input-row {
+            flex-direction: column;
+        }
+        .sync-stats {
+            grid-template-columns: repeat(2, 1fr);
+        }
+        .action-buttons {
+            flex-direction: column;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Status Banner -->
+<div id="sync-status-banner" class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
+    <div class="stat-card">
+        <div class="stat-value" id="stat-enabled">--</div>
+        <div class="stat-label">Sync Status</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" id="stat-auto">--</div>
+        <div class="stat-label">Auto Sync</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" id="stat-model">--</div>
+        <div class="stat-label">AI Model</div>
+    </div>
+</div>
+
+<!-- Manual Sync Form -->
+<div class="sync-form">
+    <h3>Manual Sync / Translate</h3>
+    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
+        Nhập Plex Rating Key để sync timing hoặc dịch subtitle chủ động.
+        Rating Key tìm trong URL Plex Web: <code>...metadata/<b>12345</b></code>
+    </p>
+
+    <div class="sync-input-row">
+        <div class="form-group">
+            <label for="rating-key">Plex Rating Key</label>
+            <input type="text" id="rating-key" class="form-input" placeholder="VD: 12345">
+        </div>
+        <button class="btn btn-secondary" onclick="previewSync()" id="btn-preview">Preview</button>
+    </div>
+
+    <!-- Progress -->
+    <div class="progress-bar-container" id="progress-container">
+        <div class="progress-bar-bg">
+            <div class="progress-bar-fill" id="progress-fill"></div>
+        </div>
+        <p class="progress-label" id="progress-label">Processing...</p>
+    </div>
+</div>
+
+<!-- Preview / Results Area -->
+<div id="results-area"></div>
+
+<!-- How it works -->
+<div class="how-it-works">
+    <h3>Cách hoạt động</h3>
+    <ul class="step-list">
+        <li>
+            <span class="step-num">1</span>
+            <span><b>Preview:</b> Kiểm tra Engsub trên Plex + tìm Vietsub trên Plex & Subsource</span>
+        </li>
+        <li>
+            <span class="step-num">2</span>
+            <span><b>Sync Timing:</b> AI match các mốc thời gian Vietsub &harr; Engsub, tính hàm chuyển đổi timing</span>
+        </li>
+        <li>
+            <span class="step-num">3</span>
+            <span><b>Hoặc AI Translate:</b> Dịch Engsub sang Tiếng Việt khi không có Vietsub phù hợp</span>
+        </li>
+        <li>
+            <span class="step-num">4</span>
+            <span><b>Upload:</b> Subtitle đã xử lý được upload lại lên Plex</span>
+        </li>
+    </ul>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let currentRatingKey = '';
+    let selectedSubtitleId = null;
+    let previewData = null;
+
+    // Load sync status
+    async function loadStatus() {
+        try {
+            const res = await fetch('/api/sync/status');
+            const data = await res.json();
+
+            document.getElementById('stat-enabled').textContent = data.sync_enabled ? 'ON' : 'OFF';
+            document.getElementById('stat-enabled').style.color = data.sync_enabled ? 'var(--success)' : 'var(--error)';
+
+            document.getElementById('stat-auto').textContent = data.auto_sync_after_download ? 'ON' : 'OFF';
+            document.getElementById('stat-auto').style.color = data.auto_sync_after_download ? 'var(--success)' : 'var(--text-muted)';
+
+            document.getElementById('stat-model').textContent = data.model || '--';
+            document.getElementById('stat-model').style.cssText = 'font-size: 16px; color: var(--text-primary);';
+
+            if (!data.ai_available) {
+                showAlert('OpenAI API key chưa được cấu hình. Vào Setup để cài đặt.', 'warning');
+            }
+        } catch (e) {
+            console.error('Failed to load sync status:', e);
+        }
+    }
+
+    // Preview: check subtitles availability
+    async function previewSync() {
+        const ratingKey = document.getElementById('rating-key').value.trim();
+        if (!ratingKey) {
+            showAlert('Vui lòng nhập Rating Key', 'warning');
+            return;
+        }
+
+        currentRatingKey = ratingKey;
+        const btn = document.getElementById('btn-preview');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>';
+
+        try {
+            const res = await fetch('/api/sync/preview', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ rating_key: ratingKey })
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || 'Preview failed');
+            }
+
+            previewData = await res.json();
+            renderPreview(previewData);
+
+        } catch (e) {
+            showAlert('Error: ' + e.message, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Preview';
+        }
+    }
+
+    function renderPreview(data) {
+        const area = document.getElementById('results-area');
+        const hasViSub = data.has_vi_on_plex || data.vi_candidates.length > 0;
+
+        // Build subtitle info section
+        let subInfoHtml = '';
+
+        // English sub status
+        subInfoHtml += `
+            <div class="sub-info">
+                <span class="icon ${data.has_en_on_plex ? 'ok' : 'missing'}"></span>
+                <span>English subtitle: ${data.has_en_on_plex ? 'Available on Plex' : 'Not found'}</span>
+            </div>
+        `;
+
+        // Vietnamese sub status
+        if (data.has_vi_on_plex) {
+            subInfoHtml += `
+                <div class="sub-info">
+                    <span class="icon ok"></span>
+                    <span>Vietnamese subtitle: Available on Plex (sync timing sẽ dùng sub này)</span>
+                </div>
+            `;
+        } else if (data.vi_candidates.length > 0) {
+            subInfoHtml += `
+                <div class="sub-info">
+                    <span class="icon ok"></span>
+                    <span>Vietnamese subtitle: ${data.vi_candidates.length} bản tìm thấy trên Subsource</span>
+                </div>
+                <select class="sub-select" id="vi-sub-select" onchange="onSubSelect(this.value)">
+                    ${data.vi_candidates.map((c, i) => `
+                        <option value="${c.id}" ${i === 0 ? 'selected' : ''}>
+                            ${c.name} (${c.quality}, ${c.downloads} downloads${c.rating ? ', rating: ' + c.rating.toFixed(1) : ''})
+                        </option>
+                    `).join('')}
+                </select>
+            `;
+            selectedSubtitleId = data.vi_candidates[0].id;
+        } else {
+            subInfoHtml += `
+                <div class="sub-info">
+                    <span class="icon missing"></span>
+                    <span>Vietnamese subtitle: Not found (Plex & Subsource)</span>
+                </div>
+            `;
+        }
+
+        // Action buttons
+        let actionsHtml = '<div class="action-buttons">';
+
+        if (data.can_sync && data.sync_enabled) {
+            actionsHtml += `
+                <button class="btn btn-primary" onclick="executeSync()" id="btn-sync">
+                    Sync Timing
+                </button>
+            `;
+        } else if (data.can_sync && !data.sync_enabled) {
+            actionsHtml += `
+                <button class="btn btn-primary" disabled title="Enable sync in Setup">
+                    Sync Timing (disabled)
+                </button>
+            `;
+        }
+
+        if (data.has_en_on_plex && data.can_translate) {
+            actionsHtml += `
+                <button class="btn btn-info" onclick="executeTranslate()" id="btn-translate">
+                    AI Translate (EN &rarr; VI)
+                </button>
+            `;
+        }
+
+        actionsHtml += '</div>';
+
+        // Determine status tag
+        let statusTag;
+        if (data.can_sync && data.sync_enabled) {
+            statusTag = '<span class="tag tag-info">Ready to Sync</span>';
+        } else if (data.can_translate) {
+            statusTag = '<span class="tag tag-warning">Translate Only</span>';
+        } else {
+            statusTag = '<span class="tag tag-error">Cannot Process</span>';
+        }
+
+        area.innerHTML = `
+            <div class="result-card">
+                <div class="result-header">
+                    <h3>${data.title}</h3>
+                    ${statusTag}
+                </div>
+                <div class="result-body">
+                    ${subInfoHtml}
+                    ${actionsHtml}
+                </div>
+            </div>
+        `;
+    }
+
+    function onSubSelect(subtitleId) {
+        selectedSubtitleId = subtitleId;
+    }
+
+    // Execute sync
+    async function executeSync() {
+        if (!currentRatingKey) {
+            showAlert('No media selected', 'warning');
+            return;
+        }
+
+        if (!confirm('Execute sync timing? Sẽ sử dụng AI API credits.')) return;
+
+        setButtonsLoading(true);
+        showProgress('Downloading subtitles...');
+
+        try {
+            const body = { rating_key: currentRatingKey };
+            if (selectedSubtitleId && !previewData?.has_vi_on_plex) {
+                body.subtitle_id = selectedSubtitleId;
+            }
+
+            const res = await fetch('/api/sync/execute', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(body)
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || 'Sync failed');
+            }
+
+            const result = await res.json();
+            finishProgress();
+            renderSyncResult(result);
+            showAlert(result.message, 'success');
+
+        } catch (e) {
+            hideProgress();
+            showAlert('Sync failed: ' + e.message, 'error');
+        } finally {
+            setButtonsLoading(false);
+        }
+    }
+
+    // Execute translate
+    async function executeTranslate() {
+        if (!currentRatingKey) {
+            showAlert('No media selected', 'warning');
+            return;
+        }
+
+        if (!confirm('Dịch English subtitle sang Vietnamese? Sẽ sử dụng AI API credits.')) return;
+
+        setButtonsLoading(true);
+        showProgress('Translating subtitle...');
+
+        try {
+            const res = await fetch('/api/sync/translate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ rating_key: currentRatingKey })
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || 'Translation failed');
+            }
+
+            const result = await res.json();
+            finishProgress();
+            showAlert(result.message || 'Translation completed', 'success');
+
+            // Re-preview to update status
+            setTimeout(() => previewSync(), 2000);
+
+        } catch (e) {
+            hideProgress();
+            showAlert('Translation failed: ' + e.message, 'error');
+        } finally {
+            setButtonsLoading(false);
+        }
+    }
+
+    // Progress helpers
+    let progressInterval = null;
+
+    function showProgress(label) {
+        const container = document.getElementById('progress-container');
+        const fill = document.getElementById('progress-fill');
+        const labelEl = document.getElementById('progress-label');
+        container.style.display = 'block';
+        fill.style.width = '0%';
+        labelEl.textContent = label;
+
+        let progress = 0;
+        progressInterval = setInterval(() => {
+            progress = Math.min(progress + 3, 90);
+            fill.style.width = progress + '%';
+
+            if (progress < 30) labelEl.textContent = 'Downloading subtitles...';
+            else if (progress < 60) labelEl.textContent = 'AI processing...';
+            else if (progress < 80) labelEl.textContent = 'Applying corrections...';
+            else labelEl.textContent = 'Uploading to Plex...';
+        }, 500);
+    }
+
+    function finishProgress() {
+        if (progressInterval) clearInterval(progressInterval);
+        document.getElementById('progress-fill').style.width = '100%';
+        document.getElementById('progress-label').textContent = 'Done!';
+    }
+
+    function hideProgress() {
+        if (progressInterval) clearInterval(progressInterval);
+        document.getElementById('progress-container').style.display = 'none';
+    }
+
+    function setButtonsLoading(loading) {
+        const btnSync = document.getElementById('btn-sync');
+        const btnTranslate = document.getElementById('btn-translate');
+        const btnPreview = document.getElementById('btn-preview');
+
+        if (btnSync) btnSync.disabled = loading;
+        if (btnTranslate) btnTranslate.disabled = loading;
+        if (btnPreview) btnPreview.disabled = loading;
+
+        if (loading && btnSync) btnSync.innerHTML = '<span class="spinner"></span> Processing...';
+        if (!loading && btnSync) btnSync.textContent = 'Sync Timing';
+    }
+
+    function renderSyncResult(result) {
+        const stats = result.stats;
+        if (!stats) return;
+
+        const offsetS = (Math.abs(stats.avg_offset_ms) / 1000).toFixed(1);
+        const direction = stats.avg_offset_ms > 0 ? 'delayed' : 'early';
+
+        const area = document.getElementById('results-area');
+        area.innerHTML = `
+            <div class="result-card">
+                <div class="result-header">
+                    <h3>Sync Complete</h3>
+                    <span class="tag tag-success">Done</span>
+                </div>
+                <div class="result-body">
+                    <div class="sync-stats">
+                        <div class="sync-stat">
+                            <div class="value">${stats.entries_synced}</div>
+                            <div class="label">Entries Synced</div>
+                        </div>
+                        <div class="sync-stat">
+                            <div class="value">${stats.anchors_found}</div>
+                            <div class="label">Anchor Points</div>
+                        </div>
+                        <div class="sync-stat">
+                            <div class="value">${offsetS}s</div>
+                            <div class="label">Avg Offset (${direction})</div>
+                        </div>
+                        <div class="sync-stat">
+                            <div class="value">${stats.total_ref_entries}</div>
+                            <div class="label">EN Reference</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    // Init
+    loadStatus();
+
+    // Submit on Enter key
+    document.getElementById('rating-key').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') previewSync();
+    });
+</script>
+{% endblock %}
