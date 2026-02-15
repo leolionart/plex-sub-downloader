@@ -101,16 +101,3 @@ class ServiceConfig(BaseModel):
     """Runtime configuration cho service."""
 
     subtitle_settings: SubtitleSettings = Field(default_factory=SubtitleSettings)
-
-    # Stats tracking
-    total_downloads: int = Field(default=0, description="Tổng số subtitle đã download")
-    total_skipped: int = Field(default=0, description="Tổng số lần skip")
-    last_download: str | None = Field(default=None, description="Timestamp của download cuối")
-
-    def increment_downloads(self) -> None:
-        """Increment download counter."""
-        self.total_downloads += 1
-
-    def increment_skipped(self) -> None:
-        """Increment skip counter."""
-        self.total_skipped += 1

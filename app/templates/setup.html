@@ -286,13 +286,7 @@
                 <input id="openai_base_url" class="form-input" value="https://api.openai.com/v1">
             </div>
         </div>
-        <div class="form-row">
-            <div class="form-group">
-                <label for="default_language">Default language</label>
-                <input id="default_language" class="form-input" value="vi">
-            </div>
-        </div>
-        <p class="setup-hint" style="margin-top: 8px; margin-bottom: 0;">Cấu hình bật/tắt Translation và Sync nằm ở trang <a href="/" style="color: var(--plex-gold);">Settings</a>.</p>
+        <p class="setup-hint" style="margin-top: 8px; margin-bottom: 0;">Ngôn ngữ target và cấu hình Translation/Sync nằm ở trang <a href="/" style="color: var(--plex-gold);">Settings</a>.</p>
     </div>
 </div>
 
@@ -403,7 +397,6 @@
 
         fill('plex_url', data.plex_url);
         fill('openai_model', data.openai_model || 'gpt-4o-mini');
-        fill('default_language', data.default_language || 'vi');
         fill('telegram_chat_id', data.telegram_chat_id || '');
         fill('redis_url', data.redis_url || '');
         fill('cache_ttl_seconds', data.cache_ttl_seconds || 3600);
@@ -447,7 +440,6 @@
             plex_url: $('plex_url').value.trim() || null,
             openai_model: $('openai_model').value.trim() || 'gpt-4o-mini',
             openai_base_url: $('openai_base_url').value.trim() || 'https://api.openai.com/v1',
-            default_language: $('default_language').value.trim() || 'vi',
             telegram_chat_id: $('telegram_chat_id').value.trim() || null,
             cache_enabled: $('cache_enabled').value === 'true',
             redis_url: $('redis_url').value.trim() || null,

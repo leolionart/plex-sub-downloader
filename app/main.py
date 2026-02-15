@@ -19,6 +19,7 @@ from app.config import settings
 from app.models.runtime_config import RuntimeConfig
 from app.models.webhook import PlexWebhookPayload, TautulliWebhookPayload
 from app.models.settings import SubtitleSettings
+from app.clients.subsource_client import LANGUAGE_MAP
 from app.services.subtitle_service import SubtitleService, SubtitleServiceError
 from app.services.config_store import ConfigStore
 from app.utils.logger import setup_logging, get_logger
@@ -168,28 +169,22 @@ async def web_ui(request: Request) -> HTMLResponse:
     configured = _is_configured(runtime_config)
 
     if configured:
-        config = subtitle_service.get_config()
-        stats = {
-            "total_downloads": config.total_downloads,
-            "total_skipped": config.total_skipped,
-            "success_rate": (
-                round(config.total_downloads / (config.total_downloads + config.total_skipped) * 100)
-                if (config.total_downloads + config.total_skipped) > 0
-                else 0
-            ),
-        }
-        settings_data = config.subtitle_settings
-        languages = settings_data.languages
+        stats = subtitle_service.stats.get_all()
+        current_language = runtime_config.default_language
+        selected_languages = runtime_config.subtitle_settings.languages or [current_language]
     else:
-        stats = {"total_downloads": 0, "total_skipped": 0, "success_rate": 0}
-        languages = ["vi"]
+        stats = {"total_downloads": 0, "total_skipped": 0, "total_translations": 0, "total_syncs": 0, "success_rate": 0}
+        current_language = "vi"
+        selected_languages = ["vi"]
 
     return templates.TemplateResponse(
         "settings.html",
         {
             "request": request,
             "stats": stats,
-            "languages": languages,
+            "languages_map": LANGUAGE_MAP,
+            "current_language": current_language,
+            "selected_languages": selected_languages,
             "configured": configured,
         },
     )
@@ -249,23 +244,34 @@ async def api_info() -> dict[str, Any]:
 @app.get("/api/settings")
 async def get_settings() -> dict[str, Any]:
     """Get current settings API."""
-    if not subtitle_service:
+    if not subtitle_service or not runtime_config:
         raise HTTPException(status_code=503, detail="Service not initialized")
 
     config = subtitle_service.get_config()
-    return config.model_dump()
+    data = config.model_dump()
+    data["default_language"] = runtime_config.default_language
+    return data
 
 
 @app.post("/api/settings")
-async def update_settings(settings_update: SubtitleSettings) -> dict[str, str]:
+async def update_settings(request: Request) -> dict[str, str]:
     """Update settings API."""
     if not subtitle_service or not config_store or not runtime_config:
         raise HTTPException(status_code=503, detail="Service not initialized")
 
+    body = await request.json()
+
+    # Extract default_language (nếu có)
+    new_lang = body.pop("default_language", None)
+
+    # Parse SubtitleSettings từ remaining fields
+    settings_update = SubtitleSettings(**body)
     subtitle_service.update_settings(settings_update)
 
     # Persist to disk so settings survive restart
     runtime_config.subtitle_settings = settings_update
+    if new_lang and new_lang in LANGUAGE_MAP:
+        runtime_config.default_language = new_lang
     config_store.save(runtime_config)
 
     return {

@@ -19,6 +19,7 @@ from app.clients.cache_client import CacheClient
 from app.clients.openai_translation_client import OpenAITranslationClient, TranslationClientError
 from app.clients.sync_client import SubtitleSyncClient, SyncClientError
 from app.models.runtime_config import RuntimeConfig
+from app.services.stats_store import StatsStore
 from app.models.webhook import MediaMetadata
 from app.models.subtitle import SubtitleSearchParams, SubtitleResult
 from app.models.settings import ServiceConfig, SubtitleSettings
@@ -63,13 +64,11 @@ class SubtitleService:
         # Runtime configuration/state
         self.config = service_config or ServiceConfig(subtitle_settings=runtime_config.subtitle_settings)
 
+        # Persistent stats store (survives restarts)
+        self.stats = StatsStore()
+
         # Pending translation queue (for approval mode)
         self._pending_translations: dict[str, dict] = {}
-        self._translation_stats = {
-            "total_translations": 0,
-            "total_lines": 0,
-            "total_cost": 0.0,
-        }
 
         # Translation history (persisted to JSON)
         self._history_path = Path("data") / "translation_history.json"
@@ -171,7 +170,7 @@ class SubtitleService:
             should_download, reason = await self._should_download_subtitle(video, metadata, log)
             if not should_download:
                 log.info(f"[Step 3/7] ⏭ Skipping: {reason}", title=metadata.title)
-                self.config.increment_skipped()
+                self.stats.increment("total_skipped")
                 return {
                     "status": "skipped",
                     "message": reason,
@@ -281,9 +280,8 @@ class SubtitleService:
                     video, metadata, subtitle_path, log,
                 )
 
-            # Update stats
-            self.config.increment_downloads()
-            self.config.last_download = datetime.now().isoformat()
+            # Update persistent stats
+            self.stats.increment("total_downloads")
 
             # Send Telegram notification
             await self.telegram_client.notify_subtitle_downloaded(
@@ -636,6 +634,9 @@ class SubtitleService:
             await self._upload_to_plex(video, output_path, log)
             log.info("[Sync] ✓ Synced subtitle re-uploaded to Plex")
 
+            # Update persistent stats
+            self.stats.increment("total_syncs")
+
             await self.telegram_client.notify_sync_completed(
                 title=str(metadata),
                 anchors=sync_stats["anchors_found"],
@@ -899,6 +900,9 @@ class SubtitleService:
 
             # Upload synced subtitle
             await self._upload_to_plex(video, output_path, log)
+
+            # Update persistent stats
+            self.stats.increment("total_syncs")
 
             await self.telegram_client.notify_sync_completed(
                 title=str(metadata),
@@ -1190,15 +1194,12 @@ class SubtitleService:
             logger.info(f"Removed pending translation: {rating_key}")
 
     def get_translation_stats(self) -> dict:
-        """Get translation statistics."""
+        """Get translation statistics (from persistent store)."""
+        all_stats = self.stats.get_all()
         return {
-            **self._translation_stats,
+            "total_translations": all_stats["total_translations"],
+            "total_lines": all_stats["total_translation_lines"],
             "pending_count": len(self._pending_translations),
-            "average_cost": (
-                self._translation_stats["total_cost"] / self._translation_stats["total_translations"]
-                if self._translation_stats["total_translations"] > 0
-                else 0
-            ),
         }
 
     # ── Translation History ─────────────────────────────────────────────
@@ -1355,10 +1356,10 @@ class SubtitleService:
                 lines_translated=stats["lines_translated"],
             )
 
-            # Update stats
-            self.config.increment_downloads()
-            self._translation_stats["total_translations"] += 1
-            self._translation_stats["total_lines"] += stats["lines_translated"]
+            # Update persistent stats
+            self.stats.increment("total_downloads")
+            self.stats.increment("total_translations")
+            self.stats.increment("total_translation_lines", stats["lines_translated"])
 
             # Record translation history
             self.add_history_entry(

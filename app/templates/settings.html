@@ -5,16 +5,241 @@
 {% block page_title %}Settings{% endblock %}
 {% block page_description %}Cấu hình subtitle download và xử lý tự động{% endblock %}
 
+{% block extra_styles %}
+<style>
+    /* ── Multi-select Searchable Component ── */
+    /* Override card overflow so dropdown can overlay */
+    .card:has(.multi-select) {
+        overflow: visible;
+    }
+
+    .multi-select {
+        position: relative;
+    }
+
+    .multi-select-trigger {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px;
+        min-height: 42px;
+        width: 100%;
+        padding: 6px 10px;
+        background: var(--bg-input);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        transition: border-color var(--transition-fast);
+    }
+
+    .multi-select-trigger:hover {
+        border-color: var(--text-muted);
+    }
+
+    .multi-select.open .multi-select-trigger {
+        border-color: var(--plex-gold);
+        box-shadow: 0 0 0 3px var(--plex-gold-dim);
+    }
+
+    .multi-select-trigger .placeholder {
+        color: var(--text-muted);
+        font-size: 14px;
+        padding: 2px 4px;
+    }
+
+    .multi-select-trigger .chevron {
+        margin-left: auto;
+        padding-left: 8px;
+        color: var(--text-muted);
+        transition: transform 0.2s;
+        flex-shrink: 0;
+        font-size: 12px;
+    }
+
+    .multi-select.open .chevron {
+        transform: rotate(180deg);
+    }
+
+    /* Selected tags */
+    .lang-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 3px 8px;
+        background: var(--plex-gold-dim);
+        color: var(--plex-gold);
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 600;
+        white-space: nowrap;
+        line-height: 1.4;
+    }
+
+    .lang-tag.primary {
+        background: var(--plex-gold);
+        color: #1A1A1A;
+    }
+
+    .lang-tag .tag-label {
+        max-width: 100px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .lang-tag .tag-remove {
+        cursor: pointer;
+        opacity: 0.7;
+        font-size: 14px;
+        line-height: 1;
+    }
+
+    .lang-tag .tag-remove:hover {
+        opacity: 1;
+    }
+
+    .lang-tag.primary .tag-remove:hover {
+        opacity: 0.8;
+    }
+
+    /* Dropdown */
+    .multi-select-dropdown {
+        display: none;
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 0;
+        right: 0;
+        background: var(--bg-surface);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+        z-index: 100;
+        max-height: 300px;
+        overflow: hidden;
+        flex-direction: column;
+    }
+
+    .multi-select.open .multi-select-dropdown {
+        display: flex;
+    }
+
+    .multi-select-search {
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .multi-select-search input {
+        width: 100%;
+        padding: 8px 12px;
+        background: var(--bg-input);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-sm);
+        color: var(--text-primary);
+        font-size: 13px;
+        font-family: inherit;
+        outline: none;
+    }
+
+    .multi-select-search input:focus {
+        border-color: var(--plex-gold);
+    }
+
+    .multi-select-search input::placeholder {
+        color: var(--text-muted);
+    }
+
+    .multi-select-options {
+        overflow-y: auto;
+        flex: 1;
+    }
+
+    .multi-select-option {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        cursor: pointer;
+        transition: background var(--transition-fast);
+        font-size: 14px;
+    }
+
+    .multi-select-option:hover {
+        background: var(--bg-surface-hover);
+    }
+
+    .multi-select-option.selected {
+        background: var(--plex-gold-dim);
+    }
+
+    .multi-select-option .check-box {
+        width: 18px;
+        height: 18px;
+        border: 2px solid var(--border-subtle);
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        transition: all var(--transition-fast);
+    }
+
+    .multi-select-option.selected .check-box {
+        background: var(--plex-gold);
+        border-color: var(--plex-gold);
+    }
+
+    .multi-select-option.selected .check-box::after {
+        content: '';
+        width: 5px;
+        height: 9px;
+        border: solid #1A1A1A;
+        border-width: 0 2px 2px 0;
+        transform: rotate(45deg) translateY(-1px);
+    }
+
+    .multi-select-option .lang-name {
+        flex: 1;
+        color: var(--text-primary);
+    }
+
+    .multi-select-option.selected .lang-name {
+        color: var(--plex-gold);
+    }
+
+    .multi-select-option .lang-code {
+        color: var(--text-muted);
+        font-size: 12px;
+        text-transform: uppercase;
+        font-weight: 600;
+    }
+
+    .multi-select-option.selected .lang-code {
+        color: var(--plex-gold);
+        opacity: 0.7;
+    }
+
+    .multi-select-empty {
+        padding: 16px;
+        text-align: center;
+        color: var(--text-muted);
+        font-size: 13px;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <!-- Stats -->
 <div class="stats-grid">
     <div class="stat-card">
         <div class="stat-value">{{ stats.total_downloads }}</div>
-        <div class="stat-label">Subtitles Downloaded</div>
+        <div class="stat-label">Downloaded</div>
     </div>
     <div class="stat-card">
-        <div class="stat-value">{{ stats.total_skipped }}</div>
-        <div class="stat-label">Tasks Skipped</div>
+        <div class="stat-value">{{ stats.total_translations }}</div>
+        <div class="stat-label">AI Translated</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ stats.total_syncs }}</div>
+        <div class="stat-label">Timing Synced</div>
     </div>
     <div class="stat-card">
         <div class="stat-value">{{ stats.success_rate }}%</div>
@@ -26,16 +251,24 @@
     <!-- Language Settings -->
     <div class="card" style="margin-bottom: 20px;">
         <div class="card-header">
-            <h2>Language Settings</h2>
+            <h2>Target Languages</h2>
         </div>
         <div class="card-body">
-            <div class="form-group">
-                <label for="language-input">Subtitle Languages</label>
-                <input type="text" id="language-input" class="form-input"
-                       placeholder="Nhập language code (vd: vi, en, ko) rồi nhấn Enter">
-                <div class="form-hint">Nhấn Enter để thêm ngôn ngữ. Click x để xóa.</div>
-                <div id="language-tags" style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px;"></div>
-                <input type="hidden" name="languages" id="languages-hidden">
+            <div class="form-group" style="margin-bottom: 0;">
+                <label>Ngôn ngữ subtitle mục tiêu</label>
+                <div class="form-hint" style="margin-bottom: 8px;">Ngôn ngữ đầu tiên là primary, dùng cho download, dịch AI, và sync timing</div>
+                <div class="multi-select" id="language-select">
+                    <div class="multi-select-trigger" id="language-trigger">
+                        <span class="placeholder">Chọn ngôn ngữ...</span>
+                        <span class="chevron">&#9662;</span>
+                    </div>
+                    <div class="multi-select-dropdown">
+                        <div class="multi-select-search">
+                            <input type="text" id="language-search" placeholder="Tìm ngôn ngữ..." autocomplete="off">
+                        </div>
+                        <div class="multi-select-options" id="language-options"></div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -135,7 +368,7 @@
                 </div>
                 <div class="toggle-label">
                     <div class="toggle-title">Sync Timing</div>
-                    <div class="toggle-desc">Đồng bộ timing Vietsub theo Engsub chuẩn kèm phim bằng AI</div>
+                    <div class="toggle-desc">Đồng bộ timing subtitle theo Engsub chuẩn kèm phim bằng AI</div>
                 </div>
             </label>
 
@@ -146,7 +379,7 @@
                 </div>
                 <div class="toggle-label">
                     <div class="toggle-title">Auto Sync After Download</div>
-                    <div class="toggle-desc">Tự động sync timing ngay sau khi download Vietsub từ Subsource</div>
+                    <div class="toggle-desc">Tự động sync timing ngay sau khi download subtitle từ Subsource</div>
                 </div>
             </label>
         </div>
@@ -164,8 +397,8 @@
                     <span class="toggle-slider"></span>
                 </div>
                 <div class="toggle-label">
-                    <div class="toggle-title">Auto Translate (Eng → Viet)</div>
-                    <div class="toggle-desc">Tự động dịch Engsub sang Vietsub khi không tìm thấy Vietsub</div>
+                    <div class="toggle-title">Auto Translate (Eng → Target)</div>
+                    <div class="toggle-desc">Tự động dịch Engsub sang ngôn ngữ target khi không tìm thấy subtitle</div>
                 </div>
             </label>
 
@@ -209,52 +442,132 @@
 
 {% block scripts %}
 <script>
-    let languages = {{ languages | tojson }};
+    // ── Language data ─────────────────────────────────────
+    const LANGUAGES = {{ languages_map | tojson }};
+    let selectedLanguages = {{ selected_languages | tojson }};
 
-    function renderLanguageTags() {
-        const container = document.getElementById('language-tags');
-        container.innerHTML = '';
+    // ── Multi-Select Component ────────────────────────────
+    const selectEl = document.getElementById('language-select');
+    const triggerEl = document.getElementById('language-trigger');
+    const searchEl = document.getElementById('language-search');
+    const optionsEl = document.getElementById('language-options');
 
-        languages.forEach(lang => {
-            const tag = document.createElement('span');
-            tag.className = 'tag tag-gold';
-            tag.innerHTML = `
-                <span>${lang.toUpperCase()}</span>
-                <span class="tag-remove" onclick="event.stopPropagation(); removeLanguage('${lang}')">&#10005;</span>
-            `;
-            container.appendChild(tag);
-        });
-
-        document.getElementById('languages-hidden').value = JSON.stringify(languages);
+    function cap(str) {
+        return str.charAt(0).toUpperCase() + str.slice(1);
     }
 
-    document.getElementById('language-input').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            const input = e.target;
-            const lang = input.value.trim().toLowerCase();
+    function isSelected(code) {
+        return selectedLanguages.includes(code);
+    }
 
-            if (lang && !languages.includes(lang)) {
-                languages.push(lang);
-                renderLanguageTags();
-                input.value = '';
+    function toggleLanguage(code) {
+        if (isSelected(code)) {
+            selectedLanguages = selectedLanguages.filter(c => c !== code);
+        } else {
+            selectedLanguages.push(code);
+        }
+        updateTrigger();
+        renderOptions(searchEl.value);
+    }
+
+    function removeLanguage(code, event) {
+        if (event) { event.stopPropagation(); event.preventDefault(); }
+        selectedLanguages = selectedLanguages.filter(c => c !== code);
+        updateTrigger();
+        renderOptions(searchEl.value);
+    }
+
+    function updateTrigger() {
+        // Clear existing tags
+        triggerEl.querySelectorAll('.lang-tag').forEach(t => t.remove());
+        const placeholder = triggerEl.querySelector('.placeholder');
+        const chevron = triggerEl.querySelector('.chevron');
+
+        if (selectedLanguages.length === 0) {
+            placeholder.style.display = '';
+        } else {
+            placeholder.style.display = 'none';
+            // Insert tags before chevron
+            selectedLanguages.forEach((code, i) => {
+                const tag = document.createElement('span');
+                tag.className = 'lang-tag' + (i === 0 ? ' primary' : '');
+                const name = LANGUAGES[code] ? cap(LANGUAGES[code]) : code.toUpperCase();
+                tag.innerHTML = `<span class="tag-label">${name}</span><span class="tag-remove" title="Remove">&#10005;</span>`;
+                tag.querySelector('.tag-remove').addEventListener('click', (e) => removeLanguage(code, e));
+                triggerEl.insertBefore(tag, chevron);
+            });
+        }
+    }
+
+    function renderOptions(filter = '') {
+        optionsEl.innerHTML = '';
+        const query = (filter || '').toLowerCase();
+        let hasMatch = false;
+
+        for (const [code, name] of Object.entries(LANGUAGES)) {
+            if (query && !name.toLowerCase().includes(query) && !code.toLowerCase().includes(query)) {
+                continue;
             }
+            hasMatch = true;
+            const div = document.createElement('div');
+            const selected = isSelected(code);
+            div.className = 'multi-select-option' + (selected ? ' selected' : '');
+            div.innerHTML = `<span class="check-box"></span><span class="lang-name">${cap(name)}</span><span class="lang-code">${code}</span>`;
+            div.addEventListener('click', () => toggleLanguage(code));
+            optionsEl.appendChild(div);
+        }
+
+        if (!hasMatch) {
+            optionsEl.innerHTML = '<div class="multi-select-empty">Không tìm thấy ngôn ngữ</div>';
+        }
+    }
+
+    function openDropdown() {
+        selectEl.classList.add('open');
+        searchEl.value = '';
+        renderOptions();
+        setTimeout(() => searchEl.focus(), 50);
+    }
+
+    function closeDropdown() {
+        selectEl.classList.remove('open');
+    }
+
+    triggerEl.addEventListener('click', (e) => {
+        // Don't toggle if clicking a tag remove button
+        if (e.target.closest('.tag-remove')) return;
+        e.preventDefault();
+        if (selectEl.classList.contains('open')) {
+            closeDropdown();
+        } else {
+            openDropdown();
         }
     });
 
-    function removeLanguage(lang) {
-        languages = languages.filter(l => l !== lang);
-        renderLanguageTags();
-    }
+    searchEl.addEventListener('input', (e) => renderOptions(e.target.value));
+    searchEl.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDropdown(); });
 
+    document.addEventListener('click', (e) => {
+        if (!selectEl.contains(e.target)) closeDropdown();
+    });
+
+    // Init tags
+    updateTrigger();
+
+    // ── Load/Save Settings ────────────────────────────────
     async function loadSettings() {
         try {
             const response = await fetch('/api/settings');
             const data = await response.json();
             const settings = data.subtitle_settings;
 
-            languages = settings.languages || ['vi'];
-            renderLanguageTags();
+            // Languages: restore from saved list
+            if (settings.languages && settings.languages.length > 0) {
+                selectedLanguages = settings.languages;
+            } else if (data.default_language) {
+                selectedLanguages = [data.default_language];
+            }
+            updateTrigger();
 
             document.getElementById('auto_download_on_add').checked = settings.auto_download_on_add;
             document.getElementById('auto_download_on_play').checked = settings.auto_download_on_play;
@@ -275,10 +588,16 @@
     document.getElementById('settings-form').addEventListener('submit', async (e) => {
         e.preventDefault();
 
+        if (selectedLanguages.length === 0) {
+            showAlert('Vui lòng chọn ít nhất một ngôn ngữ', 'error');
+            return;
+        }
+
         const formData = new FormData(e.target);
-        const settings = {
-            languages: languages,
-            language_priority: languages,
+        const payload = {
+            default_language: selectedLanguages[0],
+            languages: selectedLanguages,
+            language_priority: selectedLanguages,
             auto_download_on_add: formData.get('auto_download_on_add') === 'on',
             auto_download_on_play: formData.get('auto_download_on_play') === 'on',
             skip_if_has_subtitle: formData.get('skip_if_has_subtitle') === 'on',
@@ -297,7 +616,7 @@
             const response = await fetch('/api/settings', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(settings)
+                body: JSON.stringify(payload)
             });
 
             if (response.ok) {
