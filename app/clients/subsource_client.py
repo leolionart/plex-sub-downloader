@@ -9,6 +9,7 @@ Flow:
 """
 
 import logging
+import re
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -258,6 +259,27 @@ class SubsourceClient:
                 return []
             raise SubsourceClientError(f"Subtitle search failed: {e}") from e
 
+    @staticmethod
+    def _extract_season_episode(name: str) -> tuple[int | None, int | None]:
+        """
+        Extract season/episode from release name.
+        Handles: S01E03, s02e01, S1E5, Season.2.Episode.1, etc.
+        """
+        if not name:
+            return None, None
+
+        # Standard SxxEyy pattern (most common)
+        match = re.search(r"[Ss](\d{1,2})[Ee](\d{1,2})", name)
+        if match:
+            return int(match.group(1)), int(match.group(2))
+
+        # Season.X.Episode.Y pattern
+        match = re.search(r"[Ss]eason\s*\.?\s*(\d{1,2})\s*\.?\s*[Ee]pisode\s*\.?\s*(\d{1,2})", name, re.IGNORECASE)
+        if match:
+            return int(match.group(1)), int(match.group(2))
+
+        return None, None
+
     def _parse_subtitle_results(self, data: dict[str, Any]) -> list[SubtitleResult]:
         """Parse Subsource API v1 subtitle response."""
         results: list[SubtitleResult] = []
@@ -270,6 +292,9 @@ class SubsourceClient:
 
                 # Build name from release info or fallback
                 name = release_info or f"subtitle-{subtitle_id}"
+
+                # Extract season/episode from release name
+                parsed_season, parsed_episode = self._extract_season_episode(name)
 
                 # Map productionType to quality_type
                 production_type = (item.get("productionType") or "").lower()
@@ -304,6 +329,8 @@ class SubsourceClient:
                     rating=rating,
                     downloads=item.get("downloads", 0),
                     quality_type=quality_type,
+                    season=parsed_season,
+                    episode=parsed_episode,
                 )
                 results.append(result)
 
@@ -318,17 +345,72 @@ class SubsourceClient:
         results: list[SubtitleResult],
         params: SubtitleSearchParams,
     ) -> list[SubtitleResult]:
-        """Sort subtitles by priority score."""
+        """
+        Filter by season/episode match, then sort by priority score.
+
+        For TV episodes (season + episode set):
+        1. Hard filter: only keep subtitles matching the exact SxxEyy
+        2. If no exact match, try season-only match (subtitle packs)
+        3. Subtitles without parseable season/episode are kept as fallback
+        """
         if not results:
             return []
 
-        sorted_results = sorted(results)
+        is_episode_search = params.season is not None and params.episode is not None
 
-        logger.info(
-            f"Ranked {len(sorted_results)} subtitles. "
-            f"Top: {sorted_results[0].name} "
-            f"(quality={sorted_results[0].quality_type}, score={sorted_results[0].priority_score})"
-        )
+        if is_episode_search:
+            # Exact match: same season AND episode
+            exact_matches = [
+                r for r in results
+                if r.season == params.season and r.episode == params.episode
+            ]
+
+            # Season match: same season, no episode info (could be season pack)
+            season_matches = [
+                r for r in results
+                if r.season == params.season and r.episode is None
+            ]
+
+            # No season/episode info at all (unparseable names, subtitle packs)
+            unknown_matches = [
+                r for r in results
+                if r.season is None and r.episode is None
+            ]
+
+            if exact_matches:
+                filtered = exact_matches
+                logger.info(
+                    f"Episode filter: {len(exact_matches)} exact S{params.season:02d}E{params.episode:02d} matches "
+                    f"(filtered out {len(results) - len(exact_matches)} non-matching)"
+                )
+            elif season_matches:
+                filtered = season_matches
+                logger.info(
+                    f"Episode filter: no exact match, using {len(season_matches)} season-{params.season} packs "
+                    f"(filtered out {len(results) - len(season_matches)} non-matching)"
+                )
+            elif unknown_matches:
+                filtered = unknown_matches
+                logger.warning(
+                    f"Episode filter: no season/episode match for S{params.season:02d}E{params.episode:02d}, "
+                    f"falling back to {len(unknown_matches)} untagged subtitles"
+                )
+            else:
+                filtered = results
+                logger.warning(
+                    f"Episode filter: all {len(results)} results are from wrong episodes, returning anyway"
+                )
+        else:
+            filtered = results
+
+        sorted_results = sorted(filtered)
+
+        if sorted_results:
+            logger.info(
+                f"Ranked {len(sorted_results)} subtitles. "
+                f"Top: {sorted_results[0].name} "
+                f"(quality={sorted_results[0].quality_type}, score={sorted_results[0].priority_score})"
+            )
 
         return sorted_results
 
