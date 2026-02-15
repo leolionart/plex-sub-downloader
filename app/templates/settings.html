@@ -122,6 +122,36 @@
         </div>
     </div>
 
+    <!-- AI Features -->
+    <div class="card" style="margin-bottom: 24px;">
+        <div class="card-header">
+            <h2>AI Features</h2>
+        </div>
+        <div class="card-body">
+            <label class="toggle-group" for="auto_sync_timing">
+                <div class="toggle-switch">
+                    <input type="checkbox" id="auto_sync_timing" name="auto_sync_timing">
+                    <span class="toggle-slider"></span>
+                </div>
+                <div class="toggle-label">
+                    <div class="toggle-title">Auto Sync Timing</div>
+                    <div class="toggle-desc">Tự động sync timing Vietsub theo Engsub chuẩn kèm phim sau khi download</div>
+                </div>
+            </label>
+
+            <label class="toggle-group" for="auto_translate_if_no_vi">
+                <div class="toggle-switch">
+                    <input type="checkbox" id="auto_translate_if_no_vi" name="auto_translate_if_no_vi">
+                    <span class="toggle-slider"></span>
+                </div>
+                <div class="toggle-label">
+                    <div class="toggle-title">Auto Translate (Eng → Viet)</div>
+                    <div class="toggle-desc">Tự động dịch Engsub sang tiếng Việt khi không tìm thấy Vietsub</div>
+                </div>
+            </label>
+        </div>
+    </div>
+
     <!-- Quality Settings -->
     <div class="card" style="margin-bottom: 24px;">
         <div class="card-header">
@@ -203,6 +233,8 @@
             document.getElementById('skip_forced_subtitles').checked = settings.skip_forced_subtitles;
             document.getElementById('skip_if_embedded').checked = settings.skip_if_embedded;
             document.getElementById('min_quality_threshold').value = settings.min_quality_threshold;
+            document.getElementById('auto_sync_timing').checked = settings.auto_sync_timing ?? false;
+            document.getElementById('auto_translate_if_no_vi').checked = settings.auto_translate_if_no_vi ?? false;
         } catch (error) {
             showAlert('Error loading settings: ' + error.message, 'error');
         }
@@ -222,6 +254,8 @@
             skip_forced_subtitles: formData.get('skip_forced_subtitles') === 'on',
             skip_if_embedded: formData.get('skip_if_embedded') === 'on',
             min_quality_threshold: formData.get('min_quality_threshold'),
+            auto_sync_timing: formData.get('auto_sync_timing') === 'on',
+            auto_translate_if_no_vi: formData.get('auto_translate_if_no_vi') === 'on',
         };
 
         try {
@@ -241,6 +275,6 @@
         }
     });
 
-    renderLanguageTags();
+    loadSettings();
 </script>
 {% endblock %}
