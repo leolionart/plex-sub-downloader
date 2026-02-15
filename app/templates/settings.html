@@ -122,31 +122,61 @@
         </div>
     </div>
 
-    <!-- AI Features -->
-    <div class="card" style="margin-bottom: 24px;">
+    <!-- AI Sync Timing -->
+    <div class="card" style="margin-bottom: 20px;">
         <div class="card-header">
-            <h2>AI Features</h2>
+            <h2>Sync Timing</h2>
         </div>
         <div class="card-body">
             <label class="toggle-group" for="auto_sync_timing">
                 <div class="toggle-switch">
-                    <input type="checkbox" id="auto_sync_timing" name="auto_sync_timing">
+                    <input type="checkbox" id="auto_sync_timing" name="auto_sync_timing" checked>
                     <span class="toggle-slider"></span>
                 </div>
                 <div class="toggle-label">
-                    <div class="toggle-title">Auto Sync Timing</div>
-                    <div class="toggle-desc">Tự động sync timing Vietsub theo Engsub chuẩn kèm phim sau khi download</div>
+                    <div class="toggle-title">Sync Timing</div>
+                    <div class="toggle-desc">Đồng bộ timing Vietsub theo Engsub chuẩn kèm phim bằng AI</div>
                 </div>
             </label>
 
-            <label class="toggle-group" for="auto_translate_if_no_vi">
+            <label class="toggle-group" for="auto_sync_after_download">
                 <div class="toggle-switch">
-                    <input type="checkbox" id="auto_translate_if_no_vi" name="auto_translate_if_no_vi">
+                    <input type="checkbox" id="auto_sync_after_download" name="auto_sync_after_download" checked>
+                    <span class="toggle-slider"></span>
+                </div>
+                <div class="toggle-label">
+                    <div class="toggle-title">Auto Sync After Download</div>
+                    <div class="toggle-desc">Tự động sync timing ngay sau khi download Vietsub từ Subsource</div>
+                </div>
+            </label>
+        </div>
+    </div>
+
+    <!-- AI Translation -->
+    <div class="card" style="margin-bottom: 20px;">
+        <div class="card-header">
+            <h2>Translation</h2>
+        </div>
+        <div class="card-body">
+            <label class="toggle-group" for="translation_enabled">
+                <div class="toggle-switch">
+                    <input type="checkbox" id="translation_enabled" name="translation_enabled">
                     <span class="toggle-slider"></span>
                 </div>
                 <div class="toggle-label">
                     <div class="toggle-title">Auto Translate (Eng → Viet)</div>
-                    <div class="toggle-desc">Tự động dịch Engsub sang tiếng Việt khi không tìm thấy Vietsub</div>
+                    <div class="toggle-desc">Tự động dịch Engsub sang Vietsub khi không tìm thấy Vietsub</div>
+                </div>
+            </label>
+
+            <label class="toggle-group" for="translation_requires_approval">
+                <div class="toggle-switch">
+                    <input type="checkbox" id="translation_requires_approval" name="translation_requires_approval" checked>
+                    <span class="toggle-slider"></span>
+                </div>
+                <div class="toggle-label">
+                    <div class="toggle-title">Require Approval</div>
+                    <div class="toggle-desc">Yêu cầu duyệt trước khi dịch tự động (qua Web UI hoặc Telegram)</div>
                 </div>
             </label>
         </div>
@@ -233,8 +263,10 @@
             document.getElementById('skip_forced_subtitles').checked = settings.skip_forced_subtitles;
             document.getElementById('skip_if_embedded').checked = settings.skip_if_embedded;
             document.getElementById('min_quality_threshold').value = settings.min_quality_threshold;
-            document.getElementById('auto_sync_timing').checked = settings.auto_sync_timing ?? false;
-            document.getElementById('auto_translate_if_no_vi').checked = settings.auto_translate_if_no_vi ?? false;
+            document.getElementById('auto_sync_timing').checked = settings.auto_sync_timing ?? true;
+            document.getElementById('auto_sync_after_download').checked = settings.auto_sync_after_download ?? true;
+            document.getElementById('translation_enabled').checked = (settings.translation_enabled || settings.auto_translate_if_no_vi) ?? false;
+            document.getElementById('translation_requires_approval').checked = settings.translation_requires_approval ?? true;
         } catch (error) {
             showAlert('Error loading settings: ' + error.message, 'error');
         }
@@ -255,7 +287,10 @@
             skip_if_embedded: formData.get('skip_if_embedded') === 'on',
             min_quality_threshold: formData.get('min_quality_threshold'),
             auto_sync_timing: formData.get('auto_sync_timing') === 'on',
-            auto_translate_if_no_vi: formData.get('auto_translate_if_no_vi') === 'on',
+            auto_sync_after_download: formData.get('auto_sync_after_download') === 'on',
+            translation_enabled: formData.get('translation_enabled') === 'on',
+            auto_translate_if_no_vi: formData.get('translation_enabled') === 'on',
+            translation_requires_approval: formData.get('translation_requires_approval') === 'on',
         };
 
         try {

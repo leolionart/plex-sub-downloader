@@ -65,8 +65,8 @@ async def execute_sync(request: SyncRequest):
     """
     service = get_subtitle_service()
 
-    if not service.runtime_config.sync_enabled:
-        raise HTTPException(status_code=400, detail="Sync timing is disabled. Enable it in Setup.")
+    if not service.config.subtitle_settings.auto_sync_timing:
+        raise HTTPException(status_code=400, detail="Sync timing is disabled. Enable it in Settings.")
 
     if not service.runtime_config.ai_available:
         raise HTTPException(status_code=400, detail="OpenAI API key required for sync timing")
@@ -109,9 +109,10 @@ async def get_sync_status():
     """Get sync feature status."""
     service = get_subtitle_service()
 
+    ss = service.config.subtitle_settings
     return {
-        "sync_enabled": service.runtime_config.sync_enabled,
-        "auto_sync_after_download": service.runtime_config.auto_sync_after_download,
+        "sync_enabled": ss.auto_sync_timing,
+        "auto_sync_after_download": ss.auto_sync_after_download,
         "ai_available": service.runtime_config.ai_available,
         "model": service.runtime_config.openai_model,
     }

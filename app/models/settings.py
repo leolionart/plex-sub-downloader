@@ -62,13 +62,25 @@ class SubtitleSettings(BaseModel):
     # AI Sync Timing
     auto_sync_timing: bool = Field(
         default=True,
-        description="Tự động sync timing Vietsub theo Engsub chuẩn kèm phim"
+        description="Bật/tắt sync timing Vietsub theo Engsub chuẩn kèm phim"
+    )
+    auto_sync_after_download: bool = Field(
+        default=True,
+        description="Tự động sync timing sau khi download Vietsub (nếu có Engsub reference)"
     )
 
-    # Proactive Translation
+    # Translation
+    translation_enabled: bool = Field(
+        default=False,
+        description="Bật/tắt dịch subtitle (EN → VI) khi không tìm thấy Vietsub"
+    )
+    translation_requires_approval: bool = Field(
+        default=True,
+        description="Yêu cầu duyệt trước khi dịch tự động"
+    )
     auto_translate_if_no_vi: bool = Field(
         default=False,
-        description="Tự động dịch Eng→Viet khi có Engsub nhưng không có Vietsub"
+        description="Chủ động dịch Eng→Viet khi có Engsub nhưng không có Vietsub"
     )
 
     @property

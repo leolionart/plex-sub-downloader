@@ -3,6 +3,7 @@ FastAPI application - main entry point.
 Webhook server để nhận events từ Plex/Tautulli.
 """
 
+import asyncio
 import uuid
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Any
@@ -435,6 +436,14 @@ def _should_process_event(event: str) -> bool:
     return event in process_events
 
 
+# ── Webhook deduplication ──────────────────────────────────
+# Plex thường gửi nhiều webhook trùng cho cùng media (library.new × 2-3).
+# Set này track rating_key đang xử lý để tránh duplicate download/upload.
+_processing_keys: set[str] = set()
+_processing_lock = asyncio.Lock()
+_DEDUP_COOLDOWN_SECONDS = 300  # 5 phút cooldown sau khi xử lý xong
+
+
 async def _process_subtitle_task(rating_key: str, event: str, request_id: str) -> None:
     """
     Background task để process subtitle.
@@ -447,6 +456,13 @@ async def _process_subtitle_task(rating_key: str, event: str, request_id: str) -
     if subtitle_service is None:
         logger.error(f"[{request_id}] Service not initialized — configure via /setup first")
         return
+
+    # Dedup: skip nếu rating_key đang được xử lý hoặc vừa xử lý xong
+    async with _processing_lock:
+        if rating_key in _processing_keys:
+            logger.info(f"[{request_id}] Skipping duplicate webhook for ratingKey: {rating_key}")
+            return
+        _processing_keys.add(rating_key)
 
     try:
         logger.info(f"[{request_id}] Starting subtitle task for ratingKey: {rating_key}")
@@ -461,6 +477,12 @@ async def _process_subtitle_task(rating_key: str, event: str, request_id: str) -
         logger.error(f"[{request_id}] Task failed: {e}", exc_info=True)
     except Exception as e:
         logger.error(f"[{request_id}] Unexpected error in task: {e}", exc_info=True)
+    finally:
+        # Xóa khỏi set sau cooldown để cho phép retry
+        async def _remove_after_cooldown() -> None:
+            await asyncio.sleep(_DEDUP_COOLDOWN_SECONDS)
+            _processing_keys.discard(rating_key)
+        asyncio.create_task(_remove_after_cooldown())
 
 
 if __name__ == "__main__":

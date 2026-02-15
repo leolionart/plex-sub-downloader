@@ -34,22 +34,6 @@ class RuntimeConfig(BaseModel):
     )
     openai_model: str = Field(default="gpt-4o-mini", description="OpenAI model name")
 
-    translation_enabled: bool = Field(default=False, description="Enable translation fallback")
-    translation_requires_approval: bool = Field(
-        default=True,
-        description="Require approval before translating",
-    )
-    proactive_translation: bool = Field(
-        default=False,
-        description="Chủ động dịch sub khi có Engsub nhưng không có Vietsub (không chỉ fallback)",
-    )
-
-    sync_enabled: bool = Field(default=False, description="Enable AI subtitle timing sync")
-    auto_sync_after_download: bool = Field(
-        default=True,
-        description="Tự động sync timing sau khi download Vietsub (nếu có Engsub reference)",
-    )
-
     telegram_bot_token: str | None = Field(default=None, description="Telegram bot token")
     telegram_chat_id: str | None = Field(default=None, description="Telegram chat ID")
 

@@ -61,7 +61,7 @@ async def estimate_translation_cost(request: TranslationRequest):
     """
     subtitle_service = get_subtitle_service()
 
-    if not subtitle_service.runtime_config.translation_enabled:
+    if not subtitle_service.config.subtitle_settings.translation_enabled:
         raise HTTPException(status_code=400, detail="Translation disabled")
 
     try:
@@ -132,7 +132,7 @@ async def approve_translation(request: TranslationRequest):
     """Approve và execute translation."""
     subtitle_service = get_subtitle_service()
 
-    if not subtitle_service.runtime_config.translation_enabled:
+    if not subtitle_service.config.subtitle_settings.translation_enabled:
         raise HTTPException(status_code=400, detail="Translation disabled")
 
     try:

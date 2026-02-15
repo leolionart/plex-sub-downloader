@@ -22,6 +22,15 @@ class ConfigStore:
         self.config_path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = RLock()
 
+    # Fields that moved from RuntimeConfig top-level to subtitle_settings
+    _MIGRATED_FIELDS: dict[str, str] = {
+        "sync_enabled": "auto_sync_timing",
+        "auto_sync_after_download": "auto_sync_after_download",
+        "translation_enabled": "translation_enabled",
+        "translation_requires_approval": "translation_requires_approval",
+        "proactive_translation": "auto_translate_if_no_vi",
+    }
+
     def load(self) -> RuntimeConfig:
         """Load config from JSON; seed from env if missing."""
         with self._lock:
@@ -32,12 +41,34 @@ class ConfigStore:
 
             try:
                 data = json.loads(self.config_path.read_text(encoding="utf-8"))
-                return RuntimeConfig(**data)
+                migrated = self._migrate_settings(data)
+                runtime = RuntimeConfig(**data)
+                if migrated:
+                    self._write(runtime)
+                return runtime
             except (json.JSONDecodeError, ValidationError):
                 # If corrupted, fall back to env seed to avoid crash
                 runtime = self._from_env()
                 self._write(runtime)
                 return runtime
+
+    def _migrate_settings(self, data: dict[str, Any]) -> bool:
+        """Migrate old top-level feature toggles into subtitle_settings.
+
+        Returns True if any migration was performed.
+        """
+        migrated = False
+        sub_settings = data.setdefault("subtitle_settings", {})
+
+        for old_key, new_key in self._MIGRATED_FIELDS.items():
+            if old_key in data:
+                # Only migrate if target not already set by user
+                if new_key not in sub_settings:
+                    sub_settings[new_key] = data[old_key]
+                del data[old_key]
+                migrated = True
+
+        return migrated
 
     def _from_env(self) -> RuntimeConfig:
         """Seed RuntimeConfig from existing env-based settings for compatibility."""
@@ -49,8 +80,6 @@ class ConfigStore:
             openai_api_key=getattr(settings, "openai_api_key", None),
             openai_base_url=getattr(settings, "openai_base_url", "https://api.openai.com/v1"),
             openai_model=getattr(settings, "openai_model", "gpt-4o-mini"),
-            translation_enabled=getattr(settings, "translation_enabled", False),
-            translation_requires_approval=getattr(settings, "translation_requires_approval", True),
             telegram_bot_token=getattr(settings, "telegram_bot_token", None),
             telegram_chat_id=getattr(settings, "telegram_chat_id", None),
             webhook_secret=getattr(settings, "webhook_secret", None),

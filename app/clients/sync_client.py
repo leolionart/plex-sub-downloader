@@ -131,7 +131,7 @@ class SubtitleSyncClient:
         self.api_key = config.openai_api_key
         self.base_url = config.openai_base_url
         self.model = config.openai_model
-        self.enabled = bool(self.api_key) and config.sync_enabled
+        self.enabled = bool(self.api_key)
 
         self._client = httpx.AsyncClient(
             timeout=60.0,

@@ -184,12 +184,13 @@ class SubtitleService:
                 log.warning(f"[Step 4/7] ✗ No {self.runtime_config.default_language} subtitle found for: {metadata.title}")
 
                 # Try proactive translation (if enabled) or translation fallback
+                ss = self.config.subtitle_settings
                 should_translate = (
-                    self.runtime_config.translation_enabled
-                    or self.runtime_config.proactive_translation
+                    ss.translation_enabled
+                    or ss.auto_translate_if_no_vi
                 )
                 if should_translate:
-                    mode = "proactive" if self.runtime_config.proactive_translation else "fallback"
+                    mode = "proactive" if ss.auto_translate_if_no_vi else "fallback"
                     log.info(f"[Step 4/7] Attempting {mode} translation (en → vi)")
                     translation_result = await self._try_translation_fallback(
                         metadata,
@@ -268,7 +269,7 @@ class SubtitleService:
 
             # Step 7b: Sync timing (if enabled and English reference available)
             sync_result = None
-            if self.runtime_config.sync_enabled and self.runtime_config.auto_sync_after_download:
+            if self.config.subtitle_settings.auto_sync_timing and self.config.subtitle_settings.auto_sync_after_download:
                 sync_result = await self._try_sync_timing(
                     video, metadata, subtitle_path, log,
                 )
@@ -568,7 +569,7 @@ class SubtitleService:
         Returns:
             Dict với sync stats hoặc None nếu không sync được
         """
-        if not self.sync_client.enabled:
+        if not self.runtime_config.ai_available:
             return None
 
         log.info("[Sync] Checking for English reference subtitle on Plex...")
@@ -781,7 +782,7 @@ class SubtitleService:
                 "vi_candidates": vi_candidates,
                 "can_sync": can_sync,
                 "can_translate": can_translate,
-                "sync_enabled": self.sync_client.enabled,
+                "sync_enabled": self.config.subtitle_settings.auto_sync_timing and self.runtime_config.ai_available,
             }
 
         finally:
@@ -811,8 +812,8 @@ class SubtitleService:
         """
         log = RequestContextLogger(logger, request_id or rating_key[:8])
 
-        if not self.sync_client.enabled:
-            return {"status": "error", "message": "Sync timing is disabled"}
+        if not self.runtime_config.ai_available:
+            return {"status": "error", "message": "OpenAI API key required for sync timing"}
 
         log.info(f"[Sync] Manual sync requested for ratingKey: {rating_key}")
 
@@ -1012,10 +1013,8 @@ class SubtitleService:
         Returns:
             Dict với status nếu thành công, None nếu fail
         """
-        can_translate = (
-            self.runtime_config.translation_enabled
-            or self.runtime_config.proactive_translation
-        )
+        ss = self.config.subtitle_settings
+        can_translate = ss.translation_enabled or ss.auto_translate_if_no_vi
         if not can_translate:
             return None
 
@@ -1061,7 +1060,7 @@ class SubtitleService:
         subtitle_source = en_results[0].name if en_results else "Plex existing subtitle"
 
         # Check if requires approval
-        if self.runtime_config.translation_requires_approval:
+        if self.config.subtitle_settings.translation_requires_approval:
             # Add to pending queue
             self.add_pending_translation(
                 rating_key=metadata.rating_key,
