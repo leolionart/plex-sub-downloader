@@ -215,6 +215,95 @@
         flex-shrink: 0;
     }
 
+    /* Media cards for Now Playing / On Deck */
+    .media-card-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 12px;
+    }
+
+    .media-card {
+        background: var(--bg-input);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
+        padding: 10px;
+        cursor: pointer;
+        transition: all var(--transition-fast);
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .media-card:hover {
+        border-color: var(--plex-gold);
+        background: var(--bg-surface-hover, var(--bg-surface));
+    }
+
+    .media-card:active {
+        transform: scale(0.97);
+    }
+
+    .media-card .media-thumb {
+        width: 100%;
+        aspect-ratio: 2/3;
+        background: var(--bg-elevated);
+        border-radius: var(--radius-sm);
+        overflow: hidden;
+    }
+
+    .media-card .media-thumb img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .media-card .media-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-primary);
+        line-height: 1.3;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    .media-card .media-meta {
+        font-size: 11px;
+        color: var(--text-muted);
+    }
+
+    .media-card .media-player {
+        font-size: 11px;
+        color: var(--plex-gold);
+    }
+
+    .media-card .progress-mini {
+        height: 3px;
+        background: var(--bg-elevated);
+        border-radius: 2px;
+        overflow: hidden;
+    }
+
+    .media-card .progress-mini-fill {
+        height: 100%;
+        background: var(--plex-gold);
+        border-radius: 2px;
+    }
+
+    .section-header {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 12px;
+    }
+
+    .empty-state {
+        font-size: 13px;
+        color: var(--text-muted);
+        padding: 8px 0;
+    }
+
     @media (max-width: 768px) {
         .sync-input-row {
             flex-direction: column;
@@ -224,6 +313,13 @@
         }
         .action-buttons {
             flex-direction: column;
+        }
+        .media-card-grid {
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 10px;
+        }
+        .how-it-works {
+            display: none;
         }
     }
 </style>
@@ -246,18 +342,31 @@
     </div>
 </div>
 
+<!-- Now Playing / On Deck -->
+<div id="now-playing-section" style="display: none;">
+    <div class="sync-form">
+        <div class="section-header">Now Playing</div>
+        <div id="now-playing-cards" class="media-card-grid"></div>
+    </div>
+    <div id="on-deck-wrapper" style="display: none;">
+        <div class="sync-form">
+            <div class="section-header">On Deck</div>
+            <div id="on-deck-cards" class="media-card-grid"></div>
+        </div>
+    </div>
+</div>
+
 <!-- Manual Sync Form -->
 <div class="sync-form">
     <h3>Manual Sync / Translate</h3>
     <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
-        Nhập Plex Rating Key để sync timing hoặc dịch subtitle chủ động.
-        Rating Key tìm trong URL Plex Web: <code>...metadata/<b>12345</b></code>
+        Paste Plex share link, web URL, hoặc nhập rating key.
     </p>
 
     <div class="sync-input-row">
         <div class="form-group">
-            <label for="rating-key">Plex Rating Key</label>
-            <input type="text" id="rating-key" class="form-input" placeholder="VD: 12345">
+            <label for="rating-key">Rating Key or Plex Link</label>
+            <input type="text" id="rating-key" class="form-input" placeholder="12345 or https://l.plex.tv/...">
         </div>
         <button class="btn btn-secondary" onclick="previewSync()" id="btn-preview">Preview</button>
     </div>
@@ -329,18 +438,34 @@
 
     // Preview: check subtitles availability
     async function previewSync() {
-        const ratingKey = document.getElementById('rating-key').value.trim();
+        let ratingKey = document.getElementById('rating-key').value.trim();
         if (!ratingKey) {
-            showAlert('Vui lòng nhập Rating Key', 'warning');
+            showAlert('Vui lòng nhập Rating Key hoặc Plex link', 'warning');
             return;
         }
 
-        currentRatingKey = ratingKey;
         const btn = document.getElementById('btn-preview');
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner"></span>';
 
         try {
+            // If input is not purely numeric, resolve it first
+            if (!/^\d+$/.test(ratingKey)) {
+                const resolveRes = await fetch('/api/sync/resolve-url', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ input: ratingKey })
+                });
+                if (!resolveRes.ok) {
+                    const err = await resolveRes.json();
+                    throw new Error(err.detail || 'Could not resolve link');
+                }
+                const resolved = await resolveRes.json();
+                ratingKey = resolved.rating_key;
+                document.getElementById('rating-key').value = ratingKey;
+            }
+
+            currentRatingKey = ratingKey;
             const res = await fetch('/api/sync/preview', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -631,8 +756,75 @@
         `;
     }
 
+    // Now Playing / On Deck
+    async function loadNowPlaying() {
+        try {
+            const res = await fetch('/api/sync/now-playing');
+            if (!res.ok) return;
+            const data = await res.json();
+
+            const section = document.getElementById('now-playing-section');
+            const sessionsContainer = document.getElementById('now-playing-cards');
+            const onDeckWrapper = document.getElementById('on-deck-wrapper');
+            const onDeckContainer = document.getElementById('on-deck-cards');
+
+            let hasContent = false;
+
+            if (data.sessions && data.sessions.length > 0) {
+                sessionsContainer.innerHTML = data.sessions.map(s => renderMediaCard(s, true)).join('');
+                hasContent = true;
+            } else {
+                sessionsContainer.innerHTML = '<p class="empty-state">Nothing playing right now</p>';
+            }
+
+            if (data.on_deck && data.on_deck.length > 0) {
+                onDeckContainer.innerHTML = data.on_deck.map(s => renderMediaCard(s, false)).join('');
+                onDeckWrapper.style.display = 'block';
+                hasContent = true;
+            } else {
+                onDeckWrapper.style.display = 'none';
+            }
+
+            section.style.display = hasContent || (data.sessions !== undefined) ? 'block' : 'none';
+        } catch (e) {
+            console.error('Failed to load now playing:', e);
+        }
+    }
+
+    function renderMediaCard(item, showPlayer) {
+        const thumbSrc = `/api/sync/thumb/${item.rating_key}`;
+        const thumbHtml = item.thumb
+            ? `<img src="${thumbSrc}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='<div style=\\'display:flex;align-items:center;justify-content:center;height:100%;font-size:28px;color:var(--text-muted)\\'>&#127910;</div>'">`
+            : `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:28px;color:var(--text-muted)">&#127910;</div>`;
+
+        const playerHtml = showPlayer && item.player
+            ? `<div class="media-player">&#9654; ${item.player.title}</div>`
+            : '';
+
+        const progressHtml = showPlayer && item.progress !== undefined
+            ? `<div class="progress-mini"><div class="progress-mini-fill" style="width:${item.progress}%"></div></div>`
+            : '';
+
+        return `
+            <div class="media-card" onclick="selectMedia('${item.rating_key}')">
+                <div class="media-thumb">${thumbHtml}</div>
+                <div class="media-title">${item.title}</div>
+                <div class="media-meta">${item.media_type}${item.year ? ' &middot; ' + item.year : ''}</div>
+                ${playerHtml}
+                ${progressHtml}
+            </div>
+        `;
+    }
+
+    function selectMedia(ratingKey) {
+        document.getElementById('rating-key').value = ratingKey;
+        previewSync();
+    }
+
     // Init
     loadStatus();
+    loadNowPlaying();
+    setInterval(loadNowPlaying, 30000);
 
     // Submit on Enter key
     document.getElementById('rating-key').addEventListener('keydown', function(e) {

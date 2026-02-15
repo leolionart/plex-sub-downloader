@@ -4,7 +4,11 @@ Sync timing API routes.
 Hỗ trợ tìm Vietsub từ Subsource khi chưa có trên Plex.
 """
 
+import asyncio
+import re
+
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/sync", tags=["sync"])
@@ -19,6 +23,11 @@ class SyncRequest(BaseModel):
 class TranslateRequest(BaseModel):
     """Request để translate English sub."""
     rating_key: str
+
+
+class ResolveUrlRequest(BaseModel):
+    """Request để resolve Plex URL/share link thành rating key."""
+    input: str
 
 
 def get_subtitle_service():
@@ -106,3 +115,99 @@ async def get_sync_status():
         "ai_available": service.runtime_config.ai_available,
         "model": service.runtime_config.openai_model,
     }
+
+
+@router.post("/resolve-url")
+async def resolve_plex_url(request: ResolveUrlRequest):
+    """
+    Resolve Plex URL / share link / rating key thành rating key.
+
+    Accepts:
+    - Plain rating key: "12345"
+    - Share link: "https://l.plex.tv/XXXXX"
+    - Full URL: "https://app.plex.tv/.../metadata/12345"
+    """
+    raw = request.input.strip()
+
+    # Case 1: Plain numeric rating key
+    if raw.isdigit():
+        return {"rating_key": raw}
+
+    # Case 2: URL containing metadata ID
+    match = re.search(r"metadata(?:%2F|/)(\d+)", raw)
+    if match:
+        return {"rating_key": match.group(1)}
+
+    # Case 3: Plex share/web link — follow redirects
+    if "plex.tv" in raw:
+        import httpx
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=10.0) as client:
+                response = await client.get(raw)
+                final_url = str(response.url)
+
+                match = re.search(r"metadata(?:%2F|/)(\d+)", final_url)
+                if match:
+                    return {"rating_key": match.group(1)}
+
+                # Fallback: check response body for metadata reference
+                body = response.text
+                match = re.search(r"metadata(?:%2F|/)(\d+)", body)
+                if match:
+                    return {"rating_key": match.group(1)}
+
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Could not extract rating key from resolved URL",
+                )
+        except httpx.HTTPError as e:
+            raise HTTPException(status_code=400, detail=f"Failed to resolve URL: {e}")
+
+    raise HTTPException(status_code=400, detail="Unrecognized input format")
+
+
+@router.get("/now-playing")
+async def get_now_playing():
+    """Get currently playing sessions and on-deck items."""
+    service = get_subtitle_service()
+
+    sessions = await asyncio.to_thread(service.plex_client.get_sessions)
+    on_deck = await asyncio.to_thread(service.plex_client.get_on_deck, 6)
+
+    return {
+        "sessions": sessions,
+        "on_deck": on_deck,
+    }
+
+
+@router.get("/thumb/{rating_key}")
+async def proxy_thumb(rating_key: str):
+    """Proxy thumbnail from Plex server (avoids CORS/network issues)."""
+    service = get_subtitle_service()
+
+    try:
+        video = await asyncio.to_thread(service.plex_client.get_video, rating_key)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    thumb = getattr(video, "thumb", None)
+    if not thumb:
+        raise HTTPException(status_code=404, detail="No thumbnail")
+
+    thumb_url = service.plex_client.get_thumb_url(thumb)
+    if not thumb_url:
+        raise HTTPException(status_code=404, detail="Could not generate thumb URL")
+
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=10.0, verify=False) as client:
+            resp = await client.get(thumb_url)
+            if resp.status_code != 200:
+                raise HTTPException(status_code=502, detail="Failed to fetch thumbnail")
+            return Response(
+                content=resp.content,
+                media_type=resp.headers.get("content-type", "image/jpeg"),
+                headers={"Cache-Control": "public, max-age=3600"},
+            )
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="Failed to fetch thumbnail")

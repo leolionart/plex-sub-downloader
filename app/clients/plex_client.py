@@ -444,3 +444,68 @@ class PlexClient:
             video.refresh()
         except Exception as e:
             logger.warning(f"Failed to refresh metadata (non-critical): {e}")
+
+    def get_sessions(self) -> list[dict]:
+        """Get currently active playback sessions from Plex."""
+        try:
+            sessions = self.server.sessions()
+            results = []
+            for session in sessions:
+                if not isinstance(session, (Movie, Episode)):
+                    continue
+                metadata = self.extract_metadata(session)
+                player = getattr(session, "player", None)
+                thumb = getattr(session, "thumb", None)
+                duration = getattr(session, "duration", 0) or 0
+                view_offset = getattr(session, "viewOffset", 0) or 0
+                results.append({
+                    "rating_key": str(session.ratingKey),
+                    "title": str(metadata),
+                    "media_type": metadata.media_type,
+                    "year": metadata.year,
+                    "thumb": thumb,
+                    "player": {
+                        "title": getattr(player, "title", "Unknown") if player else "Unknown",
+                        "state": getattr(player, "state", "unknown") if player else "unknown",
+                    },
+                    "progress": round((view_offset / duration) * 100) if duration > 0 else 0,
+                })
+            return results
+        except Exception as e:
+            logger.warning(f"Failed to get sessions: {e}")
+            return []
+
+    def get_on_deck(self, limit: int = 10) -> list[dict]:
+        """Get on-deck items (started but not finished)."""
+        try:
+            items = self.server.library.onDeck()[:limit]
+            results = []
+            seen_keys: set[str] = set()
+            for item in items:
+                if not isinstance(item, (Movie, Episode)):
+                    continue
+                key = str(item.ratingKey)
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                metadata = self.extract_metadata(item)
+                results.append({
+                    "rating_key": key,
+                    "title": str(metadata),
+                    "media_type": metadata.media_type,
+                    "year": metadata.year,
+                    "thumb": getattr(item, "thumb", None),
+                })
+            return results
+        except Exception as e:
+            logger.warning(f"Failed to get on-deck: {e}")
+            return []
+
+    def get_thumb_url(self, thumb_path: str | None) -> str | None:
+        """Generate authenticated thumbnail URL."""
+        if not thumb_path:
+            return None
+        try:
+            return self.server.url(thumb_path, includeToken=True)
+        except Exception:
+            return None
