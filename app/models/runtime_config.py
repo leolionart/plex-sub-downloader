@@ -39,6 +39,16 @@ class RuntimeConfig(BaseModel):
         default=True,
         description="Require approval before translating",
     )
+    proactive_translation: bool = Field(
+        default=False,
+        description="Chủ động dịch sub khi có Engsub nhưng không có Vietsub (không chỉ fallback)",
+    )
+
+    sync_enabled: bool = Field(default=False, description="Enable AI subtitle timing sync")
+    auto_sync_after_download: bool = Field(
+        default=True,
+        description="Tự động sync timing sau khi download Vietsub (nếu có Engsub reference)",
+    )
 
     telegram_bot_token: str | None = Field(default=None, description="Telegram bot token")
     telegram_chat_id: str | None = Field(default=None, description="Telegram chat ID")
@@ -67,6 +77,11 @@ class RuntimeConfig(BaseModel):
     @classmethod
     def strip_subsource_trailing_slash(cls, v: str) -> str:
         return v.rstrip("/") if v else v
+
+    @property
+    def ai_available(self) -> bool:
+        """Check if AI features (translation/sync) are available."""
+        return bool(self.openai_api_key)
 
     def sanitized(self) -> "RuntimeConfig":
         """Return a copy with secrets masked for UI responses."""

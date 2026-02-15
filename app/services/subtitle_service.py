@@ -15,6 +15,7 @@ from app.clients.subsource_client import SubsourceClient, SubsourceClientError
 from app.clients.telegram_client import TelegramClient
 from app.clients.cache_client import CacheClient
 from app.clients.openai_translation_client import OpenAITranslationClient, TranslationClientError
+from app.clients.sync_client import SubtitleSyncClient, SyncClientError
 from app.models.runtime_config import RuntimeConfig
 from app.models.webhook import MediaMetadata
 from app.models.subtitle import SubtitleSearchParams, SubtitleResult
@@ -52,6 +53,7 @@ class SubtitleService:
         self.telegram_client = TelegramClient(runtime_config)
         self.cache_client = CacheClient(runtime_config)
         self.translation_client = OpenAITranslationClient(runtime_config)
+        self.sync_client = SubtitleSyncClient(runtime_config)
 
         self.temp_dir = Path(runtime_config.temp_dir)
         self.temp_dir.mkdir(parents=True, exist_ok=True)
@@ -73,6 +75,7 @@ class SubtitleService:
         await self.telegram_client.close()
         await self.cache_client.close()
         await self.translation_client.close()
+        await self.sync_client.close()
 
     def update_settings(self, new_settings: SubtitleSettings) -> None:
         """Update subtitle settings từ Web UI."""
@@ -96,6 +99,7 @@ class SubtitleService:
         self.telegram_client = TelegramClient(new_runtime)
         self.cache_client = CacheClient(new_runtime)
         self.translation_client = OpenAITranslationClient(new_runtime)
+        self.sync_client = SubtitleSyncClient(new_runtime)
 
         # Ensure temp dir exists
         self.temp_dir = Path(new_runtime.temp_dir)
@@ -179,9 +183,14 @@ class SubtitleService:
             if not subtitles:
                 log.warning(f"[Step 4/7] ✗ No {self.runtime_config.default_language} subtitle found for: {metadata.title}")
 
-                # Try translation fallback if enabled
-                if self.runtime_config.translation_enabled:
-                    log.info("[Step 4/7] Attempting translation fallback (en → vi)")
+                # Try proactive translation (if enabled) or translation fallback
+                should_translate = (
+                    self.runtime_config.translation_enabled
+                    or self.runtime_config.proactive_translation
+                )
+                if should_translate:
+                    mode = "proactive" if self.runtime_config.proactive_translation else "fallback"
+                    log.info(f"[Step 4/7] Attempting {mode} translation (en → vi)")
                     translation_result = await self._try_translation_fallback(
                         metadata,
                         video,
@@ -257,6 +266,13 @@ class SubtitleService:
             await self._upload_to_plex(video, subtitle_path, log)
             log.info(f"[Step 7/7] ✓ Uploaded successfully")
 
+            # Step 7b: Sync timing (if enabled and English reference available)
+            sync_result = None
+            if self.runtime_config.sync_enabled and self.runtime_config.auto_sync_after_download:
+                sync_result = await self._try_sync_timing(
+                    video, metadata, subtitle_path, log,
+                )
+
             # Update stats
             self.config.increment_downloads()
             self.config.last_download = datetime.now().isoformat()
@@ -269,10 +285,14 @@ class SubtitleService:
                 quality=subtitle.quality_type,
             )
 
+            result_msg = f"Uploaded subtitle: {subtitle.name}"
+            if sync_result:
+                result_msg += f" (timing synced: {sync_result['anchors_found']} anchors)"
+
             log.info(f"▶ Workflow completed successfully for: {metadata.title}")
             return {
                 "status": "success",
-                "message": f"Uploaded subtitle: {subtitle.name}",
+                "message": result_msg,
             }
 
         except PlexClientError as e:
@@ -530,6 +550,366 @@ class SubtitleService:
         except Exception as e:
             logger.warning(f"Failed to cleanup temp files: {e}")
 
+    # ── Sync Timing Methods ──────────────────────────────────────────────
+
+    async def _try_sync_timing(
+        self,
+        video: Video,
+        metadata: MediaMetadata,
+        subtitle_path: Path,
+        log: RequestContextLogger,
+    ) -> dict | None:
+        """
+        Thử sync timing Vietsub dựa trên Engsub reference.
+
+        Chạy sau khi upload Vietsub lên Plex.
+        Tìm Engsub trên Plex → sync timing → re-upload.
+
+        Returns:
+            Dict với sync stats hoặc None nếu không sync được
+        """
+        if not self.sync_client.enabled:
+            return None
+
+        log.info("[Sync] Checking for English reference subtitle on Plex...")
+
+        # Download English subtitle from Plex
+        dest_dir = self.temp_dir / f"{metadata.rating_key}_sync"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+
+        en_path = await asyncio.to_thread(
+            self.plex_client.download_existing_subtitle,
+            video,
+            "en",
+            dest_dir,
+        )
+
+        if not en_path:
+            log.info("[Sync] No English subtitle on Plex — skipping sync")
+            return None
+
+        log.info(f"[Sync] Found English reference: {en_path.name}")
+
+        # Download the Vietnamese subtitle we just uploaded (from Plex)
+        vi_path = await asyncio.to_thread(
+            self.plex_client.download_existing_subtitle,
+            video,
+            self.runtime_config.default_language,
+            dest_dir,
+        )
+
+        if not vi_path:
+            # Use the subtitle file we already have
+            vi_path = subtitle_path
+            log.info(f"[Sync] Using local Vietsub file: {vi_path.name}")
+        else:
+            log.info(f"[Sync] Downloaded Vietsub from Plex: {vi_path.name}")
+
+        # Perform sync
+        try:
+            output_path = dest_dir / f"synced.{self.runtime_config.default_language}.srt"
+
+            await self.telegram_client.notify_sync_started(
+                title=str(metadata),
+            )
+
+            sync_stats = await self.sync_client.sync_subtitles(
+                reference_path=en_path,
+                target_path=vi_path,
+                output_path=output_path,
+            )
+
+            log.info(
+                f"[Sync] ✓ Timing synced: {sync_stats['anchors_found']} anchors, "
+                f"avg offset: {sync_stats['avg_offset_ms']}ms"
+            )
+
+            # Re-upload synced subtitle to Plex
+            await self._upload_to_plex(video, output_path, log)
+            log.info("[Sync] ✓ Synced subtitle re-uploaded to Plex")
+
+            await self.telegram_client.notify_sync_completed(
+                title=str(metadata),
+                anchors=sync_stats["anchors_found"],
+                avg_offset_ms=sync_stats["avg_offset_ms"],
+            )
+
+            return sync_stats
+
+        except SyncClientError as e:
+            log.warning(f"[Sync] Sync failed: {e}")
+            await self.telegram_client.notify_error(
+                title=str(metadata),
+                error_message=f"Sync timing failed: {e}",
+            )
+            return None
+        except Exception as e:
+            log.warning(f"[Sync] Unexpected sync error: {e}")
+            return None
+        finally:
+            # Cleanup sync temp files
+            try:
+                import shutil
+                shutil.rmtree(dest_dir, ignore_errors=True)
+            except Exception:
+                pass
+
+    async def preview_sync_for_media(
+        self,
+        rating_key: str,
+    ) -> dict[str, Any]:
+        """
+        Preview sync: kiểm tra subtitle có sẵn trên Plex + Subsource.
+
+        Returns:
+            Dict với metadata, trạng thái English sub, danh sách Vietnamese sub candidates
+        """
+        log = RequestContextLogger(logger, rating_key[:8])
+
+        video = await asyncio.to_thread(self.plex_client.get_video, rating_key)
+        metadata = await asyncio.to_thread(self.plex_client.extract_metadata, video)
+        lang = self.runtime_config.default_language
+
+        dest_dir = self.temp_dir / f"{rating_key}_preview"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            # Check English subtitle on Plex
+            en_path = await asyncio.to_thread(
+                self.plex_client.download_existing_subtitle,
+                video, "en", dest_dir,
+            )
+            has_en_on_plex = en_path is not None
+
+            # Check Vietnamese subtitle on Plex
+            vi_path = await asyncio.to_thread(
+                self.plex_client.download_existing_subtitle,
+                video, lang, dest_dir,
+            )
+            has_vi_on_plex = vi_path is not None
+
+            # Search Vietnamese subtitle on Subsource
+            vi_candidates: list[dict] = []
+            try:
+                vi_results = await self._find_subtitles(metadata, log, language=lang)
+                vi_candidates = [
+                    {
+                        "id": r.id,
+                        "name": r.name,
+                        "quality": r.quality_type,
+                        "downloads": r.downloads,
+                        "rating": r.rating,
+                        "score": r.priority_score,
+                    }
+                    for r in vi_results
+                ]
+            except Exception as e:
+                log.warning(f"[Preview] Subsource search failed: {e}")
+
+            can_sync = has_en_on_plex and (has_vi_on_plex or len(vi_candidates) > 0)
+            can_translate = has_en_on_plex and self.translation_client.enabled
+
+            return {
+                "rating_key": rating_key,
+                "title": str(metadata),
+                "media_type": metadata.media_type,
+                "has_en_on_plex": has_en_on_plex,
+                "has_vi_on_plex": has_vi_on_plex,
+                "vi_candidates": vi_candidates,
+                "can_sync": can_sync,
+                "can_translate": can_translate,
+                "sync_enabled": self.sync_client.enabled,
+            }
+
+        finally:
+            import shutil
+            shutil.rmtree(dest_dir, ignore_errors=True)
+
+    async def execute_sync_for_media(
+        self,
+        rating_key: str,
+        subtitle_id: str | None = None,
+        request_id: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Execute sync timing cho một media item cụ thể (từ Web UI / API).
+
+        Tìm Vietnamese subtitle theo thứ tự:
+        1. Trên Plex (nếu đã có)
+        2. Trên Subsource (nếu chưa có trên Plex), ưu tiên subtitle_id nếu chỉ định
+
+        Args:
+            rating_key: Plex ratingKey
+            subtitle_id: Subsource subtitle ID cụ thể (tuỳ chọn)
+            request_id: Request ID for logging
+
+        Returns:
+            Dict với status và sync stats
+        """
+        log = RequestContextLogger(logger, request_id or rating_key[:8])
+
+        if not self.sync_client.enabled:
+            return {"status": "error", "message": "Sync timing is disabled"}
+
+        log.info(f"[Sync] Manual sync requested for ratingKey: {rating_key}")
+
+        # Get video from Plex
+        video = await asyncio.to_thread(self.plex_client.get_video, rating_key)
+        metadata = await asyncio.to_thread(self.plex_client.extract_metadata, video)
+        log.info(f"[Sync] Media: {metadata}")
+
+        dest_dir = self.temp_dir / f"{rating_key}_sync"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            # Download English subtitle from Plex
+            en_path = await asyncio.to_thread(
+                self.plex_client.download_existing_subtitle,
+                video, "en", dest_dir,
+            )
+            if not en_path:
+                return {
+                    "status": "error",
+                    "message": "No English subtitle found on Plex",
+                }
+
+            # Download Vietnamese subtitle: Plex first, Subsource fallback
+            lang = self.runtime_config.default_language
+            vi_path = await asyncio.to_thread(
+                self.plex_client.download_existing_subtitle,
+                video, lang, dest_dir,
+            )
+            vi_source = "plex"
+
+            if not vi_path:
+                log.info("[Sync] No Vietsub on Plex — searching Subsource...")
+                vi_path = await self._get_vietsub_from_subsource(
+                    metadata, log, dest_dir, subtitle_id,
+                )
+                vi_source = "subsource"
+
+            if not vi_path:
+                return {
+                    "status": "error",
+                    "message": f"No {lang} subtitle found on Plex or Subsource",
+                }
+
+            log.info(f"[Sync] Using Vietsub from {vi_source}: {vi_path.name}")
+
+            # Perform sync
+            output_path = dest_dir / f"synced.{lang}.srt"
+            sync_stats = await self.sync_client.sync_subtitles(
+                reference_path=en_path,
+                target_path=vi_path,
+                output_path=output_path,
+            )
+
+            # Upload synced subtitle
+            await self._upload_to_plex(video, output_path, log)
+
+            await self.telegram_client.notify_sync_completed(
+                title=str(metadata),
+                anchors=sync_stats["anchors_found"],
+                avg_offset_ms=sync_stats["avg_offset_ms"],
+            )
+
+            return {
+                "status": "success",
+                "message": f"Timing synced ({sync_stats['anchors_found']} anchors, source: {vi_source})",
+                "stats": sync_stats,
+            }
+
+        except SyncClientError as e:
+            return {"status": "error", "message": str(e)}
+        except PlexClientError as e:
+            return {"status": "error", "message": f"Plex error: {e}"}
+        finally:
+            import shutil
+            shutil.rmtree(dest_dir, ignore_errors=True)
+
+    async def _get_vietsub_from_subsource(
+        self,
+        metadata: MediaMetadata,
+        log: RequestContextLogger,
+        dest_dir: Path,
+        subtitle_id: str | None = None,
+    ) -> Path | None:
+        """
+        Tìm và download Vietnamese subtitle từ Subsource.
+
+        Args:
+            metadata: MediaMetadata
+            log: Logger
+            dest_dir: Thư mục lưu tạm
+            subtitle_id: Subsource subtitle ID cụ thể (nếu user chọn từ UI)
+
+        Returns:
+            Path đến file .srt hoặc None
+        """
+        lang = self.runtime_config.default_language
+        results = await self._find_subtitles(metadata, log, language=lang)
+
+        if not results:
+            log.warning("[Sync] No Vietnamese subtitle found on Subsource")
+            return None
+
+        # Nếu user chỉ định subtitle_id, tìm subtitle đó
+        if subtitle_id:
+            target = next((r for r in results if r.id == subtitle_id), None)
+            if target:
+                results = [target]
+            else:
+                log.warning(f"[Sync] Subtitle ID {subtitle_id} not found, using best match")
+
+        downloaded = await self._download_first_available(results, metadata, log)
+        if not downloaded:
+            log.warning("[Sync] All Subsource downloads failed")
+            return None
+
+        subtitle, path = downloaded
+        log.info(f"[Sync] Downloaded Vietsub from Subsource: {subtitle.name}")
+        return path
+
+    async def execute_translate_for_media(
+        self,
+        rating_key: str,
+        request_id: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Chủ động dịch English subtitle sang Vietnamese cho media item.
+
+        Dùng khi không tìm được Vietnamese subtitle phù hợp ở đâu.
+
+        Args:
+            rating_key: Plex ratingKey
+            request_id: Request ID for logging
+
+        Returns:
+            Dict với status và translation result
+        """
+        log = RequestContextLogger(logger, request_id or rating_key[:8])
+
+        if not self.translation_client.enabled:
+            return {"status": "error", "message": "Translation disabled — no OpenAI API key"}
+
+        log.info(f"[Translate] Manual translation requested for ratingKey: {rating_key}")
+
+        video = await asyncio.to_thread(self.plex_client.get_video, rating_key)
+        metadata = await asyncio.to_thread(self.plex_client.extract_metadata, video)
+
+        result = await self._execute_translation(
+            metadata=metadata,
+            video=video,
+            from_lang="en",
+            to_lang=self.runtime_config.default_language,
+            log=log,
+        )
+
+        if not result:
+            return {"status": "error", "message": "Translation failed"}
+
+        return result
+
     async def _try_translation_fallback(
         self,
         metadata: MediaMetadata,
@@ -547,7 +927,15 @@ class SubtitleService:
         Returns:
             Dict với status nếu thành công, None nếu fail
         """
-        if not self.runtime_config.translation_enabled:
+        can_translate = (
+            self.runtime_config.translation_enabled
+            or self.runtime_config.proactive_translation
+        )
+        if not can_translate:
+            return None
+
+        if not self.translation_client.enabled:
+            log.warning("Translation requested but no OpenAI API key configured")
             return None
 
         log.info("Translation fallback: Searching English subtitle")

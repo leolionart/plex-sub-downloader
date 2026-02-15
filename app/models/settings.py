@@ -59,6 +59,18 @@ class SubtitleSettings(BaseModel):
         description="Không download nếu video có embedded subtitle"
     )
 
+    # AI Sync Timing
+    auto_sync_timing: bool = Field(
+        default=True,
+        description="Tự động sync timing Vietsub theo Engsub chuẩn kèm phim"
+    )
+
+    # Proactive Translation
+    auto_translate_if_no_vi: bool = Field(
+        default=False,
+        description="Tự động dịch Eng→Viet khi có Engsub nhưng không có Vietsub"
+    )
+
     @property
     def primary_language(self) -> str:
         """Get primary language (first in priority list)."""

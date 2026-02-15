@@ -222,3 +222,32 @@ class TelegramClient:
 📝 *Lines:* {lines_translated}
 """
         await self.send_message(message, disable_notification=True)
+
+    async def notify_sync_started(
+        self,
+        title: str,
+    ) -> None:
+        """Notify khi bắt đầu sync timing."""
+        message = (
+            f"🔄 *Syncing Subtitle Timing*\n\n"
+            f"📺 *Title:* {title}\n"
+            f"⏳ *Status:* Analyzing timing with AI..."
+        )
+        await self.send_message(message, disable_notification=True)
+
+    async def notify_sync_completed(
+        self,
+        title: str,
+        anchors: int,
+        avg_offset_ms: int,
+    ) -> None:
+        """Notify khi sync timing xong."""
+        offset_s = abs(avg_offset_ms) / 1000
+        direction = "trễ" if avg_offset_ms > 0 else "sớm"
+        message = (
+            f"✅ *Subtitle Timing Synced*\n\n"
+            f"📺 *Title:* {title}\n"
+            f"🎯 *Anchors:* {anchors} điểm neo\n"
+            f"⏱ *Avg offset:* {offset_s:.1f}s ({direction})"
+        )
+        await self.send_message(message, disable_notification=True)

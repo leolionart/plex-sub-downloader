@@ -306,6 +306,32 @@
                 <input id="default_language" class="form-input" value="vi">
             </div>
         </div>
+        <div class="form-row" style="margin-top: 4px;">
+            <div class="form-group">
+                <label for="proactive_translation">Proactive translation</label>
+                <select id="proactive_translation" class="form-select">
+                    <option value="false">Off</option>
+                    <option value="true">On</option>
+                </select>
+                <span class="form-hint">Chủ động dịch khi có Engsub nhưng không có Vietsub</span>
+            </div>
+            <div class="form-group">
+                <label for="sync_enabled">Sync Timing</label>
+                <select id="sync_enabled" class="form-select">
+                    <option value="false">Off</option>
+                    <option value="true">On</option>
+                </select>
+                <span class="form-hint">Đồng bộ timing Vietsub theo Engsub chuẩn bằng AI</span>
+            </div>
+            <div class="form-group">
+                <label for="auto_sync_after_download">Auto sync after download</label>
+                <select id="auto_sync_after_download" class="form-select">
+                    <option value="true">Yes</option>
+                    <option value="false">No</option>
+                </select>
+                <span class="form-hint">Tự động sync sau khi download Vietsub</span>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -435,6 +461,9 @@
         if (data.cache_enabled !== undefined) $('cache_enabled').value = String(data.cache_enabled);
         if (data.translation_enabled !== undefined) $('translation_enabled').value = String(data.translation_enabled);
         if (data.translation_requires_approval !== undefined) $('translation_requires_approval').value = String(data.translation_requires_approval);
+        if (data.proactive_translation !== undefined) $('proactive_translation').value = String(data.proactive_translation);
+        if (data.sync_enabled !== undefined) $('sync_enabled').value = String(data.sync_enabled);
+        if (data.auto_sync_after_download !== undefined) $('auto_sync_after_download').value = String(data.auto_sync_after_download);
         renderStatus(data);
 
         // Update webhook URL with server-detected LAN IP
@@ -469,6 +498,9 @@
             cache_ttl_seconds: Number($('cache_ttl_seconds').value) || 3600,
             translation_enabled: $('translation_enabled').value === 'true',
             translation_requires_approval: $('translation_requires_approval').value === 'true',
+            proactive_translation: $('proactive_translation').value === 'true',
+            sync_enabled: $('sync_enabled').value === 'true',
+            auto_sync_after_download: $('auto_sync_after_download').value === 'true',
         };
 
         _secretFields.forEach(id => {

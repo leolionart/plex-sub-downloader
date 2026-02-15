@@ -24,6 +24,7 @@ from app.utils.logger import setup_logging, get_logger
 from app.routes import translation
 from app.routes import setup
 from app.routes import logs
+from app.routes import sync
 
 # Setup logging
 setup_logging()
@@ -103,6 +104,7 @@ app.add_middleware(
 app.include_router(translation.router)
 app.include_router(setup.router)
 app.include_router(logs.router)
+app.include_router(sync.router)
 
 
 @app.middleware("http")
@@ -210,6 +212,18 @@ async def translation_ui(request: Request) -> HTMLResponse:
     configured = _is_configured(runtime_config)
     return templates.TemplateResponse(
         "translation.html",
+        {"request": request, "configured": configured},
+    )
+
+
+@app.get("/sync", response_class=HTMLResponse)
+async def sync_ui(request: Request) -> HTMLResponse:
+    """Sync Timing UI."""
+    if not subtitle_service or not runtime_config:
+        return HTMLResponse("Service not initialized", status_code=503)
+    configured = _is_configured(runtime_config)
+    return templates.TemplateResponse(
+        "sync.html",
         {"request": request, "configured": configured},
     )
 
