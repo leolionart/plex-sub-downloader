@@ -168,15 +168,13 @@ async def resolve_plex_url(request: ResolveUrlRequest):
 
 @router.get("/now-playing")
 async def get_now_playing():
-    """Get currently playing sessions and on-deck items."""
+    """Get currently playing sessions."""
     service = get_subtitle_service()
 
     sessions = await asyncio.to_thread(service.plex_client.get_sessions)
-    on_deck = await asyncio.to_thread(service.plex_client.get_on_deck, 6)
 
     return {
         "sessions": sessions,
-        "on_deck": on_deck,
     }
 
 

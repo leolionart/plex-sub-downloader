@@ -342,17 +342,12 @@
     </div>
 </div>
 
-<!-- Now Playing / On Deck -->
+<!-- Now Playing -->
 <div id="now-playing-section" style="display: none;">
     <div class="sync-form">
         <div class="section-header">Now Playing</div>
+        <p style="font-size: 13px; color: var(--text-muted); margin: -4px 0 12px;">Chọn phim đang xem để kiểm tra và xử lý subtitle</p>
         <div id="now-playing-cards" class="media-card-grid"></div>
-    </div>
-    <div id="on-deck-wrapper" style="display: none;">
-        <div class="sync-form">
-            <div class="section-header">On Deck</div>
-            <div id="on-deck-cards" class="media-card-grid"></div>
-        </div>
     </div>
 </div>
 
@@ -776,7 +771,7 @@
         `;
     }
 
-    // Now Playing / On Deck
+    // Now Playing
     async function loadNowPlaying() {
         try {
             const res = await fetch('/api/sync/now-playing');
@@ -784,44 +779,31 @@
             const data = await res.json();
 
             const section = document.getElementById('now-playing-section');
-            const sessionsContainer = document.getElementById('now-playing-cards');
-            const onDeckWrapper = document.getElementById('on-deck-wrapper');
-            const onDeckContainer = document.getElementById('on-deck-cards');
-
-            let hasContent = false;
+            const container = document.getElementById('now-playing-cards');
 
             if (data.sessions && data.sessions.length > 0) {
-                sessionsContainer.innerHTML = data.sessions.map(s => renderMediaCard(s, true)).join('');
-                hasContent = true;
+                container.innerHTML = data.sessions.map(renderMediaCard).join('');
+                section.style.display = 'block';
             } else {
-                sessionsContainer.innerHTML = '<p class="empty-state">Nothing playing right now</p>';
+                container.innerHTML = '<p class="empty-state">Không có phim nào đang phát</p>';
+                section.style.display = 'block';
             }
-
-            if (data.on_deck && data.on_deck.length > 0) {
-                onDeckContainer.innerHTML = data.on_deck.map(s => renderMediaCard(s, false)).join('');
-                onDeckWrapper.style.display = 'block';
-                hasContent = true;
-            } else {
-                onDeckWrapper.style.display = 'none';
-            }
-
-            section.style.display = hasContent || (data.sessions !== undefined) ? 'block' : 'none';
         } catch (e) {
             console.error('Failed to load now playing:', e);
         }
     }
 
-    function renderMediaCard(item, showPlayer) {
+    function renderMediaCard(item) {
         const thumbSrc = `/api/sync/thumb/${item.rating_key}`;
         const thumbHtml = item.thumb
             ? `<img src="${thumbSrc}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='<div style=\\'display:flex;align-items:center;justify-content:center;height:100%;font-size:28px;color:var(--text-muted)\\'>&#127910;</div>'">`
             : `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:28px;color:var(--text-muted)">&#127910;</div>`;
 
-        const playerHtml = showPlayer && item.player
+        const playerHtml = item.player
             ? `<div class="media-player">&#9654; ${item.player.title}</div>`
             : '';
 
-        const progressHtml = showPlayer && item.progress !== undefined
+        const progressHtml = item.progress !== undefined
             ? `<div class="progress-mini"><div class="progress-mini-fill" style="width:${item.progress}%"></div></div>`
             : '';
 
@@ -832,6 +814,7 @@
                 <div class="media-meta">${item.media_type}${item.year ? ' &middot; ' + item.year : ''}</div>
                 ${playerHtml}
                 ${progressHtml}
+                <button class="btn btn-secondary" style="width:100%;padding:6px 0;font-size:12px;margin-top:4px;">Chọn &rarr;</button>
             </div>
         `;
     }
@@ -839,6 +822,10 @@
     function selectMedia(ratingKey) {
         document.getElementById('rating-key').value = ratingKey;
         previewSync();
+        // Scroll to results
+        setTimeout(() => {
+            document.getElementById('results-area').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 500);
     }
 
     // Init
