@@ -715,10 +715,20 @@ class SubtitleService:
                 "source": "plex" if has_en_text else None,
             }
             if en_details["has_subtitle"] and not has_en_text:
-                codecs = [s["codec"] for s in en_details["subtitle_info"]]
+                subs = en_details["subtitle_info"]
+                embedded = [s for s in subs if s.get("is_embedded")]
+                image_based = [s for s in subs if s.get("is_image_based")]
+                codecs = [s["codec"] for s in subs]
+
+                if image_based:
+                    reason = f"dạng image-based ({', '.join(codecs)}) — không dùng được cho sync"
+                elif embedded:
+                    reason = f"dạng embedded ({', '.join(codecs)}) — không extract được qua Plex API"
+                else:
+                    reason = f"không download được ({', '.join(codecs)})"
+
                 en_status["detail"] = (
-                    f"Plex có {en_details['subtitle_count']} EN sub "
-                    f"nhưng dạng image-based ({', '.join(codecs)}) — không dùng được cho sync"
+                    f"Plex có {en_details['subtitle_count']} EN sub nhưng {reason}"
                 )
 
             # 3) Fallback: search EN sub on Subsource
@@ -761,10 +771,20 @@ class SubtitleService:
                 "source": "plex" if has_vi_text else None,
             }
             if vi_details["has_subtitle"] and not has_vi_text:
-                codecs = [s["codec"] for s in vi_details["subtitle_info"]]
+                subs = vi_details["subtitle_info"]
+                embedded = [s for s in subs if s.get("is_embedded")]
+                image_based = [s for s in subs if s.get("is_image_based")]
+                codecs = [s["codec"] for s in subs]
+
+                if image_based:
+                    reason = f"dạng image-based ({', '.join(codecs)})"
+                elif embedded:
+                    reason = f"dạng embedded ({', '.join(codecs)}) — không extract được"
+                else:
+                    reason = f"không download được ({', '.join(codecs)})"
+
                 vi_status["detail"] = (
-                    f"Plex có {vi_details['subtitle_count']} VI sub "
-                    f"nhưng dạng image-based ({', '.join(codecs)})"
+                    f"Plex có {vi_details['subtitle_count']} VI sub nhưng {reason}"
                 )
 
             # Search Vietnamese subtitle on Subsource

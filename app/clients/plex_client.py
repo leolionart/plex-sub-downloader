@@ -243,11 +243,17 @@ class PlexClient:
                 for part in media.parts:
                     for stream in part.streams:
                         if stream.streamType == 3 and self._stream_matches_language(stream, language):
+                            codec = getattr(stream, "codec", "unknown") or "unknown"
+                            key = getattr(stream, "key", None)
+                            is_image_based = codec.lower() in ("pgs", "vobsub", "dvdsub", "dvd_subtitle")
                             subtitle_info.append({
-                                "codec": getattr(stream, "codec", "unknown"),
+                                "codec": codec,
                                 "forced": getattr(stream, "forced", False),
                                 "title": getattr(stream, "title", ""),
                                 "format": getattr(stream, "format", ""),
+                                "has_key": key is not None,
+                                "is_embedded": key is None,
+                                "is_image_based": is_image_based,
                             })
 
             logger.debug(f"Subtitle details for '{language}': {len(subtitle_info)} found")
