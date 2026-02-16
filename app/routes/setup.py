@@ -2,6 +2,7 @@
 Setup routes for runtime configuration and Plex PIN login flow.
 """
 
+import logging
 import uuid
 from datetime import datetime, timedelta
 from typing import Any
@@ -17,6 +18,8 @@ from app.clients.plex_client import PlexClientError
 from app.config import settings
 
 from app.models.runtime_config import RuntimeConfig
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/setup", tags=["setup"])
 
@@ -77,16 +80,48 @@ async def update_runtime_config(payload: RuntimeConfigPayload) -> dict[str, str]
     partial = payload.model_dump(exclude_unset=True, exclude_none=True)
     updated = runtime_config.model_copy(update=partial)
 
+    # Log which fields are being updated (mask secrets)
+    changed = {
+        k: ("***" if "key" in k or "token" in k or "secret" in k else v)
+        for k, v in partial.items()
+        if k != "subtitle_settings"
+    }
+    logger.info(f"Setup config update: {changed}")
+
     config_store.save(updated)
     main_module.runtime_config = updated
 
     if subtitle_service:
         subtitle_service.update_runtime_config(updated)
+        logger.info("All clients hot-reloaded with new config")
     else:
         # First-time setup — try to initialize service now that config is saved
         main_module.reinit_service()
 
     return {"status": "ok"}
+
+
+@router.post("/reload")
+async def reload_config_from_disk() -> dict[str, str]:
+    """Re-read config.json from disk and hot-reload all clients."""
+    import app.main as main_module
+
+    config_store, subtitle_service, _ = _get_services()
+
+    updated = config_store.load()
+    main_module.runtime_config = updated
+
+    if subtitle_service:
+        subtitle_service.update_runtime_config(updated)
+
+    logger.info(
+        f"Config reloaded from disk: "
+        f"openai_base_url={updated.openai_base_url}, "
+        f"model={updated.openai_model}, "
+        f"ai_available={updated.ai_available}"
+    )
+
+    return {"status": "ok", "message": "Config reloaded from disk"}
 
 
 @router.get("/status")

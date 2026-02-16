@@ -59,7 +59,7 @@ class OpenAITranslationClient:
         if not self.enabled:
             logger.info("OpenAI translation disabled - no API key")
         else:
-            logger.info(f"OpenAI translation enabled (model={self.model})")
+            logger.info(f"OpenAI translation enabled (model={self.model}, base_url={self.base_url})")
 
         self._client = httpx.AsyncClient(
             timeout=60.0,

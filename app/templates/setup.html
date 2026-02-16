@@ -351,6 +351,7 @@
 <!-- Actions -->
 <div class="setup-footer">
     <button id="btn-save" class="btn btn-primary">Save Configuration</button>
+    <button id="btn-reload" class="btn btn-secondary">Reload from Disk</button>
     <a href="/" class="btn btn-ghost">Back to Settings</a>
 </div>
 {% endblock %}
@@ -576,8 +577,20 @@
         });
     }
 
+    // ── Reload config from disk ──────────────────────────
+    async function reloadFromDisk() {
+        const res = await fetch('/api/setup/reload', { method: 'POST' });
+        if (!res.ok) {
+            showAlert('Failed to reload config from disk', 'error');
+        } else {
+            showAlert('Config reloaded from disk — all clients refreshed', 'success');
+            await loadConfig();
+        }
+    }
+
     // ── Init ───────────────────────────────────────────────
     $('btn-save').onclick = saveConfig;
+    $('btn-reload').onclick = reloadFromDisk;
     $('btn-plex-pin').onclick = requestPin;
     $('plex_token').addEventListener('change', () => loadResources());
     updateWebhookUrl();  // Show browser-origin URL immediately, then override after loadConfig
