@@ -396,9 +396,10 @@ class SubsourceClient:
                     f"falling back to {len(unknown_matches)} untagged subtitles"
                 )
             else:
-                filtered = results
+                filtered = []
                 logger.warning(
-                    f"Episode filter: all {len(results)} results are from wrong episodes, returning anyway"
+                    f"Episode filter: all {len(results)} results are from wrong episodes "
+                    f"(wanted S{params.season:02d}E{params.episode:02d}), returning empty"
                 )
         else:
             filtered = results
