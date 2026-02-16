@@ -413,6 +413,7 @@ class SubtitleService:
         metadata: MediaMetadata,
         log: RequestContextLogger,
         language: str | None = None,
+        video_filename: str | None = None,
     ) -> list[SubtitleResult]:
         """
         Search subtitles với cache support, trả về danh sách đã sorted.
@@ -421,6 +422,7 @@ class SubtitleService:
             metadata: MediaMetadata
             log: Logger instance
             language: Override language (default: runtime default_language)
+            video_filename: Video filename for similarity matching (optional)
 
         Returns:
             List of SubtitleResult sorted by priority (best first)
@@ -435,6 +437,7 @@ class SubtitleService:
             tmdb_id=metadata.tmdb_id,
             season=metadata.season_number,
             episode=metadata.episode_number,
+            video_filename=video_filename,
         )
 
         log.info(f"Searching subtitles: lang={search_params.language}, title={search_params.title}, imdb={search_params.imdb_id}")
@@ -732,10 +735,20 @@ class SubtitleService:
                 )
 
             # 3) Fallback: search EN sub on Subsource
+            # Lấy video filename cho similarity matching
+            video_filename = None
+            try:
+                if video.media and video.media[0].parts:
+                    video_filename = Path(video.media[0].parts[0].file).name
+            except Exception:
+                pass
+
             en_candidates: list[dict] = []
             if not has_en_text:
                 try:
-                    en_results = await self._find_subtitles(metadata, log, language="en")
+                    en_results = await self._find_subtitles(
+                        metadata, log, language="en", video_filename=video_filename,
+                    )
                     en_candidates = [
                         {
                             "id": r.id,
@@ -751,6 +764,14 @@ class SubtitleService:
                         en_status["available"] = True
                         en_status["source"] = "subsource"
                         en_status["detail"] = f"Tìm được {len(en_candidates)} EN sub trên Subsource"
+                    else:
+                        # Append Subsource search result to detail
+                        existing_detail = en_status.get("detail", "")
+                        subsource_note = "Subsource cũng không có EN sub khớp tập này"
+                        if existing_detail:
+                            en_status["detail"] = f"{existing_detail}. {subsource_note}"
+                        else:
+                            en_status["detail"] = subsource_note
                 except Exception as e:
                     log.warning(f"[Preview] Subsource EN search failed: {e}")
 
@@ -790,7 +811,9 @@ class SubtitleService:
             # Search Vietnamese subtitle on Subsource
             vi_candidates: list[dict] = []
             try:
-                vi_results = await self._find_subtitles(metadata, log, language=lang)
+                vi_results = await self._find_subtitles(
+                    metadata, log, language=lang, video_filename=video_filename,
+                )
                 vi_candidates = [
                     {
                         "id": r.id,
