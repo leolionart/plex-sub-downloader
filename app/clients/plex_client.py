@@ -362,6 +362,49 @@ class PlexClient:
             logger.error(f"Failed to upload subtitle: {e}")
             raise PlexClientError(f"Upload failed: {e}") from e
 
+    def remove_external_subtitles(
+        self,
+        video: Video,
+        language: str,
+    ) -> int:
+        """
+        Remove tất cả external subtitles (uploaded/sidecar) cho language chỉ định.
+        Embedded subtitles (PGS, VobSub) không bị ảnh hưởng.
+
+        Args:
+            video: Plex Video object
+            language: ISO 639-1 language code (e.g., 'vi')
+
+        Returns:
+            Số subtitle đã xóa
+        """
+        removed = 0
+        try:
+            for stream in video.subtitleStreams():
+                tag = getattr(stream, "languageTag", None)
+                code = getattr(stream, "languageCode", None)
+                stream_lang = tag or code
+
+                # Only remove external (uploaded/sidecar), skip embedded
+                stream_format = getattr(stream, "format", "") or ""
+                is_embedded = stream_format.lower() in ("pgs", "vobsub", "dvdsub")
+
+                if stream_lang == language and not is_embedded and hasattr(stream, "key") and stream.key:
+                    try:
+                        video.removeSubtitles(subtitleStream=stream)
+                        removed += 1
+                        logger.info(f"Removed external subtitle: {getattr(stream, 'title', stream.id)} (lang={language})")
+                    except Exception as e:
+                        logger.warning(f"Failed to remove subtitle stream {stream.id}: {e}")
+
+            if removed:
+                self._refresh_metadata(video)
+
+        except Exception as e:
+            logger.warning(f"Error removing subtitles: {e}")
+
+        return removed
+
     def download_existing_subtitle(
         self,
         video: Video,

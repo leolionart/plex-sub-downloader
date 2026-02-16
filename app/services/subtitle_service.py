@@ -520,19 +520,32 @@ class SubtitleService:
     ) -> None:
         """
         Upload subtitle file lên Plex.
+        Nếu replace_existing=True, xóa subtitle cũ cùng language trước khi upload.
 
         Args:
             video: Plex Video object
             subtitle_path: Path to .srt file
             log: Logger instance
         """
+        language = self.runtime_config.default_language
+
+        # Remove existing external subtitles if replace mode is on
+        if self.config.subtitle_settings.replace_existing:
+            removed = await asyncio.to_thread(
+                self.plex_client.remove_external_subtitles,
+                video,
+                language,
+            )
+            if removed:
+                log.info(f"Removed {removed} existing {language} subtitle(s) before upload")
+
         log.info("Uploading subtitle to Plex", path=str(subtitle_path))
 
         success = await asyncio.to_thread(
             self.plex_client.upload_subtitle,
             video,
             subtitle_path,
-            self.runtime_config.default_language,
+            language,
         )
 
         if not success:
