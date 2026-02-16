@@ -11,6 +11,7 @@ Flow:
 import logging
 import re
 import zipfile
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
@@ -280,6 +281,28 @@ class SubsourceClient:
 
         return None, None
 
+    @staticmethod
+    def _filename_similarity(video_filename: str, release_name: str) -> float:
+        """
+        Tính độ tương đồng giữa video filename và subtitle release name.
+        Normalize cả hai: bỏ extension, lowercase, tách tokens.
+
+        Returns:
+            float 0.0 - 1.0 (1.0 = giống hoàn toàn)
+        """
+        def normalize(name: str) -> str:
+            # Bỏ extension và path
+            name = Path(name).stem
+            # Lowercase, thay dấu phân cách thành space
+            name = re.sub(r"[.\-_\[\]()]", " ", name.lower())
+            # Gộp multiple spaces
+            return re.sub(r"\s+", " ", name).strip()
+
+        norm_video = normalize(video_filename)
+        norm_release = normalize(release_name)
+
+        return SequenceMatcher(None, norm_video, norm_release).ratio()
+
     def _parse_subtitle_results(self, data: dict[str, Any]) -> list[SubtitleResult]:
         """Parse Subsource API v1 subtitle response."""
         results: list[SubtitleResult] = []
@@ -390,11 +413,24 @@ class SubsourceClient:
                     f"(filtered out {len(results) - len(season_matches)} non-matching)"
                 )
             elif unknown_matches:
-                filtered = unknown_matches
-                logger.warning(
-                    f"Episode filter: no season/episode match for S{params.season:02d}E{params.episode:02d}, "
-                    f"falling back to {len(unknown_matches)} untagged subtitles"
-                )
+                # Rank untagged subs by filename similarity (nếu có video_filename)
+                if params.video_filename and len(unknown_matches) > 1:
+                    scored = [
+                        (r, self._filename_similarity(params.video_filename, r.name))
+                        for r in unknown_matches
+                    ]
+                    scored.sort(key=lambda x: x[1], reverse=True)
+                    filtered = [r for r, _ in scored]
+                    logger.info(
+                        f"Episode filter: no exact match, using {len(filtered)} untagged subs "
+                        f"ranked by filename similarity (best: {scored[0][1]:.2f} — {scored[0][0].name})"
+                    )
+                else:
+                    filtered = unknown_matches
+                    logger.warning(
+                        f"Episode filter: no season/episode match for S{params.season:02d}E{params.episode:02d}, "
+                        f"falling back to {len(unknown_matches)} untagged subtitles"
+                    )
             else:
                 filtered = []
                 logger.warning(

@@ -78,6 +78,7 @@ class SubtitleSearchParams(BaseModel):
     tmdb_id: str | None = None
     season: int | None = None
     episode: int | None = None
+    video_filename: str | None = Field(None, description="Video filename for similarity matching")
 
     @property
     def has_external_id(self) -> bool:

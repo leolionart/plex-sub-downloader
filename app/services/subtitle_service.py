@@ -1048,7 +1048,16 @@ class SubtitleService:
 
         log.info("Translation fallback: Searching English subtitle")
 
-        # Search English subtitle
+        # Lấy video filename để dùng cho similarity matching
+        video_filename = None
+        try:
+            if video.media and video.media[0].parts:
+                video_filename = Path(video.media[0].parts[0].file).name
+                log.debug(f"Video filename for similarity: {video_filename}")
+        except Exception:
+            pass
+
+        # Search English subtitle on Subsource (with filename similarity fallback)
         en_search_params = SubtitleSearchParams(
             language="en",
             title=metadata.search_title,
@@ -1057,31 +1066,18 @@ class SubtitleService:
             tmdb_id=metadata.tmdb_id,
             season=metadata.season_number,
             episode=metadata.episode_number,
+            video_filename=video_filename,
         )
 
-        # Strategy 1: Search EN subtitle on Subsource
         en_results = await self._search_subtitles_by_params(en_search_params, log)
-        plex_subtitle_path: Path | None = None
 
         if en_results:
             log.info(f"Found {len(en_results)} English subtitle(s) on Subsource")
         else:
-            # Strategy 2: Download existing EN subtitle from Plex
-            log.info("No EN subtitle on Subsource — checking Plex for existing EN subtitle")
-            dest_dir = self.temp_dir / metadata.rating_key
-            plex_subtitle_path = await asyncio.to_thread(
-                self.plex_client.download_existing_subtitle,
-                video,
-                "en",
-                dest_dir,
-            )
-            if plex_subtitle_path:
-                log.info(f"Found existing EN subtitle on Plex: {plex_subtitle_path}")
-            else:
-                log.warning("No English subtitle found (Subsource + Plex)")
-                return None
+            log.warning("No English subtitle found on Subsource")
+            return None
 
-        subtitle_source = en_results[0].name if en_results else "Plex existing subtitle"
+        subtitle_source = en_results[0].name
 
         # Check if requires approval
         if self.config.subtitle_settings.translation_requires_approval:
@@ -1118,7 +1114,7 @@ class SubtitleService:
             from_lang="en",
             to_lang="vi",
             log=log,
-            source_subtitle_path=plex_subtitle_path,
+            source_subtitle_path=None,
             approval_type="auto_approved",
         )
 
