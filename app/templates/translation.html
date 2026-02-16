@@ -208,6 +208,153 @@
         color: var(--text-primary);
     }
 
+    /* ── Preview Modal ── */
+    .modal-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.7);
+        z-index: 1000;
+        backdrop-filter: blur(4px);
+    }
+
+    .modal-overlay.active {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .modal {
+        background: var(--bg-base);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        width: min(90vw, 720px);
+        max-height: 85vh;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--border-subtle);
+        flex-shrink: 0;
+    }
+
+    .modal-header h3 {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex: 1;
+        margin-right: 12px;
+    }
+
+    .modal-header .modal-meta {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-top: 2px;
+    }
+
+    .modal-close {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        cursor: pointer;
+        padding: 4px;
+        font-size: 20px;
+        line-height: 1;
+        flex-shrink: 0;
+    }
+
+    .modal-close:hover {
+        color: var(--text-primary);
+    }
+
+    .modal-body {
+        overflow-y: auto;
+        flex: 1;
+        padding: 0;
+    }
+
+    .sub-entry {
+        display: flex;
+        gap: 12px;
+        padding: 10px 20px;
+        border-bottom: 1px solid var(--border-subtle);
+        font-size: 13px;
+    }
+
+    .sub-entry:hover {
+        background: var(--bg-surface);
+    }
+
+    .sub-entry:last-child {
+        border-bottom: none;
+    }
+
+    .sub-time {
+        color: var(--plex-gold);
+        font-family: monospace;
+        font-size: 11px;
+        white-space: nowrap;
+        flex-shrink: 0;
+        padding-top: 1px;
+    }
+
+    .sub-text {
+        color: var(--text-primary);
+        line-height: 1.5;
+        word-break: break-word;
+    }
+
+    .modal-loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 48px 20px;
+        color: var(--text-muted);
+        font-size: 14px;
+    }
+
+    .modal-error {
+        text-align: center;
+        padding: 48px 20px;
+        color: var(--error);
+        font-size: 14px;
+    }
+
+    .modal-footer {
+        padding: 12px 20px;
+        border-top: 1px solid var(--border-subtle);
+        font-size: 12px;
+        color: var(--text-muted);
+        text-align: center;
+        flex-shrink: 0;
+    }
+
+    .btn-view {
+        background: none;
+        border: 1px solid var(--border-subtle);
+        color: var(--text-secondary);
+        padding: 4px 10px;
+        border-radius: var(--radius-sm);
+        font-size: 12px;
+        cursor: pointer;
+        transition: all var(--transition-fast);
+    }
+
+    .btn-view:hover {
+        border-color: var(--plex-gold);
+        color: var(--plex-gold);
+    }
+
     @media (max-width: 768px) {
         .pending-item-header {
             flex-direction: column;
@@ -216,8 +363,14 @@
             flex-direction: column;
         }
         .history-table th:nth-child(3),
-        .history-table td:nth-child(3) {
+        .history-table td:nth-child(3),
+        .history-table th:nth-child(5),
+        .history-table td:nth-child(5) {
             display: none;
+        }
+        .modal {
+            width: 95vw;
+            max-height: 90vh;
         }
     }
 </style>
@@ -240,6 +393,23 @@
 
 <div id="history-section">
     <div class="history-empty">Loading history...</div>
+</div>
+
+<!-- Subtitle Preview Modal -->
+<div id="preview-modal" class="modal-overlay" onclick="if(event.target===this)closePreview()">
+    <div class="modal">
+        <div class="modal-header">
+            <div>
+                <h3 id="preview-title">Loading...</h3>
+                <div class="modal-meta" id="preview-meta"></div>
+            </div>
+            <button class="modal-close" onclick="closePreview()">&times;</button>
+        </div>
+        <div class="modal-body" id="preview-body">
+            <div class="modal-loading"><span class="spinner"></span> Loading subtitle...</div>
+        </div>
+        <div class="modal-footer" id="preview-footer"></div>
+    </div>
 </div>
 {% endblock %}
 
@@ -486,10 +656,13 @@
                         <th>Status</th>
                         <th>Lines</th>
                         <th>Date</th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
-                    ${items.map(item => `
+                    ${items.map(item => {
+                        const canPreview = item.status !== 'rejected' && item.lines_translated > 0;
+                        return `
                         <tr>
                             <td>
                                 <div class="history-title">${item.title}</div>
@@ -502,8 +675,9 @@
                             </td>
                             <td>${item.lines_translated ? item.lines_translated.toLocaleString() : '—'}</td>
                             <td>${formatDate(item.timestamp)}</td>
-                        </tr>
-                    `).join('')}
+                            <td>${canPreview ? `<button class="btn-view" onclick="openPreview('${item.rating_key}','${item.to_lang}','${item.title.replace(/'/g, "\\'")}')">View</button>` : ''}</td>
+                        </tr>`;
+                    }).join('')}
                 </tbody>
             </table>
         `;
@@ -532,6 +706,63 @@
         }
 
         return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    }
+
+    // ── Subtitle Preview ──────────────────────────────────────────
+
+    function openPreview(ratingKey, lang, title) {
+        const modal = document.getElementById('preview-modal');
+        const body = document.getElementById('preview-body');
+        const titleEl = document.getElementById('preview-title');
+        const metaEl = document.getElementById('preview-meta');
+        const footerEl = document.getElementById('preview-footer');
+
+        titleEl.textContent = title;
+        metaEl.textContent = `Language: ${lang.toUpperCase()}`;
+        body.innerHTML = '<div class="modal-loading"><span class="spinner"></span> Loading subtitle from Plex...</div>';
+        footerEl.textContent = '';
+        modal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+
+        fetch(`/api/translation/preview/${ratingKey}?lang=${lang}`)
+            .then(r => {
+                if (!r.ok) return r.json().then(e => { throw new Error(e.detail || 'Failed'); });
+                return r.json();
+            })
+            .then(data => {
+                if (!data.entries || data.entries.length === 0) {
+                    body.innerHTML = '<div class="modal-error">No subtitle entries found</div>';
+                    return;
+                }
+
+                body.innerHTML = data.entries.map(e =>
+                    `<div class="sub-entry">` +
+                        `<span class="sub-time">${e.start.substring(0, 8)}</span>` +
+                        `<span class="sub-text">${escapeHtml(e.text)}</span>` +
+                    `</div>`
+                ).join('');
+
+                const suffix = data.truncated ? ` (showing first 500 of ${data.total_lines})` : '';
+                footerEl.textContent = `${data.total_lines} entries${suffix}`;
+            })
+            .catch(err => {
+                body.innerHTML = `<div class="modal-error">${escapeHtml(err.message)}</div>`;
+            });
+    }
+
+    function closePreview() {
+        document.getElementById('preview-modal').classList.remove('active');
+        document.body.style.overflow = '';
+    }
+
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') closePreview();
+    });
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 
     setInterval(loadPending, 30000);
