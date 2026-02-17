@@ -138,13 +138,26 @@ class OpenAITranslationClient:
         if not self.enabled:
             raise TranslationClientError("Translation disabled - no API key")
 
-        # Create prompt
-        system_prompt = f"""You are a professional subtitle translator.
-Translate the following subtitle texts from {from_lang} to {to_lang}.
-Keep the translation natural and preserve any special formatting.
-Return ONLY the translations, one per line, in the same order."""
+        # Create prompt — numbered format for reliable parsing
+        system_prompt = (
+            f"You are a professional subtitle translator from {from_lang} to {to_lang}.\n\n"
+            f"STRICT RULES:\n"
+            f"1. Output ONLY the {to_lang} translation — NEVER include the original {from_lang} text\n"
+            f"2. Return exactly {len(texts)} numbered translations matching input order\n"
+            f"3. Keep translations concise and natural for subtitle display\n"
+            f"4. Preserve line breaks within each entry (use the same number of lines)\n"
+            f"5. Do NOT merge, combine, or skip any entries\n"
+            f"6. Do NOT add explanations, notes, or extra text\n\n"
+            f"Response format (one translation per number):\n"
+            f"[1] translated text\n"
+            f"[2] translated text"
+        )
 
-        user_prompt = "\n---\n".join(texts)
+        # Build numbered input
+        numbered_lines = []
+        for i, text in enumerate(texts, 1):
+            numbered_lines.append(f"[{i}] {text}")
+        user_prompt = "\n".join(numbered_lines)
 
         try:
             response = await self._client.post(
@@ -163,15 +176,15 @@ Return ONLY the translations, one per line, in the same order."""
             data = response.json()
             translated_text = data["choices"][0]["message"]["content"]
 
-            # Parse response
-            translations = [t.strip() for t in translated_text.split("---")]
+            # Parse numbered response: [1] text, [2] text, ...
+            translations = self._parse_numbered_response(translated_text, len(texts))
 
             # Verify count matches
             if len(translations) != len(texts):
                 logger.warning(
                     f"Translation count mismatch: expected {len(texts)}, got {len(translations)}"
                 )
-                # Pad or truncate
+                # Pad with original text for missing entries
                 while len(translations) < len(texts):
                     translations.append(texts[len(translations)])
                 translations = translations[:len(texts)]
@@ -184,6 +197,36 @@ Return ONLY the translations, one per line, in the same order."""
         except Exception as e:
             logger.error(f"Translation error: {e}")
             raise TranslationClientError(f"Translation failed: {e}") from e
+
+    def _parse_numbered_response(self, response_text: str, expected_count: int) -> list[str]:
+        """
+        Parse numbered AI response: [1] text, [2] text, ...
+
+        Robust hơn split("---") vì dùng regex pattern matching.
+        Xử lý được multi-line entries giữa các [N] markers.
+        """
+        # Split by [N] pattern, capture both index and content between markers
+        parts = re.split(r'\[(\d+)\]\s*', response_text.strip())
+        # parts = ['preamble', '1', 'text1\n', '2', 'text2\n', ...]
+
+        results: dict[int, str] = {}
+        for i in range(1, len(parts) - 1, 2):
+            try:
+                idx = int(parts[i])
+                content = parts[i + 1].strip()
+                results[idx] = content
+            except (ValueError, IndexError):
+                continue
+
+        # Build ordered list matching expected count
+        translations = []
+        for i in range(1, expected_count + 1):
+            if i in results:
+                translations.append(results[i])
+            else:
+                logger.warning(f"Missing translation for entry [{i}]")
+
+        return translations
 
     async def translate_srt_file(
         self,
