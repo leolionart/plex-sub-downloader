@@ -368,9 +368,13 @@ class SubtitleService:
 
         # Check 3: Có embedded subtitle (image-based hoặc text-based trong container)
         # Embedded subs không thể replace bằng external .srt upload → bỏ qua.
+        # Lưu ý: sub_details đã filter theo default_language ("vi"), nên chỉ skip
+        # khi CHÍNH ngôn ngữ target có embedded stream — không bao giờ skip vì EN sub.
         if runtime_settings.skip_if_embedded:
             for sub_info in sub_details["subtitle_info"]:
                 if sub_info.get("is_embedded"):
+                    codec = sub_info.get("codec", "unknown")
+                    log.info(f"[Step 3/7] Found embedded {self.runtime_config.default_language} sub (codec={codec}) — skipping")
                     return False, "Has embedded subtitle and skip_if_embedded=True"
 
         # Check 4: Replace mode - chỉ download nếu có subtitle mới tốt hơn
