@@ -546,7 +546,7 @@
         if (data.has_vi_on_plex) {
             const viNote = data.can_sync
                 ? 'Plex (sẽ dùng làm tham chiếu sync)'
-                : 'Plex — sub đã có sẵn, không cần tải thêm';
+                : 'Plex ✓ — nhưng cần EN sub để thực hiện sync';
             subInfoHtml += `
                 <div class="sub-info">
                     <span class="icon ok"></span>
@@ -624,8 +624,8 @@
         } else if (data.can_translate) {
             statusTag = '<span class="tag tag-warning">Translate Only</span>';
         } else if (data.has_vi_on_plex) {
-            // VI đã có sẵn trên Plex, không cần action gì thêm
-            statusTag = '<span class="tag tag-success">Đã có Vietsub ✓</span>';
+            // VI có sẵn nhưng không sync được vì thiếu EN sub
+            statusTag = '<span class="tag tag-warning">Thiếu EN sub để sync</span>';
         } else {
             statusTag = '<span class="tag tag-error">Cannot Process</span>';
         }
