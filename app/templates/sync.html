@@ -531,38 +531,38 @@
 
     function renderPreview(data) {
         const area = document.getElementById('results-area');
-        const en = data.en_status || {};
+        const src = data.source_status || {};
         const vi = data.vi_status || {};
 
         // Build subtitle info section
         let subInfoHtml = '';
 
-        // Source subtitle status (EN or fallback language)
-        const srcLangLabel = data.source_lang && data.source_lang !== 'en'
+        // Source subtitle (any language except target, used for sync/translate)
+        const srcLangLabel = data.source_lang
             ? data.source_lang.toUpperCase()
-            : 'English';
-        if (en.available) {
-            const src = en.source === 'plex' ? 'Plex (text-based)' : 'Subsource';
+            : 'Source';
+        if (src.available) {
+            const srcFrom = src.source === 'plex' ? 'Plex' : 'Subsource';
             subInfoHtml += `
                 <div class="sub-info">
                     <span class="icon ok"></span>
-                    <span>${srcLangLabel} subtitle: ${src}</span>
+                    <span>${srcLangLabel} subtitle: ${src.detail || srcFrom}</span>
                 </div>
             `;
         } else {
             subInfoHtml += `
                 <div class="sub-info">
                     <span class="icon missing"></span>
-                    <span>Source subtitle: ${en.detail || 'Not found (Plex & Subsource)'}</span>
+                    <span>Source subtitle: ${src.detail || 'Not found (Plex & Subsource)'}</span>
                 </div>
             `;
         }
 
-        // Vietnamese sub status (detailed)
+        // Target subtitle (user's configured language)
         if (data.has_vi_on_plex) {
             const viNote = data.can_sync
                 ? 'Plex (sẽ dùng làm tham chiếu sync)'
-                : 'Plex ✓ — nhưng cần EN sub để thực hiện sync';
+                : 'Plex ✓ — nhưng cần source sub để thực hiện sync';
             subInfoHtml += `
                 <div class="sub-info">
                     <span class="icon ok"></span>
@@ -621,7 +621,7 @@
             `;
         }
 
-        if (en.available && data.can_translate) {
+        if (src.available && data.can_translate) {
             const srcLang = (data.source_lang || 'en').toUpperCase();
             actionsHtml += `
                 <button class="btn btn-info" onclick="executeTranslate()" id="btn-translate">
@@ -645,11 +645,11 @@
         } else if (data.has_vi_on_plex) {
             // VI có sẵn nhưng không tìm được source sub để sync
             statusTag = '<span class="tag tag-warning">Thiếu source sub để sync</span>';
-        } else if (!en.available) {
+        } else if (!src.available) {
             // Không tìm được sub nguồn nào → không làm gì được
             statusTag = '<span class="tag tag-error">Không tìm thấy sub nguồn</span>';
         } else {
-            // Có source sub nhưng không có VI và translate bị tắt
+            // Có source sub nhưng không có target sub và translate bị tắt
             statusTag = '<span class="tag tag-error">Không tìm thấy VI sub</span>';
         }
 

@@ -704,41 +704,7 @@ class SubtitleService:
         dest_dir.mkdir(parents=True, exist_ok=True)
 
         try:
-            # --- English subtitle ---
-            # 1) Check what EN subs exist on Plex (any format)
-            en_details = await asyncio.to_thread(
-                self.plex_client.get_subtitle_details, video, "en",
-            )
-            # 2) Try downloading text-based EN sub from Plex
-            en_path = await asyncio.to_thread(
-                self.plex_client.download_existing_subtitle,
-                video, "en", dest_dir,
-            )
-            has_en_text = en_path is not None
-
-            # Build EN status detail
-            en_status: dict[str, Any] = {
-                "available": has_en_text,
-                "source": "plex" if has_en_text else None,
-            }
-            if en_details["has_subtitle"] and not has_en_text:
-                subs = en_details["subtitle_info"]
-                embedded = [s for s in subs if s.get("is_embedded")]
-                image_based = [s for s in subs if s.get("is_image_based")]
-                codecs = [s["codec"] for s in subs]
-
-                if image_based:
-                    reason = f"dạng image-based ({', '.join(codecs)}) — không dùng được cho sync"
-                elif embedded:
-                    reason = f"dạng embedded ({', '.join(codecs)}) — không extract được qua Plex API"
-                else:
-                    reason = f"không download được ({', '.join(codecs)})"
-
-                en_status["detail"] = (
-                    f"Plex có {en_details['subtitle_count']} EN sub nhưng {reason}"
-                )
-
-            # Lấy video filename cho similarity matching
+            # Lấy video filename cho similarity matching (Subsource)
             video_filename = None
             try:
                 if video.media and video.media[0].parts:
@@ -746,58 +712,66 @@ class SubtitleService:
             except Exception:
                 pass
 
-            # --- Vietnamese subtitle (Plex check sớm) ---
-            # Kiểm tra VI trên Plex trước khi gọi bất kỳ Subsource API nào.
-            # Nếu VI đã có dạng text-based → không cần translate → bỏ qua toàn bộ
-            # Subsource source lang search để tránh lãng phí.
-            vi_path_early = await asyncio.to_thread(
+            # --- Target subtitle (ngôn ngữ user chọn trong settings) ---
+            # Kiểm tra target lang trên Plex ngay đầu tiên (fast, không gọi Subsource).
+            # Nếu đã có → không cần translate/search → bỏ qua toàn bộ AI search.
+            target_details = await asyncio.to_thread(
+                self.plex_client.get_subtitle_details, video, lang,
+            )
+            vi_path = await asyncio.to_thread(
                 self.plex_client.download_existing_subtitle,
                 video, lang, dest_dir,
             )
-            has_vi_text = vi_path_early is not None
+            has_vi_text = vi_path is not None
 
-            # 3) Fallback: search EN sub on Subsource — chỉ khi VI chưa có trên Plex
-            en_candidates: list[dict] = []
-            if not has_en_text and not has_vi_text:
-                try:
-                    en_results = await self._find_subtitles(
-                        metadata, log, language="en", video_filename=video_filename,
-                    )
-                    en_candidates = [
-                        {
-                            "id": r.id,
-                            "name": r.name,
-                            "quality": r.quality_type,
-                            "downloads": r.downloads,
-                            "rating": r.rating,
-                            "score": r.priority_score,
-                        }
-                        for r in en_results
-                    ]
-                    if en_candidates:
-                        en_status["available"] = True
-                        en_status["source"] = "subsource"
-                        en_status["detail"] = f"Tìm được {len(en_candidates)} EN sub trên Subsource"
-                    else:
-                        # Append Subsource search result to detail
-                        existing_detail = en_status.get("detail", "")
-                        subsource_note = "Subsource cũng không có EN sub khớp tập này"
-                        if existing_detail:
-                            en_status["detail"] = f"{existing_detail}. {subsource_note}"
-                        else:
-                            en_status["detail"] = subsource_note
-                except Exception as e:
-                    log.warning(f"[Preview] Subsource EN search failed: {e}")
-
-            has_en_available = en_status["available"]
+            # --- Source subtitle (bất kỳ lang nào ≠ target, dùng cho sync/translate) ---
+            # Ưu tiên: Plex trước (tất cả langs có sẵn, trừ target) → Subsource.
+            # Chỉ chạy khi target chưa có trên Plex (nếu có rồi, translate không cần).
+            source_status: dict[str, Any] = {"available": False, "source": None}
             source_lang = "en"
+            source_candidates: list[dict] = []
 
-            # Fallback source lang search — chỉ khi VI chưa có trên Plex
-            # (nếu VI đã có, translate không cần thiết → không cần tìm source sub)
-            if not has_en_available and not has_vi_text:
-                for fb_lang in _FALLBACK_SOURCE_LANGS:
-                    if fb_lang == lang:  # Bỏ qua target language (vi)
-                        continue
+            # 1) Tìm source sub trên Plex: lấy tất cả langs ≠ target
+            plex_langs = await asyncio.to_thread(
+                self.plex_client._get_existing_subtitle_languages, video,
+            )
+            source_langs_on_plex = [l for l in plex_langs if l != lang]
+            # Ưu tiên EN nếu có, còn lại sort theo thứ tự alphabet
+            source_langs_on_plex.sort(key=lambda l: (l != "en", l))
+
+            for plex_lang in source_langs_on_plex:
+                path = await asyncio.to_thread(
+                    self.plex_client.download_existing_subtitle,
+                    video, plex_lang, dest_dir,
+                )
+                if path:
+                    source_lang = plex_lang
+                    lang_name = LANGUAGE_MAP.get(plex_lang, plex_lang).title()
+                    source_status["available"] = True
+                    source_status["source"] = "plex"
+                    source_status["detail"] = f"Plex (text-based, {lang_name})"
+                    log.info(f"[Preview] Source sub on Plex: {plex_lang}")
+                    break
+                else:
+                    # Sub exists but not downloadable (image-based/embedded)
+                    details = await asyncio.to_thread(
+                        self.plex_client.get_subtitle_details, video, plex_lang,
+                    )
+                    if details["has_subtitle"] and not source_status.get("detail"):
+                        subs = details["subtitle_info"]
+                        codecs = [s["codec"] for s in subs]
+                        image_based = [s for s in subs if s.get("is_image_based")]
+                        embedded = [s for s in subs if s.get("is_embedded")]
+                        lang_name = LANGUAGE_MAP.get(plex_lang, plex_lang).title()
+                        if image_based:
+                            source_status["detail"] = f"Plex có {lang_name} sub dạng image ({', '.join(codecs)}) — không dùng được"
+                        elif embedded:
+                            source_status["detail"] = f"Plex có {lang_name} sub dạng embedded — không extract được"
+
+            # 2) Nếu không tìm được source trên Plex VÀ target chưa có → tìm Subsource
+            if not source_status["available"] and not has_vi_text:
+                search_order = ["en"] + [l for l in _FALLBACK_SOURCE_LANGS if l != "en" and l != lang]
+                for fb_lang in search_order:
                     try:
                         fb_results = await self._find_subtitles(
                             metadata, log, language=fb_lang, video_filename=video_filename,
@@ -805,7 +779,7 @@ class SubtitleService:
                         if fb_results:
                             source_lang = fb_lang
                             lang_name = LANGUAGE_MAP.get(fb_lang, fb_lang).title()
-                            en_candidates = [
+                            source_candidates = [
                                 {
                                     "id": r.id,
                                     "name": r.name,
@@ -816,21 +790,21 @@ class SubtitleService:
                                 }
                                 for r in fb_results
                             ]
-                            en_status["available"] = True
-                            en_status["source"] = "subsource"
-                            en_status["detail"] = f"Tìm được {len(en_candidates)} {lang_name} sub trên Subsource"
-                            has_en_available = True
-                            log.info(f"[Preview] Fallback source lang: {fb_lang} ({len(en_candidates)} subs)")
+                            source_status["available"] = True
+                            source_status["source"] = "subsource"
+                            source_status["detail"] = f"Tìm được {len(source_candidates)} {lang_name} sub trên Subsource"
+                            log.info(f"[Preview] Source sub from Subsource: {fb_lang} ({len(source_candidates)})")
                             break
                     except Exception as e:
                         log.debug(f"[Preview] Subsource {fb_lang} search failed: {e}")
 
-            # --- Vietnamese subtitle ---
-            vi_details = await asyncio.to_thread(
-                self.plex_client.get_subtitle_details, video, lang,
-            )
-            # has_vi_text already computed above (vi_path_early check)
-            vi_path = vi_path_early
+                if not source_status["available"]:
+                    source_status["detail"] = "Không tìm thấy sub nguồn trên Plex hoặc Subsource"
+
+            has_source_available = source_status["available"]
+
+            # --- Target subtitle (Subsource fallback, chỉ khi chưa có trên Plex) ---
+            vi_details = target_details  # Already fetched above
 
             vi_status: dict[str, Any] = {
                 "available": has_vi_text,
@@ -849,8 +823,9 @@ class SubtitleService:
                 else:
                     reason = f"không download được ({', '.join(codecs)})"
 
+                lang_name = LANGUAGE_MAP.get(lang, lang).title()
                 vi_status["detail"] = (
-                    f"Plex có {vi_details['subtitle_count']} VI sub nhưng {reason}"
+                    f"Plex có {vi_details['subtitle_count']} {lang_name} sub nhưng {reason}"
                 )
 
             # Search Vietnamese subtitle on Subsource — chỉ khi chưa có VI trên Plex.
@@ -875,21 +850,20 @@ class SubtitleService:
                 except Exception as e:
                     log.warning(f"[Preview] Subsource VI search failed: {e}")
 
-            has_vi_available = has_vi_text or len(vi_candidates) > 0
+            has_target_available = has_vi_text or len(vi_candidates) > 0
 
-            can_sync = has_en_available and has_vi_available
-            can_translate = has_en_available and self.translation_client.enabled
+            can_sync = has_source_available and has_target_available
+            can_translate = has_source_available and self.translation_client.enabled
 
             return {
                 "rating_key": rating_key,
                 "title": str(metadata),
                 "media_type": metadata.media_type,
-                "en_status": en_status,
+                "source_status": source_status,
                 "vi_status": vi_status,
-                # Legacy compat
-                "has_en_on_plex": has_en_text,
+                "has_source_on_plex": source_status["source"] == "plex",
                 "has_vi_on_plex": has_vi_text,
-                "en_candidates": en_candidates,
+                "source_candidates": source_candidates,
                 "vi_candidates": vi_candidates,
                 "can_sync": can_sync,
                 "can_translate": can_translate,
