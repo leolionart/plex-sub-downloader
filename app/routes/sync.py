@@ -21,8 +21,9 @@ class SyncRequest(BaseModel):
 
 
 class TranslateRequest(BaseModel):
-    """Request để translate English sub."""
+    """Request để translate subtitle sang Vietnamese."""
     rating_key: str
+    from_lang: str = "en"
 
 
 class ResolveUrlRequest(BaseModel):
@@ -96,6 +97,7 @@ async def translate_for_media(request: TranslateRequest):
 
     result = await service.execute_translate_for_media(
         rating_key=request.rating_key,
+        from_lang=request.from_lang,
     )
 
     if result["status"] == "error":

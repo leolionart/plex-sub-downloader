@@ -13,7 +13,11 @@ from datetime import datetime
 from plexapi.video import Video
 
 from app.clients.plex_client import PlexClient, PlexClientError
-from app.clients.subsource_client import SubsourceClient, SubsourceClientError
+from app.clients.subsource_client import SubsourceClient, SubsourceClientError, LANGUAGE_MAP
+
+# Languages to try as source for AI translation when EN not available
+# Ordered by prevalence on Subsource
+_FALLBACK_SOURCE_LANGS = ["ko", "ja", "zh", "fr", "es", "de", "pt", "ru", "it", "ar"]
 from app.clients.telegram_client import TelegramClient
 from app.clients.cache_client import CacheClient
 from app.clients.openai_translation_client import OpenAITranslationClient, TranslationClientError
@@ -776,6 +780,39 @@ class SubtitleService:
                     log.warning(f"[Preview] Subsource EN search failed: {e}")
 
             has_en_available = en_status["available"]
+            source_lang = "en"
+
+            # Nếu không có EN sub, thử các ngôn ngữ khác để làm source cho AI translate
+            if not has_en_available:
+                for fb_lang in _FALLBACK_SOURCE_LANGS:
+                    if fb_lang == lang:  # Bỏ qua target language (vi)
+                        continue
+                    try:
+                        fb_results = await self._find_subtitles(
+                            metadata, log, language=fb_lang, video_filename=video_filename,
+                        )
+                        if fb_results:
+                            source_lang = fb_lang
+                            lang_name = LANGUAGE_MAP.get(fb_lang, fb_lang).title()
+                            en_candidates = [
+                                {
+                                    "id": r.id,
+                                    "name": r.name,
+                                    "quality": r.quality_type,
+                                    "downloads": r.downloads,
+                                    "rating": r.rating,
+                                    "score": r.priority_score,
+                                }
+                                for r in fb_results
+                            ]
+                            en_status["available"] = True
+                            en_status["source"] = "subsource"
+                            en_status["detail"] = f"Tìm được {len(en_candidates)} {lang_name} sub trên Subsource"
+                            has_en_available = True
+                            log.info(f"[Preview] Fallback source lang: {fb_lang} ({len(en_candidates)} subs)")
+                            break
+                    except Exception as e:
+                        log.debug(f"[Preview] Subsource {fb_lang} search failed: {e}")
 
             # --- Vietnamese subtitle ---
             vi_details = await asyncio.to_thread(
@@ -832,7 +869,7 @@ class SubtitleService:
 
             has_vi_available = has_vi_text or len(vi_candidates) > 0
 
-            can_sync = has_en_available and has_vi_available
+            can_sync = has_en_available and has_vi_available and source_lang == "en"
             can_translate = has_en_available and self.translation_client.enabled
 
             return {
@@ -848,6 +885,7 @@ class SubtitleService:
                 "vi_candidates": vi_candidates,
                 "can_sync": can_sync,
                 "can_translate": can_translate,
+                "source_lang": source_lang,
                 "sync_enabled": self.config.subtitle_settings.auto_sync_timing and self.runtime_config.ai_available,
             }
 
@@ -1029,15 +1067,18 @@ class SubtitleService:
         self,
         rating_key: str,
         request_id: str | None = None,
+        from_lang: str = "en",
     ) -> dict[str, Any]:
         """
-        Chủ động dịch English subtitle sang Vietnamese cho media item.
+        Chủ động dịch subtitle sang Vietnamese cho media item.
 
-        Dùng khi không tìm được Vietnamese subtitle phù hợp ở đâu.
+        Hỗ trợ bất kỳ ngôn ngữ nguồn nào (EN, KO, JA, ZH, v.v.) vì AI translate
+        không bị giới hạn ngôn ngữ.
 
         Args:
             rating_key: Plex ratingKey
             request_id: Request ID for logging
+            from_lang: Source language code (default: "en")
 
         Returns:
             Dict với status và translation result
@@ -1047,7 +1088,7 @@ class SubtitleService:
         if not self.translation_client.enabled:
             return {"status": "error", "message": "Translation disabled — no OpenAI API key"}
 
-        log.info(f"[Translate] Manual translation requested for ratingKey: {rating_key}")
+        log.info(f"[Translate] Manual translation requested for ratingKey: {rating_key} (from_lang={from_lang})")
 
         video = await asyncio.to_thread(self.plex_client.get_video, rating_key)
         metadata = await asyncio.to_thread(self.plex_client.extract_metadata, video)
@@ -1055,7 +1096,7 @@ class SubtitleService:
         result = await self._execute_translation(
             metadata=metadata,
             video=video,
-            from_lang="en",
+            from_lang=from_lang,
             to_lang=self.runtime_config.default_language,
             log=log,
         )
