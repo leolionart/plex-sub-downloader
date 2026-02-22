@@ -8,6 +8,7 @@ Flow:
 3. Download subtitle by subtitleId → ZIP file
 """
 
+import asyncio
 import logging
 import re
 import zipfile
@@ -96,12 +97,23 @@ class SubsourceClient:
             },
         )
 
+        # In-session movie lookup cache: prevents repeating the same API call
+        # across multi-language searches. Key: imdb ID or "title:year".
+        # Value: movieId (int) or None (not found on Subsource).
+        self._movie_id_cache: dict[str, int | None] = {}
+
     async def close(self) -> None:
         await self._client.aclose()
 
     def _to_subsource_lang(self, iso_code: str) -> str:
         """Convert ISO 639-1 code to Subsource language name."""
         return LANGUAGE_MAP.get(iso_code, iso_code)
+
+    def _movie_cache_key(self, params: SubtitleSearchParams) -> str:
+        """Build cache key: prefer IMDb ID, fallback to title+year."""
+        if params.imdb_id:
+            return f"imdb:{params.imdb_id}"
+        return f"title:{params.title}:{params.year}"
 
     # ── Movie search ──────────────────────────────────────────────
 
@@ -115,22 +127,33 @@ class SubsourceClient:
         Search for a movie on Subsource, return movieId.
 
         Tries IMDb ID first, then title fallback.
+        Results (including "not found") are cached in-session to avoid
+        repeating the same API call across multi-language searches.
         """
+        cache_key = self._movie_cache_key(params)
+        if cache_key in self._movie_id_cache:
+            cached = self._movie_id_cache[cache_key]
+            logger.debug(
+                f"Movie cache hit: {cache_key} → "
+                f"{'movieId=' + str(cached) if cached else 'not found'}"
+            )
+            return cached
+
+        movie_id: int | None = None
+
         # Strategy 1: Search by IMDb ID (most accurate)
         if params.imdb_id:
             movie_id = await self._search_movie_by_imdb(params.imdb_id)
-            if movie_id:
-                return movie_id
 
         # Strategy 2: Search by title
-        if params.title:
+        if not movie_id and params.title:
             movie_id = await self._search_movie_by_title(
                 params.title, params.year, params.season
             )
-            if movie_id:
-                return movie_id
 
-        return None
+        # Cache result (including None for "not found on Subsource")
+        self._movie_id_cache[cache_key] = movie_id
+        return movie_id
 
     async def _search_movie_by_imdb(self, imdb_id: str) -> int | None:
         """Search movie by IMDb ID."""
@@ -259,6 +282,82 @@ class SubsourceClient:
                 logger.debug("No subtitles found")
                 return []
             raise SubsourceClientError(f"Subtitle search failed: {e}") from e
+
+    async def _search_subtitles_for_movie(
+        self,
+        movie_id: int,
+        language: str,
+        params: SubtitleSearchParams,
+    ) -> list[SubtitleResult]:
+        """
+        Fetch and rank subtitles for a known movieId + language.
+        Used internally by search_subtitles_multi_lang for parallel queries.
+        """
+        subsource_lang = self._to_subsource_lang(language)
+        try:
+            response = await self._client.get(
+                f"{self.base_url}/v1/subtitles",
+                params={"movieId": movie_id, "language": subsource_lang},
+            )
+            if response.status_code == 401:
+                raise SubsourceClientError("Subsource API key invalid or missing")
+            if response.status_code == 404:
+                return []
+            response.raise_for_status()
+
+            data = response.json()
+            results = self._parse_subtitle_results(data)
+            ranked = self._rank_and_filter(results, params)
+            logger.info(f"Found {len(ranked)} {subsource_lang} subtitles for movieId={movie_id}")
+            return ranked
+
+        except SubsourceClientError:
+            raise
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return []
+            logger.debug(f"Subtitle search failed for {language}: {e.response.status_code}")
+            return []
+        except Exception as e:
+            logger.debug(f"Subtitle search failed for {language}: {e}")
+            return []
+
+    async def search_subtitles_multi_lang(
+        self,
+        params: SubtitleSearchParams,
+        languages: list[str],
+    ) -> dict[str, list[SubtitleResult]]:
+        """
+        Search subtitles for multiple languages efficiently.
+
+        - Finds the movie ONCE (result cached in-session)
+        - Fetches subtitles for all languages in PARALLEL via asyncio.gather
+
+        Args:
+            params: Base search params (title, imdb_id, season, episode, etc.)
+                    The `language` field is ignored — each lang searched separately.
+            languages: List of ISO 639-1 codes to search (e.g. ["vi", "en", "ko"])
+
+        Returns:
+            Dict mapping language code → sorted SubtitleResult list ([] if not found)
+        """
+        if not languages:
+            return {}
+
+        logger.info(f"Multi-lang search ({', '.join(languages)}) for '{params.title}'")
+
+        # Find movie ONCE — subsequent calls for same movie are instant (cached)
+        movie_id = await self._search_movie(params)
+        if not movie_id:
+            logger.warning(f"Movie not found on Subsource: {params.title}")
+            return {lang: [] for lang in languages}
+
+        # Search all languages in parallel
+        results = await asyncio.gather(*[
+            self._search_subtitles_for_movie(movie_id, lang, params)
+            for lang in languages
+        ])
+        return dict(zip(languages, results))
 
     @staticmethod
     def _extract_season_episode(name: str) -> tuple[int | None, int | None]:

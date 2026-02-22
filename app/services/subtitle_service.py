@@ -768,39 +768,6 @@ class SubtitleService:
                         elif embedded:
                             source_status["detail"] = f"Plex có {lang_name} sub dạng embedded — không extract được"
 
-            # 2) Nếu không tìm được source trên Plex VÀ target chưa có → tìm Subsource
-            if not source_status["available"] and not has_vi_text:
-                search_order = ["en"] + [l for l in _FALLBACK_SOURCE_LANGS if l != "en" and l != lang]
-                for fb_lang in search_order:
-                    try:
-                        fb_results = await self._find_subtitles(
-                            metadata, log, language=fb_lang, video_filename=video_filename,
-                        )
-                        if fb_results:
-                            source_lang = fb_lang
-                            lang_name = LANGUAGE_MAP.get(fb_lang, fb_lang).title()
-                            source_candidates = [
-                                {
-                                    "id": r.id,
-                                    "name": r.name,
-                                    "quality": r.quality_type,
-                                    "downloads": r.downloads,
-                                    "rating": r.rating,
-                                    "score": r.priority_score,
-                                }
-                                for r in fb_results
-                            ]
-                            source_status["available"] = True
-                            source_status["source"] = "subsource"
-                            source_status["detail"] = f"Tìm được {len(source_candidates)} {lang_name} sub trên Subsource"
-                            log.info(f"[Preview] Source sub from Subsource: {fb_lang} ({len(source_candidates)})")
-                            break
-                    except Exception as e:
-                        log.debug(f"[Preview] Subsource {fb_lang} search failed: {e}")
-
-                if not source_status["available"]:
-                    source_status["detail"] = "Không tìm thấy sub nguồn trên Plex hoặc Subsource"
-
             has_source_available = source_status["available"]
 
             # --- Target subtitle (Subsource fallback, chỉ khi chưa có trên Plex) ---
@@ -828,27 +795,82 @@ class SubtitleService:
                     f"Plex có {vi_details['subtitle_count']} {lang_name} sub nhưng {reason}"
                 )
 
-            # Search Vietnamese subtitle on Subsource — chỉ khi chưa có VI trên Plex.
-            # Nếu đã có VI text-based trên Plex, không cần candidates để chọn.
+            # 2) Tìm trên Subsource — chỉ khi target chưa có trên Plex.
+            # Dùng multi-lang search: movie lookup 1 lần, subtitle queries song song.
             vi_candidates: list[dict] = []
             if not has_vi_text:
+                # Xây danh sách ngôn ngữ cần tìm
+                source_search_order = ["en"] + [
+                    l for l in _FALLBACK_SOURCE_LANGS if l != "en" and l != lang
+                ]
+                if has_source_available:
+                    # Đã có source trên Plex → chỉ cần tìm target lang
+                    langs_to_search = [lang]
+                    source_search_order = []
+                else:
+                    # Cần tìm cả target lang + tất cả fallback source langs
+                    langs_to_search = [lang] + source_search_order
+
+                base_params = SubtitleSearchParams(
+                    language=lang,
+                    title=metadata.search_title,
+                    year=metadata.year,
+                    imdb_id=metadata.imdb_id,
+                    tmdb_id=metadata.tmdb_id,
+                    season=metadata.season_number,
+                    episode=metadata.episode_number,
+                    video_filename=video_filename,
+                )
+
                 try:
-                    vi_results = await self._find_subtitles(
-                        metadata, log, language=lang, video_filename=video_filename,
+                    multi_results = await self.subsource_client.search_subtitles_multi_lang(
+                        base_params, langs_to_search,
                     )
-                    vi_candidates = [
-                        {
-                            "id": r.id,
-                            "name": r.name,
-                            "quality": r.quality_type,
-                            "downloads": r.downloads,
-                            "rating": r.rating,
-                            "score": r.priority_score,
-                        }
-                        for r in vi_results
-                    ]
                 except Exception as e:
-                    log.warning(f"[Preview] Subsource VI search failed: {e}")
+                    log.warning(f"[Preview] Subsource multi-lang search failed: {e}")
+                    multi_results = {}
+
+                # Kết quả target lang (VI)
+                target_results = multi_results.get(lang, [])
+                vi_candidates = [
+                    {
+                        "id": r.id,
+                        "name": r.name,
+                        "quality": r.quality_type,
+                        "downloads": r.downloads,
+                        "rating": r.rating,
+                        "score": r.priority_score,
+                    }
+                    for r in target_results
+                ]
+
+                # Kết quả source lang (nếu chưa tìm được trên Plex)
+                if not has_source_available:
+                    for fb_lang in source_search_order:
+                        fb_results = multi_results.get(fb_lang, [])
+                        if fb_results:
+                            source_lang = fb_lang
+                            lang_name = LANGUAGE_MAP.get(fb_lang, fb_lang).title()
+                            source_candidates = [
+                                {
+                                    "id": r.id,
+                                    "name": r.name,
+                                    "quality": r.quality_type,
+                                    "downloads": r.downloads,
+                                    "rating": r.rating,
+                                    "score": r.priority_score,
+                                }
+                                for r in fb_results
+                            ]
+                            source_status["available"] = True
+                            has_source_available = True
+                            source_status["source"] = "subsource"
+                            source_status["detail"] = f"Tìm được {len(source_candidates)} {lang_name} sub trên Subsource"
+                            log.info(f"[Preview] Source sub from Subsource: {fb_lang} ({len(source_candidates)})")
+                            break
+
+                    if not source_status["available"]:
+                        source_status["detail"] = "Không tìm thấy sub nguồn trên Plex hoặc Subsource"
 
             has_target_available = has_vi_text or len(vi_candidates) > 0
 
