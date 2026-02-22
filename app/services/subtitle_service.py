@@ -366,10 +366,11 @@ class SubtitleService:
                 if sub_info.get("forced"):
                     return False, "Has forced subtitle and skip_forced_subtitles=True"
 
-        # Check 3: Có embedded subtitle
+        # Check 3: Có embedded subtitle (image-based hoặc text-based trong container)
+        # Embedded subs không thể replace bằng external .srt upload → bỏ qua.
         if runtime_settings.skip_if_embedded:
             for sub_info in sub_details["subtitle_info"]:
-                if sub_info.get("format") in ["pgs", "vobsub", "dvdsub"]:
+                if sub_info.get("is_embedded"):
                     return False, "Has embedded subtitle and skip_if_embedded=True"
 
         # Check 4: Replace mode - chỉ download nếu có subtitle mới tốt hơn
