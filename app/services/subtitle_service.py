@@ -738,7 +738,6 @@ class SubtitleService:
                     f"Plex có {en_details['subtitle_count']} EN sub nhưng {reason}"
                 )
 
-            # 3) Fallback: search EN sub on Subsource
             # Lấy video filename cho similarity matching
             video_filename = None
             try:
@@ -747,8 +746,19 @@ class SubtitleService:
             except Exception:
                 pass
 
+            # --- Vietnamese subtitle (Plex check sớm) ---
+            # Kiểm tra VI trên Plex trước khi gọi bất kỳ Subsource API nào.
+            # Nếu VI đã có dạng text-based → không cần translate → bỏ qua toàn bộ
+            # Subsource source lang search để tránh lãng phí.
+            vi_path_early = await asyncio.to_thread(
+                self.plex_client.download_existing_subtitle,
+                video, lang, dest_dir,
+            )
+            has_vi_text = vi_path_early is not None
+
+            # 3) Fallback: search EN sub on Subsource — chỉ khi VI chưa có trên Plex
             en_candidates: list[dict] = []
-            if not has_en_text:
+            if not has_en_text and not has_vi_text:
                 try:
                     en_results = await self._find_subtitles(
                         metadata, log, language="en", video_filename=video_filename,
@@ -782,8 +792,9 @@ class SubtitleService:
             has_en_available = en_status["available"]
             source_lang = "en"
 
-            # Nếu không có EN sub, thử các ngôn ngữ khác để làm source cho AI translate
-            if not has_en_available:
+            # Fallback source lang search — chỉ khi VI chưa có trên Plex
+            # (nếu VI đã có, translate không cần thiết → không cần tìm source sub)
+            if not has_en_available and not has_vi_text:
                 for fb_lang in _FALLBACK_SOURCE_LANGS:
                     if fb_lang == lang:  # Bỏ qua target language (vi)
                         continue
@@ -818,11 +829,8 @@ class SubtitleService:
             vi_details = await asyncio.to_thread(
                 self.plex_client.get_subtitle_details, video, lang,
             )
-            vi_path = await asyncio.to_thread(
-                self.plex_client.download_existing_subtitle,
-                video, lang, dest_dir,
-            )
-            has_vi_text = vi_path is not None
+            # has_vi_text already computed above (vi_path_early check)
+            vi_path = vi_path_early
 
             vi_status: dict[str, Any] = {
                 "available": has_vi_text,
