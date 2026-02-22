@@ -18,6 +18,7 @@ class SyncRequest(BaseModel):
     """Request để execute sync timing."""
     rating_key: str
     subtitle_id: str | None = None
+    source_lang: str = "en"
 
 
 class TranslateRequest(BaseModel):
@@ -75,6 +76,7 @@ async def execute_sync(request: SyncRequest):
     result = await service.execute_sync_for_media(
         rating_key=request.rating_key,
         subtitle_id=request.subtitle_id,
+        source_lang=request.source_lang,
     )
 
     if result["status"] == "error":

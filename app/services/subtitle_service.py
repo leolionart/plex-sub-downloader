@@ -869,7 +869,7 @@ class SubtitleService:
 
             has_vi_available = has_vi_text or len(vi_candidates) > 0
 
-            can_sync = has_en_available and has_vi_available and source_lang == "en"
+            can_sync = has_en_available and has_vi_available
             can_translate = has_en_available and self.translation_client.enabled
 
             return {
@@ -898,18 +898,19 @@ class SubtitleService:
         rating_key: str,
         subtitle_id: str | None = None,
         request_id: str | None = None,
+        source_lang: str = "en",
     ) -> dict[str, Any]:
         """
         Execute sync timing cho một media item cụ thể (từ Web UI / API).
 
-        Tìm Vietnamese subtitle theo thứ tự:
-        1. Trên Plex (nếu đã có)
-        2. Trên Subsource (nếu chưa có trên Plex), ưu tiên subtitle_id nếu chỉ định
+        Dùng bất kỳ ngôn ngữ nào làm timing reference (source_lang).
+        Tìm reference sub theo thứ tự: Plex → Subsource (source_lang) → fallback langs.
 
         Args:
             rating_key: Plex ratingKey
-            subtitle_id: Subsource subtitle ID cụ thể (tuỳ chọn)
+            subtitle_id: Subsource subtitle ID cụ thể cho VI sub (tuỳ chọn)
             request_id: Request ID for logging
+            source_lang: Ngôn ngữ dùng làm timing reference (default: "en")
 
         Returns:
             Dict với status và sync stats
@@ -919,7 +920,7 @@ class SubtitleService:
         if not self.runtime_config.ai_available:
             return {"status": "error", "message": "OpenAI API key required for sync timing"}
 
-        log.info(f"[Sync] Manual sync requested for ratingKey: {rating_key}")
+        log.info(f"[Sync] Manual sync requested for ratingKey: {rating_key} (source_lang={source_lang})")
 
         # Get video from Plex
         video = await asyncio.to_thread(self.plex_client.get_video, rating_key)
@@ -930,38 +931,52 @@ class SubtitleService:
         dest_dir.mkdir(parents=True, exist_ok=True)
 
         try:
-            # Download English subtitle: Plex first, Subsource fallback
-            en_path = await asyncio.to_thread(
+            # Download reference subtitle: try source_lang on Plex first, then Subsource
+            # If source_lang fails, try all fallback languages
+            ref_path: Path | None = None
+            ref_source = "plex"
+            ref_lang_used = source_lang
+
+            # 1) Try source_lang on Plex
+            ref_path = await asyncio.to_thread(
                 self.plex_client.download_existing_subtitle,
-                video, "en", dest_dir,
+                video, source_lang, dest_dir,
             )
-            en_source = "plex"
 
-            if not en_path:
-                log.info("[Sync] No text-based EN sub on Plex — searching Subsource...")
-                en_results = await self._find_subtitles(metadata, log, language="en")
-                if en_results:
-                    downloaded = await self._download_first_available(en_results, metadata, log)
+            # 2) Try source_lang on Subsource
+            if not ref_path:
+                log.info(f"[Sync] No text-based {source_lang.upper()} sub on Plex — searching Subsource...")
+                ref_results = await self._find_subtitles(metadata, log, language=source_lang)
+                if ref_results:
+                    downloaded = await self._download_first_available(ref_results, metadata, log)
                     if downloaded:
-                        _, en_path = downloaded
-                        en_source = "subsource"
-                        log.info(f"[Sync] Downloaded EN sub from Subsource: {en_path.name}")
+                        _, ref_path = downloaded
+                        ref_source = "subsource"
+                        log.info(f"[Sync] Downloaded {source_lang.upper()} sub from Subsource: {ref_path.name}")
 
-            if not en_path:
-                en_details = await asyncio.to_thread(
-                    self.plex_client.get_subtitle_details, video, "en",
-                )
-                if en_details["has_subtitle"]:
-                    codecs = [s["codec"] for s in en_details["subtitle_info"]]
-                    return {
-                        "status": "error",
-                        "message": f"EN sub trên Plex là dạng image ({', '.join(codecs)}), "
-                                   f"không tìm được text-based EN sub trên Subsource",
-                    }
+            # 3) Fallback: try other languages (EN first if source_lang wasn't EN, then rest)
+            if not ref_path:
+                fallback_order = (["en"] if source_lang != "en" else []) + [
+                    l for l in _FALLBACK_SOURCE_LANGS if l != source_lang and l != "en"
+                ]
+                for fb_lang in fallback_order:
+                    fb_results = await self._find_subtitles(metadata, log, language=fb_lang)
+                    if fb_results:
+                        downloaded = await self._download_first_available(fb_results, metadata, log)
+                        if downloaded:
+                            _, ref_path = downloaded
+                            ref_source = "subsource"
+                            ref_lang_used = fb_lang
+                            log.info(f"[Sync] Using fallback {fb_lang.upper()} sub from Subsource")
+                            break
+
+            if not ref_path:
                 return {
                     "status": "error",
-                    "message": "Không tìm được English subtitle trên Plex hoặc Subsource",
+                    "message": "Không tìm được subtitle nào làm timing reference trên Plex hoặc Subsource",
                 }
+
+            en_path = ref_path  # Alias for legacy variable used below
 
             # Download Vietnamese subtitle: Plex first, Subsource fallback
             lang = self.runtime_config.default_language
@@ -1008,7 +1023,7 @@ class SubtitleService:
 
             return {
                 "status": "success",
-                "message": f"Timing synced ({sync_stats['anchors_found']} anchors, source: {vi_source})",
+                "message": f"Timing synced ({sync_stats['anchors_found']} anchors, ref: {ref_lang_used.upper()} from {ref_source}, vi: {vi_source})",
                 "stats": sync_stats,
             }
 

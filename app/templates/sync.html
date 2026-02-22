@@ -643,13 +643,13 @@
             const translateLabel = srcLang === 'EN' ? 'Translate Only' : `Translate (${srcLang} → VI)`;
             statusTag = `<span class="tag tag-warning">${translateLabel}</span>`;
         } else if (data.has_vi_on_plex) {
-            // VI có sẵn nhưng không sync được vì thiếu EN sub
-            statusTag = '<span class="tag tag-warning">Thiếu EN sub để sync</span>';
+            // VI có sẵn nhưng không tìm được source sub để sync
+            statusTag = '<span class="tag tag-warning">Thiếu source sub để sync</span>';
         } else if (!en.available) {
-            // Không có EN sub → cả sync lẫn AI translate đều không thể thực hiện
-            statusTag = '<span class="tag tag-error">Không tìm thấy EN sub</span>';
+            // Không tìm được sub nguồn nào → không làm gì được
+            statusTag = '<span class="tag tag-error">Không tìm thấy sub nguồn</span>';
         } else {
-            // Có EN nhưng không có VI và translate bị tắt
+            // Có source sub nhưng không có VI và translate bị tắt
             statusTag = '<span class="tag tag-error">Không tìm thấy VI sub</span>';
         }
 
@@ -684,7 +684,10 @@
         showProgress('Downloading subtitles...');
 
         try {
-            const body = { rating_key: currentRatingKey };
+            const body = {
+                rating_key: currentRatingKey,
+                source_lang: previewData?.source_lang || 'en',
+            };
             if (selectedSubtitleId && !previewData?.has_vi_on_plex) {
                 body.subtitle_id = selectedSubtitleId;
             }
