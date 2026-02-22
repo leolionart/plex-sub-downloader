@@ -414,6 +414,7 @@
     let selectedSubtitleId = null;
     let previewData = null;
     let autoSelected = false;
+    let previewAbortController = null;
 
     // Load sync status
     async function loadStatus() {
@@ -446,6 +447,13 @@
             return;
         }
 
+        // Hủy request preview đang chạy (nếu có) trước khi bắt đầu mới
+        if (previewAbortController) {
+            previewAbortController.abort();
+        }
+        previewAbortController = new AbortController();
+        const signal = previewAbortController.signal;
+
         const btn = document.getElementById('btn-preview');
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner"></span>';
@@ -456,7 +464,8 @@
                 const resolveRes = await fetch('/api/sync/resolve-url', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ input: ratingKey })
+                    body: JSON.stringify({ input: ratingKey }),
+                    signal,
                 });
                 if (!resolveRes.ok) {
                     const err = await resolveRes.json();
@@ -471,7 +480,8 @@
             const res = await fetch('/api/sync/preview', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ rating_key: ratingKey })
+                body: JSON.stringify({ rating_key: ratingKey }),
+                signal,
             });
 
             if (!res.ok) {
@@ -483,6 +493,7 @@
             renderPreview(previewData);
 
         } catch (e) {
+            if (e.name === 'AbortError') return; // Request bị hủy chủ động — không cần báo lỗi
             showAlert('Error: ' + e.message, 'error');
         } finally {
             btn.disabled = false;
@@ -789,7 +800,9 @@
             const container = document.getElementById('now-playing-cards');
 
             if (data.sessions && data.sessions.length > 0) {
-                container.innerHTML = data.sessions.map((item, i) => renderMediaCard(item, i === 0 && !autoSelected)).join('');
+                container.innerHTML = data.sessions.map(item =>
+                    renderMediaCard(item, item.rating_key === currentRatingKey)
+                ).join('');
                 section.style.display = 'block';
 
                 // Auto-select item đầu tiên (chỉ lần đầu, không ghi đè thao tác user)
@@ -839,12 +852,15 @@
         const card = document.querySelector(`.media-card[data-key="${ratingKey}"]`);
         if (card) card.classList.add('selected');
 
+        // Clear kết quả cũ ngay khi đổi sang video khác
+        if (ratingKey !== currentRatingKey) {
+            document.getElementById('results-area').innerHTML = '';
+            selectedSubtitleId = null;
+            previewData = null;
+        }
+
         document.getElementById('rating-key').value = ratingKey;
         previewSync();
-        // Scroll to results
-        setTimeout(() => {
-            document.getElementById('results-area').scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }, 500);
     }
 
     // Init

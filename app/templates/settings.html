@@ -300,6 +300,21 @@
                     <div class="toggle-desc">Tải subtitle khi user bắt đầu xem (nếu chưa có)</div>
                 </div>
             </label>
+
+            <div class="toggle-group" style="cursor:default;">
+                <div style="display:flex;flex-direction:column;gap:4px;flex:1;">
+                    <div style="display:flex;align-items:center;gap:12px;">
+                        <div class="toggle-title" style="flex:1;">New Media Delay</div>
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <input type="number" id="new_media_delay_seconds" name="new_media_delay_seconds"
+                                   min="0" max="300" value="30"
+                                   style="width:70px;padding:4px 8px;background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-primary);font-size:13px;text-align:center;">
+                            <span style="font-size:13px;color:var(--text-muted);">giây</span>
+                        </div>
+                    </div>
+                    <div class="toggle-desc">Thời gian chờ sau event <code>library.new</code> trước khi tìm sub. Plex cần thời gian index metadata — đặt 0 để tắt</div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -580,6 +595,7 @@
             document.getElementById('auto_sync_after_download').checked = settings.auto_sync_after_download ?? true;
             document.getElementById('translation_enabled').checked = (settings.translation_enabled || settings.auto_translate_if_no_vi) ?? false;
             document.getElementById('translation_requires_approval').checked = settings.translation_requires_approval ?? true;
+            document.getElementById('new_media_delay_seconds').value = settings.new_media_delay_seconds ?? 30;
         } catch (error) {
             showAlert('Error loading settings: ' + error.message, 'error');
         }
@@ -610,6 +626,7 @@
             translation_enabled: formData.get('translation_enabled') === 'on',
             auto_translate_if_no_vi: formData.get('translation_enabled') === 'on',
             translation_requires_approval: formData.get('translation_requires_approval') === 'on',
+            new_media_delay_seconds: Number(formData.get('new_media_delay_seconds')) || 0,
         };
 
         try {

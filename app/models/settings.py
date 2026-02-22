@@ -83,6 +83,14 @@ class SubtitleSettings(BaseModel):
         description="Chủ động dịch Eng→Viet khi có Engsub nhưng không có Vietsub"
     )
 
+    # Webhook processing delay
+    new_media_delay_seconds: int = Field(
+        default=30,
+        ge=0,
+        le=300,
+        description="Seconds to wait after library.new event before processing (allows Plex to finish indexing metadata)",
+    )
+
     @property
     def primary_language(self) -> str:
         """Get primary language (first in priority list)."""

@@ -45,13 +45,6 @@ class RuntimeConfig(BaseModel):
 
     temp_dir: str = Field(default="/tmp/plex-subtitles", description="Temp directory for subtitles")
 
-    new_media_delay_seconds: int = Field(
-        default=30,
-        ge=0,
-        le=300,
-        description="Seconds to wait after library.new event before processing (allows Plex to finish indexing metadata)",
-    )
-
     subtitle_settings: SubtitleSettings = Field(
         default_factory=SubtitleSettings,
         description="User-facing subtitle behavior settings",

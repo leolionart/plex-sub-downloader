@@ -474,8 +474,9 @@ async def _process_subtitle_task(rating_key: str, event: str, request_id: str) -
         # Delay cho library.new để Plex có đủ thời gian index metadata đầy đủ.
         # Ngay sau khi thêm media, Plex fire event cho Show → Season → Episode liên tiếp;
         # nếu xử lý ngay, ratingKey có thể trả về type "Show" hoặc "Season" thay vì "episode".
-        if event == "library.new" and runtime_config and runtime_config.new_media_delay_seconds > 0:
-            delay = runtime_config.new_media_delay_seconds
+        delay_setting = runtime_config.subtitle_settings.new_media_delay_seconds if runtime_config else 0
+        if event == "library.new" and delay_setting > 0:
+            delay = delay_setting
             logger.info(f"[{request_id}] Waiting {delay}s for Plex to finish indexing metadata...")
             await asyncio.sleep(delay)
 
