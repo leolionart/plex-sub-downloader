@@ -471,6 +471,14 @@ async def _process_subtitle_task(rating_key: str, event: str, request_id: str) -
         _processing_keys.add(rating_key)
 
     try:
+        # Delay cho library.new để Plex có đủ thời gian index metadata đầy đủ.
+        # Ngay sau khi thêm media, Plex fire event cho Show → Season → Episode liên tiếp;
+        # nếu xử lý ngay, ratingKey có thể trả về type "Show" hoặc "Season" thay vì "episode".
+        if event == "library.new" and runtime_config and runtime_config.new_media_delay_seconds > 0:
+            delay = runtime_config.new_media_delay_seconds
+            logger.info(f"[{request_id}] Waiting {delay}s for Plex to finish indexing metadata...")
+            await asyncio.sleep(delay)
+
         logger.info(f"[{request_id}] Starting subtitle task for ratingKey: {rating_key}")
 
         result = await subtitle_service.process_webhook(rating_key, event, request_id)
