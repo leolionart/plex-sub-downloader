@@ -477,6 +477,16 @@
             }
 
             currentRatingKey = ratingKey;
+
+            // Hiển thị skeleton loading để user biết đang xử lý
+            document.getElementById('results-area').innerHTML = `
+                <div class="result-card">
+                    <div class="result-body" style="color:var(--text-muted);font-size:13px;display:flex;align-items:center;gap:10px;padding:20px;">
+                        <span class="spinner" style="flex-shrink:0;"></span>
+                        <span>Đang kiểm tra subtitle trên Plex và Subsource…</span>
+                    </div>
+                </div>`;
+
             const res = await fetch('/api/sync/preview', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -493,7 +503,12 @@
             renderPreview(previewData);
 
         } catch (e) {
-            if (e.name === 'AbortError') return; // Request bị hủy chủ động — không cần báo lỗi
+            if (e.name === 'AbortError') {
+                // Request bị hủy chủ động — xóa loading skeleton, không báo lỗi
+                document.getElementById('results-area').innerHTML = '';
+                return;
+            }
+            document.getElementById('results-area').innerHTML = '';
             showAlert('Error: ' + e.message, 'error');
         } finally {
             btn.disabled = false;
@@ -825,8 +840,9 @@
             ? `<img src="${thumbSrc}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='<div style=\\'display:flex;align-items:center;justify-content:center;height:100%;font-size:28px;color:var(--text-muted)\\'>&#127910;</div>'">`
             : `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:28px;color:var(--text-muted)">&#127910;</div>`;
 
-        const playerHtml = item.player
-            ? `<div class="media-player">&#9654; ${item.player.title}</div>`
+        const playerTitle = item.player?.title && item.player.title !== 'null' ? item.player.title : null;
+        const playerHtml = playerTitle
+            ? `<div class="media-player">&#9654; ${playerTitle}</div>`
             : '';
 
         const progressHtml = item.progress !== undefined

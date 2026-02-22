@@ -808,25 +808,27 @@ class SubtitleService:
                     f"Plex có {vi_details['subtitle_count']} VI sub nhưng {reason}"
                 )
 
-            # Search Vietnamese subtitle on Subsource
+            # Search Vietnamese subtitle on Subsource — chỉ khi chưa có VI trên Plex.
+            # Nếu đã có VI text-based trên Plex, không cần candidates để chọn.
             vi_candidates: list[dict] = []
-            try:
-                vi_results = await self._find_subtitles(
-                    metadata, log, language=lang, video_filename=video_filename,
-                )
-                vi_candidates = [
-                    {
-                        "id": r.id,
-                        "name": r.name,
-                        "quality": r.quality_type,
-                        "downloads": r.downloads,
-                        "rating": r.rating,
-                        "score": r.priority_score,
-                    }
-                    for r in vi_results
-                ]
-            except Exception as e:
-                log.warning(f"[Preview] Subsource VI search failed: {e}")
+            if not has_vi_text:
+                try:
+                    vi_results = await self._find_subtitles(
+                        metadata, log, language=lang, video_filename=video_filename,
+                    )
+                    vi_candidates = [
+                        {
+                            "id": r.id,
+                            "name": r.name,
+                            "quality": r.quality_type,
+                            "downloads": r.downloads,
+                            "rating": r.rating,
+                            "score": r.priority_score,
+                        }
+                        for r in vi_results
+                    ]
+                except Exception as e:
+                    log.warning(f"[Preview] Subsource VI search failed: {e}")
 
             has_vi_available = has_vi_text or len(vi_candidates) > 0
 
