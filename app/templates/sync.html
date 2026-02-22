@@ -544,10 +544,13 @@
 
         // Vietnamese sub status (detailed)
         if (data.has_vi_on_plex) {
+            const viNote = data.can_sync
+                ? 'Plex (sẽ dùng làm tham chiếu sync)'
+                : 'Plex — sub đã có sẵn, không cần tải thêm';
             subInfoHtml += `
                 <div class="sub-info">
                     <span class="icon ok"></span>
-                    <span>Vietnamese subtitle: Plex (text-based, sẽ dùng cho sync)</span>
+                    <span>Vietnamese subtitle: ${viNote}</span>
                 </div>
             `;
         } else if (vi.detail) {
@@ -587,9 +590,11 @@
         let actionsHtml = '<div class="action-buttons">';
 
         if (data.can_sync && data.sync_enabled) {
+            const syncLabel = data.has_vi_on_plex ? 'Re-sync Timing (optional)' : 'Sync Timing';
+            const syncStyle = data.has_vi_on_plex ? 'btn btn-secondary' : 'btn btn-primary';
             actionsHtml += `
-                <button class="btn btn-primary" onclick="executeSync()" id="btn-sync">
-                    Sync Timing
+                <button class="${syncStyle}" onclick="executeSync()" id="btn-sync">
+                    ${syncLabel}
                 </button>
             `;
         } else if (data.can_sync && !data.sync_enabled) {
@@ -613,9 +618,14 @@
         // Determine status tag
         let statusTag;
         if (data.can_sync && data.sync_enabled) {
-            statusTag = '<span class="tag tag-info">Ready to Sync</span>';
+            statusTag = data.has_vi_on_plex
+                ? '<span class="tag tag-info">Re-sync Timing</span>'
+                : '<span class="tag tag-info">Ready to Sync</span>';
         } else if (data.can_translate) {
             statusTag = '<span class="tag tag-warning">Translate Only</span>';
+        } else if (data.has_vi_on_plex) {
+            // VI đã có sẵn trên Plex, không cần action gì thêm
+            statusTag = '<span class="tag tag-success">Đã có Vietsub ✓</span>';
         } else {
             statusTag = '<span class="tag tag-error">Cannot Process</span>';
         }
