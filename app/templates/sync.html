@@ -454,6 +454,13 @@
         previewAbortController = new AbortController();
         const signal = previewAbortController.signal;
 
+        // Timeout 60s — Subsource search có thể chậm (retry + exponential backoff)
+        let previewTimedOut = false;
+        const previewTimeoutId = setTimeout(() => {
+            previewTimedOut = true;
+            previewAbortController.abort();
+        }, 60000);
+
         const btn = document.getElementById('btn-preview');
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner"></span>';
@@ -504,13 +511,19 @@
 
         } catch (e) {
             if (e.name === 'AbortError') {
-                // Request bị hủy chủ động — xóa loading skeleton, không báo lỗi
-                document.getElementById('results-area').innerHTML = '';
+                if (previewTimedOut) {
+                    document.getElementById('results-area').innerHTML = '';
+                    showAlert('Preview timeout — Subsource không phản hồi sau 60s. Thử lại sau.', 'warning');
+                } else {
+                    // Hủy chủ động khi chọn video khác — xóa skeleton, không báo lỗi
+                    document.getElementById('results-area').innerHTML = '';
+                }
                 return;
             }
             document.getElementById('results-area').innerHTML = '';
             showAlert('Error: ' + e.message, 'error');
         } finally {
+            clearTimeout(previewTimeoutId);
             btn.disabled = false;
             btn.textContent = 'Preview';
         }
@@ -626,8 +639,12 @@
         } else if (data.has_vi_on_plex) {
             // VI có sẵn nhưng không sync được vì thiếu EN sub
             statusTag = '<span class="tag tag-warning">Thiếu EN sub để sync</span>';
+        } else if (!en.available) {
+            // Không có EN sub → cả sync lẫn AI translate đều không thể thực hiện
+            statusTag = '<span class="tag tag-error">Không tìm thấy EN sub</span>';
         } else {
-            statusTag = '<span class="tag tag-error">Cannot Process</span>';
+            // Có EN nhưng không có VI và translate bị tắt
+            statusTag = '<span class="tag tag-error">Không tìm thấy VI sub</span>';
         }
 
         area.innerHTML = `
