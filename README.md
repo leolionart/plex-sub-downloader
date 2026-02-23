@@ -10,6 +10,8 @@ Plex/Tautulli ──webhook──▶ Subtitle Service ──▶ Subsource (tìm 
                            Plex API (upload)    OpenAI (sync / dịch sub)
 ```
 
+![1771806404878](image/README/1771806346986.png)
+
 ## Tính năng
 
 - **Auto-download** — tải và upload subtitle khi có media mới hoặc khi bắt đầu play
