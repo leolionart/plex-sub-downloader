@@ -25,6 +25,7 @@ Plex/Tautulli ──webhook──▶ Subtitle Service ──▶ Subsource (tìm 
 ## Cài đặt nhanh
 
 ### Yêu cầu
+
 - Docker & Docker Compose
 - Plex Media Server (với Webhooks enabled — Plex Pass)
 - Tài khoản [Subsource](https://subsource.net) + API key
@@ -52,6 +53,8 @@ docker compose up -d
 
 ### Cấu hình
 
+![1771806404878](image/README/1771806404878.png)
+
 1. Mở **http://your-server:8000/setup**
 2. Nhập Plex URL, Plex Token, Subsource API Key
 3. (Tuỳ chọn) Cấu hình OpenAI key để bật AI sync/translate
@@ -62,18 +65,19 @@ docker compose up -d
 **Plex:** Settings → Webhooks → Add: `http://your-server:8000/webhook`
 
 **Tautulli:** Notification Agents → Webhook → `http://your-server:8000/webhook`
+
 - Trigger: Recently Added
 - Payload: `{"event": "library.new", "rating_key": "{rating_key}", "media_type": "{media_type}"}`
 
 ## Web UI
 
-| URL | Chức năng |
-|-----|-----------|
-| `/` | Settings — cấu hình download, AI, quality |
-| `/setup` | Setup wizard — credentials |
-| `/sync` | Manual sync/translate bất kỳ media |
-| `/translation` | Duyệt translation requests |
-| `/logs` | Log viewer real-time |
+| URL              | Chức năng                                  |
+| ---------------- | -------------------------------------------- |
+| `/`            | Settings — cấu hình download, AI, quality |
+| `/setup`       | Setup wizard — credentials                  |
+| `/sync`        | Manual sync/translate bất kỳ media         |
+| `/translation` | Duyệt translation requests                  |
+| `/logs`        | Log viewer real-time                         |
 
 ## Tài liệu
 

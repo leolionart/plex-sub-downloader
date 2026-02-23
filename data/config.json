@@ -4,11 +4,9 @@
   "subsource_api_key": "sk_d7d185f43da1b58c4e25ceeceb0f37bb856f5449f84b645e3f973f278f2a0e30",
   "subsource_base_url": "https://api.subsource.net/api",
   "default_language": "vi",
-  "openai_api_key": "sk-dummy",
-  "openai_base_url": "https://proxy.naai.studio/v1",
-  "openai_model": "gpt-5-mini",
-  "translation_enabled": true,
-  "translation_requires_approval": false,
+  "openai_api_key": "sk-TCYN2jJTE8KGWwb48kZub20kv1QOHv5PNL3tBU6xnp1GrUlb",
+  "openai_base_url": "https://api.yescale.io/v1",
+  "openai_model": "gpt-4o-mini",
   "telegram_bot_token": "7021204170:AAG-DmOA--BPaqVXMvUZM0_sC6of7p1STQI",
   "telegram_chat_id": "-1002050746518",
   "webhook_secret": null,
@@ -26,10 +24,15 @@
     "auto_download_on_add": true,
     "auto_download_on_play": true,
     "skip_if_has_subtitle": true,
-    "replace_existing": false,
+    "replace_existing": true,
     "replace_only_if_better_quality": true,
     "min_quality_threshold": "translated",
     "skip_forced_subtitles": true,
-    "skip_if_embedded": true
+    "skip_if_embedded": true,
+    "auto_sync_timing": true,
+    "auto_sync_after_download": true,
+    "translation_enabled": true,
+    "translation_requires_approval": true,
+    "auto_translate_if_no_vi": true
   }
 }
