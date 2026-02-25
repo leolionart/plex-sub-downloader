@@ -310,6 +310,226 @@
         padding: 8px 0;
     }
 
+    /* ── History Section ── */
+    .section-divider {
+        margin: 40px 0 24px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+    }
+
+    .section-divider h2 {
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--text-primary);
+        white-space: nowrap;
+    }
+
+    .section-divider::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--border-subtle);
+    }
+
+    .history-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .history-table th {
+        text-align: left;
+        padding: 10px 12px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .history-table td {
+        padding: 12px;
+        font-size: 14px;
+        color: var(--text-secondary);
+        border-bottom: 1px solid var(--border-subtle);
+        vertical-align: middle;
+    }
+
+    .history-table tr:last-child td {
+        border-bottom: none;
+    }
+
+    .history-table tr:hover td {
+        background: var(--bg-surface);
+    }
+
+    .history-title {
+        color: var(--text-primary);
+        font-weight: 500;
+    }
+
+    .history-meta {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-top: 2px;
+    }
+
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 3px 10px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .status-success {
+        background: var(--success-dim);
+        color: var(--success);
+    }
+
+    .status-failed {
+        background: var(--error-dim);
+        color: var(--error);
+    }
+
+    .history-empty {
+        text-align: center;
+        padding: 32px;
+        color: var(--text-muted);
+        font-size: 14px;
+    }
+
+    .history-stats {
+        display: flex;
+        gap: 24px;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+    }
+
+    .history-stat {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        font-size: 13px;
+        color: var(--text-muted);
+    }
+
+    .history-stat strong {
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+
+    .btn-view {
+        padding: 4px 12px;
+        font-size: 12px;
+        border-radius: 6px;
+        border: 1px solid var(--border-subtle);
+        background: transparent;
+        color: var(--text-secondary);
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+
+    .btn-view:hover {
+        background: var(--bg-surface);
+        color: var(--text-primary);
+    }
+
+    /* ── Detail Modal ── */
+    .modal-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.7);
+        z-index: 1000;
+        backdrop-filter: blur(4px);
+    }
+
+    .modal-overlay.active {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .modal {
+        background: var(--bg-base);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        width: min(90vw, 480px);
+        max-height: 85vh;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--border-subtle);
+        flex-shrink: 0;
+    }
+
+    .modal-header h3 {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex: 1;
+        margin-right: 12px;
+    }
+
+    .modal-close {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        cursor: pointer;
+        padding: 4px;
+        font-size: 20px;
+        line-height: 1;
+        flex-shrink: 0;
+    }
+
+    .modal-close:hover {
+        color: var(--text-primary);
+    }
+
+    .modal-body {
+        overflow-y: auto;
+        flex: 1;
+        padding: 20px;
+    }
+
+    .detail-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .detail-row:last-child {
+        border-bottom: none;
+    }
+
+    .detail-label {
+        font-size: 13px;
+        color: var(--text-muted);
+    }
+
+    .detail-value {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text-primary);
+    }
+
     @media (max-width: 768px) {
         .sync-input-row {
             flex-direction: column;
@@ -336,10 +556,6 @@
 <div id="sync-status-banner" class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
     <div class="stat-card">
         <div class="stat-value" id="stat-enabled">--</div>
-        <div class="stat-label">Sync Status</div>
-    </div>
-    <div class="stat-card">
-        <div class="stat-value" id="stat-auto">--</div>
         <div class="stat-label">Auto Sync</div>
     </div>
     <div class="stat-card">
@@ -406,6 +622,26 @@
         </li>
     </ul>
 </div>
+
+<!-- Sync History -->
+<div class="section-divider">
+    <h2>Sync History</h2>
+</div>
+<div id="history-stats" class="history-stats" style="display:none;"></div>
+<div id="history-section">
+    <div class="history-empty">Loading history...</div>
+</div>
+
+<!-- Detail Modal -->
+<div id="sync-detail-modal" class="modal-overlay" onclick="if(event.target===this)closeSyncDetail()">
+    <div class="modal">
+        <div class="modal-header">
+            <h3 id="detail-title">Sync Detail</h3>
+            <button class="modal-close" onclick="closeSyncDetail()">&times;</button>
+        </div>
+        <div class="modal-body" id="detail-body"></div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -424,9 +660,6 @@
 
             document.getElementById('stat-enabled').textContent = data.sync_enabled ? 'ON' : 'OFF';
             document.getElementById('stat-enabled').style.color = data.sync_enabled ? 'var(--success)' : 'var(--error)';
-
-            document.getElementById('stat-auto').textContent = data.auto_sync_after_download ? 'ON' : 'OFF';
-            document.getElementById('stat-auto').style.color = data.auto_sync_after_download ? 'var(--success)' : 'var(--text-muted)';
 
             document.getElementById('stat-model').textContent = data.model || '--';
             document.getElementById('stat-model').style.cssText = 'font-size: 16px; color: var(--text-primary);';
@@ -919,9 +1152,143 @@
         previewSync();
     }
 
+    // ── Sync History ──────────────────────────────────────────
+
+    let syncHistoryItems = [];
+
+    async function loadHistory() {
+        try {
+            const res = await fetch('/api/sync/history?limit=50');
+            const data = await res.json();
+            syncHistoryItems = data.items || [];
+            renderHistory(syncHistoryItems);
+        } catch (e) {
+            document.getElementById('history-section').innerHTML =
+                '<div class="history-empty">Failed to load history</div>';
+        }
+    }
+
+    function renderHistory(items) {
+        const section = document.getElementById('history-section');
+        const statsEl = document.getElementById('history-stats');
+
+        if (!items || items.length === 0) {
+            section.innerHTML = '<div class="history-empty">No sync history yet</div>';
+            statsEl.style.display = 'none';
+            return;
+        }
+
+        const success = items.filter(i => i.status === 'success').length;
+        const failed = items.filter(i => i.status === 'failed').length;
+        const avgAnchors = success > 0
+            ? Math.round(items.filter(i => i.status === 'success').reduce((s, i) => s + (i.anchors_found || 0), 0) / success)
+            : 0;
+
+        statsEl.style.display = 'flex';
+        statsEl.innerHTML = `
+            <div class="history-stat"><strong>${success}</strong> synced</div>
+            <div class="history-stat"><strong>${failed}</strong> failed</div>
+            <div class="history-stat"><strong>${avgAnchors}</strong> avg anchors</div>
+        `;
+
+        section.innerHTML = `
+            <table class="history-table">
+                <thead>
+                    <tr>
+                        <th>Title</th>
+                        <th>Status</th>
+                        <th>Anchors</th>
+                        <th>Offset</th>
+                        <th>Date</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${items.map((item, idx) => {
+                        const offsetSec = Math.abs(item.avg_offset_ms || 0) / 1000;
+                        const offsetDir = (item.avg_offset_ms || 0) > 0 ? 'trễ' : 'sớm';
+                        const offsetText = item.status === 'success' ? `${offsetSec.toFixed(1)}s ${offsetDir}` : '—';
+                        const sourceBadge = item.source === 'auto' ? 'auto' : 'manual';
+                        return `
+                        <tr>
+                            <td>
+                                <div class="history-title">${item.title || '—'}</div>
+                                <div class="history-meta">${sourceBadge}${item.ref_lang ? ' &middot; ref: ' + item.ref_lang.toUpperCase() : ''}${item.model ? ' &middot; ' + item.model : ''}</div>
+                            </td>
+                            <td><span class="status-badge status-${item.status}">${item.status === 'success' ? '✓' : '✗'} ${item.status}</span></td>
+                            <td>${item.status === 'success' ? item.anchors_found : '—'}</td>
+                            <td>${offsetText}</td>
+                            <td>${formatDate(item.timestamp)}</td>
+                            <td><button class="btn-view" onclick="openSyncDetail(${idx})">View</button></td>
+                        </tr>`;
+                    }).join('')}
+                </tbody>
+            </table>
+        `;
+    }
+
+    function formatDate(iso) {
+        if (!iso) return '—';
+        const d = new Date(iso);
+        const now = new Date();
+        const diff = now - d;
+
+        if (diff < 86400000) {
+            const hours = Math.floor(diff / 3600000);
+            if (hours < 1) {
+                const mins = Math.floor(diff / 60000);
+                return mins <= 0 ? 'Just now' : `${mins}m ago`;
+            }
+            return `${hours}h ago`;
+        }
+
+        if (diff < 604800000) {
+            const days = Math.floor(diff / 86400000);
+            return `${days}d ago`;
+        }
+
+        return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    }
+
+    function openSyncDetail(idx) {
+        const item = syncHistoryItems[idx];
+        if (!item) return;
+
+        const modal = document.getElementById('sync-detail-modal');
+        document.getElementById('detail-title').textContent = item.title || 'Sync Detail';
+
+        const offsetSec = Math.abs(item.avg_offset_ms || 0) / 1000;
+        const offsetDir = (item.avg_offset_ms || 0) > 0 ? 'trễ' : 'sớm';
+
+        const rows = [
+            ['Status', `<span class="status-badge status-${item.status}">${item.status === 'success' ? '✓' : '✗'} ${item.status}</span>`],
+            ['Source', item.source === 'auto' ? 'Auto (after download)' : 'Manual'],
+            ['Anchors Found', item.status === 'success' ? item.anchors_found : '—'],
+            ['Avg Offset', item.status === 'success' ? `${offsetSec.toFixed(1)}s ${offsetDir}` : '—'],
+            ['Reference', item.ref_lang ? `${item.ref_lang.toUpperCase()} from ${item.ref_source || '—'}` : '—'],
+            ['AI Model', item.model || '—'],
+            ['Date', item.timestamp ? new Date(item.timestamp).toLocaleString('vi-VN') : '—'],
+        ];
+
+        if (item.error) {
+            rows.push(['Error', `<span style="color:var(--error)">${item.error}</span>`]);
+        }
+
+        document.getElementById('detail-body').innerHTML = rows.map(([label, value]) =>
+            `<div class="detail-row"><span class="detail-label">${label}</span><span class="detail-value">${value}</span></div>`
+        ).join('');
+
+        modal.classList.add('active');
+    }
+
+    function closeSyncDetail() {
+        document.getElementById('sync-detail-modal').classList.remove('active');
+    }
+
     // Init
     loadStatus();
     loadNowPlaying();
+    loadHistory();
     setInterval(loadNowPlaying, 30000);
 
     // Submit on Enter key

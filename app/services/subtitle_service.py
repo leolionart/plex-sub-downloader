@@ -79,6 +79,11 @@ class SubtitleService:
         self._history_lock = RLock()
         self._translation_history: list[dict] = self._load_history()
 
+        # Sync history (persisted to JSON)
+        self._sync_history_path = Path("data") / "sync_history.json"
+        self._sync_history_lock = RLock()
+        self._sync_history: list[dict] = self._load_sync_history()
+
     async def close(self) -> None:
         """Cleanup resources."""
         await self.subsource_client.close()
@@ -279,7 +284,7 @@ class SubtitleService:
 
             # Step 7b: Sync timing (if enabled and English reference available)
             sync_result = None
-            if self.config.subtitle_settings.auto_sync_timing and self.config.subtitle_settings.auto_sync_after_download:
+            if self.config.subtitle_settings.auto_sync_timing:
                 sync_result = await self._try_sync_timing(
                     video, metadata, subtitle_path, log,
                 )
@@ -662,6 +667,18 @@ class SubtitleService:
             # Update persistent stats
             self.stats.increment("total_syncs")
 
+            self.add_sync_history_entry(
+                rating_key=metadata.rating_key,
+                title=str(metadata),
+                status="success",
+                source="auto",
+                anchors_found=sync_stats["anchors_found"],
+                avg_offset_ms=sync_stats["avg_offset_ms"],
+                ref_lang="en",
+                ref_source="plex",
+                model=self.runtime_config.openai_model,
+            )
+
             await self.telegram_client.notify_sync_completed(
                 title=str(metadata),
                 anchors=sync_stats["anchors_found"],
@@ -672,6 +689,16 @@ class SubtitleService:
 
         except SyncClientError as e:
             log.warning(f"[Sync] Sync failed: {e}")
+            self.add_sync_history_entry(
+                rating_key=metadata.rating_key,
+                title=str(metadata),
+                status="failed",
+                source="auto",
+                ref_lang="en",
+                ref_source="plex",
+                model=self.runtime_config.openai_model,
+                error=str(e),
+            )
             await self.telegram_client.notify_error(
                 title=str(metadata),
                 error_message=f"Sync timing failed: {e}",
@@ -679,6 +706,20 @@ class SubtitleService:
             return None
         except Exception as e:
             log.warning(f"[Sync] Unexpected sync error: {e}")
+            self.add_sync_history_entry(
+                rating_key=metadata.rating_key,
+                title=str(metadata),
+                status="failed",
+                source="auto",
+                ref_lang="en",
+                ref_source="plex",
+                model=self.runtime_config.openai_model,
+                error=str(e),
+            )
+            await self.telegram_client.notify_error(
+                title=str(metadata),
+                error_message=f"Sync timing failed: {e}",
+            )
             return None
         finally:
             # Cleanup sync temp files
@@ -895,7 +936,7 @@ class SubtitleService:
                 "can_sync": can_sync,
                 "can_translate": can_translate,
                 "source_lang": source_lang,
-                "sync_enabled": self.config.subtitle_settings.auto_sync_timing and self.runtime_config.ai_available,
+                "sync_enabled": self.runtime_config.ai_available,
             }
 
         finally:
@@ -1024,6 +1065,18 @@ class SubtitleService:
             # Update persistent stats
             self.stats.increment("total_syncs")
 
+            self.add_sync_history_entry(
+                rating_key=rating_key,
+                title=str(metadata),
+                status="success",
+                source="manual",
+                anchors_found=sync_stats["anchors_found"],
+                avg_offset_ms=sync_stats["avg_offset_ms"],
+                ref_lang=ref_lang_used,
+                ref_source=ref_source,
+                model=self.runtime_config.openai_model,
+            )
+
             await self.telegram_client.notify_sync_completed(
                 title=str(metadata),
                 anchors=sync_stats["anchors_found"],
@@ -1037,6 +1090,14 @@ class SubtitleService:
             }
 
         except SyncClientError as e:
+            self.add_sync_history_entry(
+                rating_key=rating_key,
+                title=str(metadata),
+                status="failed",
+                source="manual",
+                model=self.runtime_config.openai_model,
+                error=str(e),
+            )
             return {"status": "error", "message": str(e)}
         except PlexClientError as e:
             return {"status": "error", "message": f"Plex error: {e}"}
@@ -1385,6 +1446,69 @@ class SubtitleService:
         """Get translation history, mới nhất trước."""
         with self._history_lock:
             return self._translation_history[:limit]
+
+    # ── Sync History ─────────────────────────────────────────────────
+
+    def _load_sync_history(self) -> list[dict]:
+        """Load sync history từ JSON file."""
+        try:
+            if self._sync_history_path.exists():
+                data = json.loads(self._sync_history_path.read_text(encoding="utf-8"))
+                if isinstance(data, list):
+                    return data
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning(f"Failed to load sync history: {e}")
+        return []
+
+    def _save_sync_history(self) -> None:
+        """Persist sync history to JSON file."""
+        try:
+            self._sync_history_path.parent.mkdir(parents=True, exist_ok=True)
+            self._sync_history_path.write_text(
+                json.dumps(self._sync_history, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+        except OSError as e:
+            logger.warning(f"Failed to save sync history: {e}")
+
+    def add_sync_history_entry(
+        self,
+        *,
+        rating_key: str,
+        title: str,
+        status: str,
+        source: str,
+        anchors_found: int = 0,
+        avg_offset_ms: int = 0,
+        ref_lang: str = "",
+        ref_source: str = "",
+        model: str = "",
+        error: str = "",
+    ) -> None:
+        """Ghi một entry vào sync history."""
+        entry = {
+            "rating_key": rating_key,
+            "title": title,
+            "status": status,
+            "source": source,
+            "anchors_found": anchors_found,
+            "avg_offset_ms": avg_offset_ms,
+            "ref_lang": ref_lang,
+            "ref_source": ref_source,
+            "model": model,
+            "error": error,
+            "timestamp": datetime.now().isoformat(),
+        }
+        with self._sync_history_lock:
+            self._sync_history.insert(0, entry)
+            self._sync_history = self._sync_history[:200]
+            self._save_sync_history()
+        logger.info(f"Sync history: [{status}] {title} ({source})")
+
+    def get_sync_history(self, limit: int = 50) -> list[dict]:
+        """Get sync history, mới nhất trước."""
+        with self._sync_history_lock:
+            return self._sync_history[:limit]
 
     def _get_logger(self, request_id: str) -> RequestContextLogger:
         """Create logger với request ID."""

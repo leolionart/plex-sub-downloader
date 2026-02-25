@@ -38,8 +38,7 @@ Tất cả cấu hình được lưu tại `data/config.json` và có thể ch�
 
 | Field | Mô tả | Mặc định |
 |-------|-------|---------|
-| `auto_sync_timing` | Bật tính năng sync timing | `false` |
-| `auto_sync_after_download` | Tự động sync sau khi download sub | `false` |
+| `auto_sync_timing` | Tự động sync timing sau khi download subtitle | `false` |
 | `translation_enabled` | Bật AI translate fallback | `false` |
 | `translation_requires_approval` | Yêu cầu approve trước khi dịch | `true` |
 | `auto_translate_if_no_vi` | Tự động dịch khi không tìm được target sub | `false` |

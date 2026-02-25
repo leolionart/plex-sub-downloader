@@ -67,9 +67,6 @@ async def execute_sync(request: SyncRequest):
     """
     service = get_subtitle_service()
 
-    if not service.config.subtitle_settings.auto_sync_timing:
-        raise HTTPException(status_code=400, detail="Sync timing is disabled. Enable it in Settings.")
-
     if not service.runtime_config.ai_available:
         raise HTTPException(status_code=400, detail="OpenAI API key required for sync timing")
 
@@ -116,10 +113,16 @@ async def get_sync_status():
     ss = service.config.subtitle_settings
     return {
         "sync_enabled": ss.auto_sync_timing,
-        "auto_sync_after_download": ss.auto_sync_after_download,
         "ai_available": service.runtime_config.ai_available,
         "model": service.runtime_config.openai_model,
     }
+
+
+@router.get("/history")
+async def get_sync_history(limit: int = 50):
+    """Get sync timing history."""
+    service = get_subtitle_service()
+    return {"items": service.get_sync_history(limit=limit)}
 
 
 @router.post("/resolve-url")

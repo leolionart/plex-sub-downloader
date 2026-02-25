@@ -62,11 +62,7 @@ class SubtitleSettings(BaseModel):
     # AI Sync Timing
     auto_sync_timing: bool = Field(
         default=True,
-        description="Bật/tắt sync timing Vietsub theo Engsub chuẩn kèm phim"
-    )
-    auto_sync_after_download: bool = Field(
-        default=True,
-        description="Tự động sync timing sau khi download Vietsub (nếu có Engsub reference)"
+        description="Tự động sync timing sau khi download subtitle"
     )
 
     # Translation
