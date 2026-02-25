@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import cast
 
 from plexapi.server import PlexServer
-from plexapi.video import Movie, Episode, Video
+from plexapi.video import Movie, Episode, Show, Season, Video
 from plexapi.exceptions import NotFound, Unauthorized, BadRequest
 from tenacity import (
     retry,
@@ -97,6 +97,31 @@ class PlexClient:
             self._connect()
         assert self._server is not None
         return self._server
+
+    def find_by_plex_guid(self, content_type: str, plex_guid_hex: str) -> int | None:
+        """
+        Find library item by Plex metadata GUID (from watch.plex.tv share links).
+
+        Args:
+            content_type: 'movie' or 'episode'
+            plex_guid_hex: hex ID from Plex metadata (e.g. '693716a94ae2129de4af23b4')
+
+        Returns:
+            ratingKey as int, or None if not found
+        """
+        guid = f"plex://{content_type}/{plex_guid_hex}"
+        logger.debug(f"Searching library for GUID: {guid}")
+
+        try:
+            items = self.server.library.search(libtype=content_type, guid=guid)
+            if items:
+                item = items[0]
+                logger.info(f"Found item by GUID: {item.title} (ratingKey={item.ratingKey})")
+                return item.ratingKey
+        except Exception as e:
+            logger.warning(f"GUID search failed: {e}")
+
+        return None
 
     def get_video(self, rating_key: str) -> Video:
         """
