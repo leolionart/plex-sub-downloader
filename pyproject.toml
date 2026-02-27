@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "plex-subtitle-service"
-version = "0.2.1"
+version = "0.2.2"
 description = "Automated Vietnamese subtitle downloader and uploader for Plex"
 authors = ["Your Name <your.email@example.com>"]
 readme = "README.md"
