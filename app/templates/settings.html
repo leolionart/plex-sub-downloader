@@ -7,34 +7,28 @@
 
 {% block extra_styles %}
 <style>
-    /* ── Settings Grid: 2-col desktop, 1-col mobile ── */
-    .settings-grid {
+    /* ── 2-column card grid ── */
+    .settings-columns {
         display: grid;
         grid-template-columns: repeat(2, 1fr);
         gap: 20px;
-        margin-bottom: 24px;
+        align-items: start;
     }
 
+    /* ── Responsive ── */
     @media (max-width: 960px) {
-        .settings-grid {
+        .settings-columns {
             grid-template-columns: 1fr;
         }
     }
 
-    .settings-grid .card {
-        margin-bottom: 0;
-    }
-
-    /* Mobile: stats 2-col, setting-row tighter */
     @media (max-width: 768px) {
         .stats-grid {
             grid-template-columns: repeat(2, 1fr) !important;
         }
-
         .setting-row {
             gap: 12px;
         }
-
         .setting-select {
             min-width: 110px !important;
         }
@@ -85,7 +79,7 @@
         margin-top: 1px;
     }
 
-    /* Control variants: constrained widths for selects & inputs */
+    /* Control variants */
     .setting-select {
         width: auto !important;
         min-width: 130px;
@@ -352,90 +346,40 @@
 </div>
 
 <form id="settings-form">
-    <div class="settings-grid">
 
-        <!-- ① Target Languages -->
-        <div class="card">
-            <div class="card-header">
-                <h2>Target Languages</h2>
-            </div>
-            <div class="card-body">
-                <div class="setting-desc" style="margin-bottom: 10px;">Ngôn ngữ đầu tiên là primary — dùng cho download, dịch AI, và sync timing</div>
-                <div class="multi-select" id="language-select">
-                    <div class="multi-select-trigger" id="language-trigger">
-                        <span class="placeholder">Chọn ngôn ngữ...</span>
-                        <span class="chevron">&#9662;</span>
+    <!-- Target Languages — compact full-width -->
+    <div class="card" style="margin-bottom: 20px; overflow: visible;">
+        <div class="card-header">
+            <h2>Target Languages</h2>
+        </div>
+        <div class="card-body">
+            <div class="setting-desc" style="margin-bottom: 10px;">Ngôn ngữ đầu tiên là primary — dùng cho download, dịch AI, và sync timing</div>
+            <div class="multi-select" id="language-select">
+                <div class="multi-select-trigger" id="language-trigger">
+                    <span class="placeholder">Chọn ngôn ngữ...</span>
+                    <span class="chevron">&#9662;</span>
+                </div>
+                <div class="multi-select-dropdown">
+                    <div class="multi-select-search">
+                        <input type="text" id="language-search" placeholder="Tìm ngôn ngữ..." autocomplete="off">
                     </div>
-                    <div class="multi-select-dropdown">
-                        <div class="multi-select-search">
-                            <input type="text" id="language-search" placeholder="Tìm ngôn ngữ..." autocomplete="off">
-                        </div>
-                        <div class="multi-select-options" id="language-options"></div>
-                    </div>
+                    <div class="multi-select-options" id="language-options"></div>
                 </div>
             </div>
         </div>
+    </div>
 
-        <!-- ② AI Features (Sync + Translation) -->
+    <!-- 2-column cards -->
+    <div class="settings-columns">
+
+        <!-- Left: Download & Translation -->
         <div class="card">
             <div class="card-header">
-                <h2>AI Features</h2>
+                <h2>Download & Translation</h2>
             </div>
             <div class="card-body">
-                <div class="setting-section-label">Sync Timing</div>
+                <div class="setting-section-label">Download Triggers</div>
 
-                <label class="setting-row" for="auto_sync_timing">
-                    <div class="setting-info">
-                        <div class="setting-title">Auto Sync Timing</div>
-                        <div class="setting-desc">Tự động sync timing sau khi download subtitle</div>
-                    </div>
-                    <div class="toggle-switch">
-                        <input type="checkbox" id="auto_sync_timing" name="auto_sync_timing" checked>
-                        <span class="toggle-slider"></span>
-                    </div>
-                </label>
-
-                <div class="setting-section-label">Translation</div>
-
-                <label class="setting-row" for="translation_enabled">
-                    <div class="setting-info">
-                        <div class="setting-title">Auto Translate (Eng → Target)</div>
-                        <div class="setting-desc">Tự động dịch Engsub khi không tìm thấy subtitle</div>
-                    </div>
-                    <div class="toggle-switch">
-                        <input type="checkbox" id="translation_enabled" name="translation_enabled">
-                        <span class="toggle-slider"></span>
-                    </div>
-                </label>
-
-                <label class="setting-row" for="translation_requires_approval">
-                    <div class="setting-info">
-                        <div class="setting-title">Require Approval</div>
-                        <div class="setting-desc">Duyệt trước khi dịch tự động (Web UI / Telegram)</div>
-                    </div>
-                    <div class="toggle-switch">
-                        <input type="checkbox" id="translation_requires_approval" name="translation_requires_approval" checked>
-                        <span class="toggle-slider"></span>
-                    </div>
-                </label>
-
-                <div class="setting-row">
-                    <div class="setting-info">
-                        <div class="setting-title">Parallel Batches</div>
-                        <div class="setting-desc">Số batch dịch gửi đồng thời (tăng = nhanh hơn)</div>
-                    </div>
-                    <input type="number" id="translation_batch_concurrency" name="translation_batch_concurrency"
-                           class="form-input setting-number" min="1" max="20" value="5">
-                </div>
-            </div>
-        </div>
-
-        <!-- ③ Download Triggers -->
-        <div class="card">
-            <div class="card-header">
-                <h2>Download Triggers</h2>
-            </div>
-            <div class="card-body">
                 <label class="setting-row" for="auto_download_on_add">
                     <div class="setting-info">
                         <div class="setting-title">On media added</div>
@@ -472,15 +416,73 @@
                         <option value="300">5 phút</option>
                     </select>
                 </div>
+
+                <div class="setting-section-label">AI Translation</div>
+
+                <label class="setting-row" for="translation_enabled">
+                    <div class="setting-info">
+                        <div class="setting-title">Auto Translate</div>
+                        <div class="setting-desc">Dịch Engsub khi không tìm thấy target subtitle</div>
+                    </div>
+                    <div class="toggle-switch">
+                        <input type="checkbox" id="translation_enabled" name="translation_enabled">
+                        <span class="toggle-slider"></span>
+                    </div>
+                </label>
+
+                <label class="setting-row" for="translation_requires_approval">
+                    <div class="setting-info">
+                        <div class="setting-title">Require Approval</div>
+                        <div class="setting-desc">Duyệt trước khi dịch (Web UI / Telegram)</div>
+                    </div>
+                    <div class="toggle-switch">
+                        <input type="checkbox" id="translation_requires_approval" name="translation_requires_approval" checked>
+                        <span class="toggle-slider"></span>
+                    </div>
+                </label>
+
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <div class="setting-title">Parallel Batches</div>
+                        <div class="setting-desc">Batch dịch đồng thời (tăng = nhanh hơn)</div>
+                    </div>
+                    <input type="number" id="translation_batch_concurrency" name="translation_batch_concurrency"
+                           class="form-input setting-number" min="1" max="20" value="5">
+                </div>
             </div>
         </div>
 
-        <!-- ④ Filtering & Quality -->
+        <!-- Right: Processing & Filters -->
         <div class="card">
             <div class="card-header">
-                <h2>Filtering & Quality</h2>
+                <h2>Processing & Filters</h2>
             </div>
             <div class="card-body">
+                <div class="setting-section-label">Post-Download</div>
+
+                <label class="setting-row" for="auto_sync_timing">
+                    <div class="setting-info">
+                        <div class="setting-title">Auto Sync Timing</div>
+                        <div class="setting-desc">Tự động sync timing sau khi download subtitle</div>
+                    </div>
+                    <div class="toggle-switch">
+                        <input type="checkbox" id="auto_sync_timing" name="auto_sync_timing" checked>
+                        <span class="toggle-slider"></span>
+                    </div>
+                </label>
+
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <div class="setting-title">Minimum Quality</div>
+                        <div class="setting-desc">Chỉ download từ mức chất lượng này trở lên</div>
+                    </div>
+                    <select id="min_quality_threshold" name="min_quality_threshold" class="form-select setting-select">
+                        <option value="any">Any quality</option>
+                        <option value="translated" selected>Translated+</option>
+                        <option value="retail">Retail only</option>
+                    </select>
+                </div>
+
                 <div class="setting-section-label">Duplicate Prevention</div>
 
                 <label class="setting-row" for="skip_if_has_subtitle">
@@ -519,34 +521,19 @@
                 <label class="setting-row" for="skip_if_embedded">
                     <div class="setting-info">
                         <div class="setting-title">Skip embedded subtitles</div>
-                        <div class="setting-desc">Không download nếu video có embedded sub (PGS, VobSub)</div>
+                        <div class="setting-desc">Không download nếu có embedded sub (PGS, VobSub)</div>
                     </div>
                     <div class="toggle-switch">
                         <input type="checkbox" id="skip_if_embedded" name="skip_if_embedded" checked>
                         <span class="toggle-slider"></span>
                     </div>
                 </label>
-
-                <div class="setting-section-label">Quality</div>
-
-                <div class="setting-row">
-                    <div class="setting-info">
-                        <div class="setting-title">Minimum Quality</div>
-                        <div class="setting-desc">Chỉ download subtitle từ mức chất lượng này trở lên</div>
-                    </div>
-                    <select id="min_quality_threshold" name="min_quality_threshold" class="form-select setting-select">
-                        <option value="any">Any quality</option>
-                        <option value="translated" selected>Translated+</option>
-                        <option value="retail">Retail only</option>
-                    </select>
-                </div>
             </div>
         </div>
-
     </div>
 
     <!-- Actions -->
-    <div class="btn-group">
+    <div class="btn-group" style="margin-top: 20px;">
         <button type="submit" class="btn btn-primary">Save Settings</button>
         <button type="button" class="btn btn-ghost" onclick="loadSettings()">Reset</button>
     </div>
