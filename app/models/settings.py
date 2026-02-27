@@ -78,6 +78,12 @@ class SubtitleSettings(BaseModel):
         default=False,
         description="Chủ động dịch Eng→Viet khi có Engsub nhưng không có Vietsub"
     )
+    translation_batch_concurrency: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="Số batch dịch song song tối đa (1=tuần tự, cao hơn=nhanh hơn nhưng tốn rate limit)",
+    )
 
     # Webhook processing delay
     new_media_delay_seconds: int = Field(

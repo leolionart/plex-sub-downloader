@@ -416,6 +416,13 @@
                     <div class="toggle-desc">Yêu cầu duyệt trước khi dịch tự động (qua Web UI hoặc Telegram)</div>
                 </div>
             </label>
+
+            <div class="form-group" style="margin-top: 16px; margin-bottom: 0;">
+                <label for="translation_batch_concurrency">Parallel Batches</label>
+                <div class="toggle-desc" style="margin-bottom: 8px;">Số batch dịch gửi đồng thời (tăng = nhanh hơn, giảm nếu bị rate limit)</div>
+                <input type="number" id="translation_batch_concurrency" name="translation_batch_concurrency"
+                       class="form-input" min="1" max="20" value="5" style="width: 80px;">
+            </div>
         </div>
     </div>
 
@@ -583,6 +590,7 @@
             document.getElementById('auto_sync_timing').checked = settings.auto_sync_timing ?? true;
             document.getElementById('translation_enabled').checked = (settings.translation_enabled || settings.auto_translate_if_no_vi) ?? false;
             document.getElementById('translation_requires_approval').checked = settings.translation_requires_approval ?? true;
+            document.getElementById('translation_batch_concurrency').value = settings.translation_batch_concurrency ?? 5;
             document.getElementById('new_media_delay_seconds').value = settings.new_media_delay_seconds ?? 30;
         } catch (error) {
             showAlert('Error loading settings: ' + error.message, 'error');
@@ -613,6 +621,7 @@
             translation_enabled: formData.get('translation_enabled') === 'on',
             auto_translate_if_no_vi: formData.get('translation_enabled') === 'on',
             translation_requires_approval: formData.get('translation_requires_approval') === 'on',
+            translation_batch_concurrency: Number(formData.get('translation_batch_concurrency')) || 5,
             new_media_delay_seconds: Number(formData.get('new_media_delay_seconds')) || 0,
         };
 

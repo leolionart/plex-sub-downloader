@@ -1580,11 +1580,13 @@ class SubtitleService:
 
             target_subtitle_path = source_subtitle_path.parent / f"{source_subtitle_path.stem}.{to_lang}.srt"
 
+            concurrency = self.config.subtitle_settings.translation_batch_concurrency
             stats = await self.translation_client.translate_srt_file(
                 srt_path=source_subtitle_path,
                 output_path=target_subtitle_path,
                 from_lang=from_lang,
                 to_lang=to_lang,
+                max_concurrent=concurrency,
             )
 
             log.info(f"✓ Translation completed: {stats['lines_translated']} lines")

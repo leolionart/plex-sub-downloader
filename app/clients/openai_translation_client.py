@@ -3,6 +3,7 @@ OpenAI translation client cho subtitle translation.
 Translate English subtitles → Vietnamese khi không tìm thấy subtitle tiếng Việt.
 """
 
+import asyncio
 import logging
 import re
 from pathlib import Path
@@ -234,10 +235,11 @@ class OpenAITranslationClient:
         output_path: Path,
         from_lang: str = "en",
         to_lang: str = "vi",
-        batch_size: int = 10,
+        batch_size: int = 25,
+        max_concurrent: int = 5,
     ) -> dict[str, Any]:
         """
-        Translate entire .srt subtitle file.
+        Translate entire .srt subtitle file with parallel batch processing.
 
         Args:
             srt_path: Input .srt file path
@@ -245,6 +247,7 @@ class OpenAITranslationClient:
             from_lang: Source language
             to_lang: Target language
             batch_size: Number of subtitle entries per API call
+            max_concurrent: Max concurrent API calls (semaphore limit)
 
         Returns:
             Dict với stats: {lines_translated, batches, cost_estimate}
@@ -259,35 +262,52 @@ class OpenAITranslationClient:
         if not entries:
             raise TranslationClientError("No subtitle entries found")
 
-        # Translate in batches
-        translated_entries = []
-        total_batches = (len(entries) + batch_size - 1) // batch_size
+        # Split entries into batches
+        batches = [
+            entries[i:i + batch_size]
+            for i in range(0, len(entries), batch_size)
+        ]
+        total_batches = len(batches)
+        semaphore = asyncio.Semaphore(max_concurrent)
 
-        for i in range(0, len(entries), batch_size):
-            batch = entries[i:i + batch_size]
-            batch_num = i // batch_size + 1
+        logger.info(
+            f"Translation plan: {len(entries)} entries → {total_batches} batches "
+            f"(size={batch_size}, concurrent={max_concurrent})"
+        )
 
-            logger.info(f"Translating batch {batch_num}/{total_batches} ({len(batch)} entries)")
+        async def _translate_one_batch(
+            batch_idx: int, batch: list[dict[str, Any]]
+        ) -> tuple[int, list[dict[str, Any]]]:
+            """Translate a single batch under semaphore control."""
+            async with semaphore:
+                batch_num = batch_idx + 1
+                logger.info(f"Translating batch {batch_num}/{total_batches} ({len(batch)} entries)")
+                texts = [entry["text"] for entry in batch]
 
-            # Extract texts
-            texts = [entry["text"] for entry in batch]
+                try:
+                    translated_texts = await self.translate_text_batch(texts, from_lang, to_lang)
+                    translated = [
+                        {"index": entry["index"], "timing": entry["timing"], "text": t}
+                        for entry, t in zip(batch, translated_texts)
+                    ]
+                    return (batch_idx, translated)
 
-            # Translate
-            try:
-                translated_texts = await self.translate_text_batch(texts, from_lang, to_lang)
+                except Exception as e:
+                    logger.error(f"Batch {batch_num} translation failed: {e}")
+                    # Fallback: keep original text
+                    return (batch_idx, list(batch))
 
-                # Update entries
-                for entry, translated_text in zip(batch, translated_texts):
-                    translated_entries.append({
-                        "index": entry["index"],
-                        "timing": entry["timing"],
-                        "text": translated_text,
-                    })
+        # Launch all batches concurrently (semaphore limits parallelism)
+        results = await asyncio.gather(*[
+            _translate_one_batch(idx, batch)
+            for idx, batch in enumerate(batches)
+        ])
 
-            except Exception as e:
-                logger.error(f"Batch {batch_num} translation failed: {e}")
-                # Fallback: keep original text
-                translated_entries.extend(batch)
+        # Sort by batch index and flatten — guarantees correct order
+        results_sorted = sorted(results, key=lambda r: r[0])
+        translated_entries = [
+            entry for _, batch_entries in results_sorted for entry in batch_entries
+        ]
 
         # Write translated SRT
         srt_content = []
