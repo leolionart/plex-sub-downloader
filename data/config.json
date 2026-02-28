@@ -30,9 +30,10 @@
     "skip_forced_subtitles": true,
     "skip_if_embedded": true,
     "auto_sync_timing": true,
-    "auto_sync_after_download": true,
     "translation_enabled": true,
     "translation_requires_approval": true,
-    "auto_translate_if_no_vi": true
+    "auto_translate_if_no_vi": true,
+    "translation_batch_concurrency": 5,
+    "new_media_delay_seconds": 30
   }
 }
