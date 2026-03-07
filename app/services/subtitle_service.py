@@ -1265,6 +1265,7 @@ class SubtitleService:
                 to_lang=target_lang,
                 log=log,
                 source_subtitle_path=source_subtitle_path,
+                approval_type="improved",
                 source_strategy="plex_target_improve",
                 source_origin="plex",
                 used_final_fallback=False,

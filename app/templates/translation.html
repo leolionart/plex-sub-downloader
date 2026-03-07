@@ -347,6 +347,11 @@
         color: var(--error);
     }
 
+    .status-improved {
+        background: var(--plex-gold-dim);
+        color: var(--plex-gold);
+    }
+
     .source-badge {
         display: inline-flex;
         align-items: center;
@@ -1021,12 +1026,14 @@
     const statusLabels = {
         approved: 'Approved',
         auto_approved: 'Auto',
+        improved: 'Improved',
         rejected: 'Rejected',
     };
 
     const statusIcons = {
         approved: '&#10003;',
         auto_approved: '&#9889;',
+        improved: '&#10010;',
         rejected: '&#10007;',
     };
 

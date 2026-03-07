@@ -102,6 +102,74 @@
         padding: 4px 4px 6px;
     }
 
+    .setting-textarea {
+        width: 100%;
+        min-height: 300px;
+        resize: vertical;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        font-size: 12px;
+        line-height: 1.4;
+    }
+
+    .prompt-link {
+        color: var(--plex-gold);
+        text-decoration: underline;
+        text-underline-offset: 2px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .prompt-link:hover {
+        color: var(--plex-gold-light);
+    }
+
+    .prompt-modal {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 10050;
+        background: rgba(0, 0, 0, 0.7);
+        padding: 24px;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .prompt-modal.open {
+        display: flex;
+    }
+
+    .prompt-modal-dialog {
+        width: min(900px, 100%);
+        max-height: 85vh;
+        display: flex;
+        flex-direction: column;
+        background: var(--bg-surface);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+    }
+
+    .prompt-modal-header {
+        padding: 14px 18px;
+        border-bottom: 1px solid var(--border-subtle);
+        font-size: 16px;
+        font-weight: 600;
+    }
+
+    .prompt-modal-body {
+        padding: 16px 18px;
+        overflow: auto;
+    }
+
+    .prompt-modal-footer {
+        padding: 14px 18px;
+        border-top: 1px solid var(--border-subtle);
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+    }
+
     .setting-section-label:not(:first-child) {
         margin-top: 10px;
         padding-top: 14px;
@@ -422,7 +490,10 @@
                 <label class="setting-row" for="translation_enabled">
                     <div class="setting-info">
                         <div class="setting-title">Auto Translate</div>
-                        <div class="setting-desc">Dịch Engsub khi không tìm thấy target subtitle</div>
+                        <div class="setting-desc">
+                            Dịch Engsub khi không tìm thấy target subtitle ·
+                            <a href="#" class="prompt-link" onclick="openPromptEditorFromLink('translation', event)">Edit prompt</a>
+                        </div>
                     </div>
                     <div class="toggle-switch">
                         <input type="checkbox" id="translation_enabled" name="translation_enabled">
@@ -452,7 +523,10 @@
                 <label class="setting-row" for="auto_sync_timing">
                     <div class="setting-info">
                         <div class="setting-title">Auto Sync Timing</div>
-                        <div class="setting-desc">Tự động sync timing sau khi download subtitle</div>
+                        <div class="setting-desc">
+                            Tự động sync timing sau khi download subtitle ·
+                            <a href="#" class="prompt-link" onclick="openPromptEditorFromLink('sync', event)">Edit prompt</a>
+                        </div>
                     </div>
                     <div class="toggle-switch">
                         <input type="checkbox" id="auto_sync_timing" name="auto_sync_timing" checked>
@@ -521,6 +595,23 @@
         </div>
     </div>
 
+    <textarea id="translation_system_prompt_template" name="translation_system_prompt_template" style="display:none;"></textarea>
+    <textarea id="sync_system_prompt_template" name="sync_system_prompt_template" style="display:none;"></textarea>
+
+    <div id="prompt-modal" class="prompt-modal" onclick="onPromptModalBackdrop(event)">
+        <div class="prompt-modal-dialog">
+            <div class="prompt-modal-header" id="prompt-modal-title">Edit Prompt</div>
+            <div class="prompt-modal-body">
+                <div class="setting-desc" id="prompt-modal-hint" style="margin-bottom: 10px;"></div>
+                <textarea id="prompt-modal-textarea" class="form-input setting-textarea"></textarea>
+            </div>
+            <div class="prompt-modal-footer">
+                <button type="button" class="btn btn-ghost" onclick="closePromptEditor()">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="savePromptEditor()">Save prompt</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Actions -->
     <div class="btn-group" style="margin-top: 20px;">
         <button type="submit" class="btn btn-primary">Save Settings</button>
@@ -540,6 +631,58 @@
     const triggerEl = document.getElementById('language-trigger');
     const searchEl = document.getElementById('language-search');
     const optionsEl = document.getElementById('language-options');
+
+    // ── Prompt Modal ─────────────────────────────────────
+    const promptModal = document.getElementById('prompt-modal');
+    const promptModalTitle = document.getElementById('prompt-modal-title');
+    const promptModalHint = document.getElementById('prompt-modal-hint');
+    const promptModalTextarea = document.getElementById('prompt-modal-textarea');
+    let activePromptField = null;
+
+    function openPromptEditorFromLink(type, event) {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+        openPromptEditor(type);
+    }
+
+    function openPromptEditor(type) {
+        if (type === 'translation') {
+            activePromptField = 'translation_system_prompt_template';
+            promptModalTitle.textContent = 'Translation System Prompt Template';
+            promptModalHint.textContent = 'Hỗ trợ placeholders: {from_lang}, {to_lang}, {count}';
+        } else {
+            activePromptField = 'sync_system_prompt_template';
+            promptModalTitle.textContent = 'Sync System Prompt Template';
+            promptModalHint.textContent = 'Prompt dùng để AI match Vietnamese entries với English entries';
+        }
+
+        const field = document.getElementById(activePromptField);
+        promptModalTextarea.value = field?.value || '';
+        promptModal.classList.add('open');
+        setTimeout(() => promptModalTextarea.focus(), 30);
+    }
+
+    function closePromptEditor() {
+        promptModal.classList.remove('open');
+        activePromptField = null;
+    }
+
+    function savePromptEditor() {
+        if (!activePromptField) return;
+        const field = document.getElementById(activePromptField);
+        if (field) {
+            field.value = promptModalTextarea.value;
+        }
+        closePromptEditor();
+    }
+
+    function onPromptModalBackdrop(event) {
+        if (event.target === promptModal) {
+            closePromptEditor();
+        }
+    }
 
     function cap(str) {
         return str.charAt(0).toUpperCase() + str.slice(1);
@@ -637,6 +780,12 @@
         if (!selectEl.contains(e.target)) closeDropdown();
     });
 
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && promptModal.classList.contains('open')) {
+            closePromptEditor();
+        }
+    });
+
     updateTrigger();
 
     // ── Load/Save Settings ────────────────────────────────
@@ -664,6 +813,8 @@
             document.getElementById('translation_enabled').checked = (settings.translation_enabled || settings.auto_translate_if_no_vi) ?? false;
             document.getElementById('translation_batch_concurrency').value = settings.translation_batch_concurrency ?? 5;
             document.getElementById('new_media_delay_seconds').value = settings.new_media_delay_seconds ?? 30;
+            document.getElementById('translation_system_prompt_template').value = settings.translation_system_prompt_template ?? '';
+            document.getElementById('sync_system_prompt_template').value = settings.sync_system_prompt_template ?? '';
         } catch (error) {
             showAlert('Error loading settings: ' + error.message, 'error');
         }
@@ -694,6 +845,8 @@
             auto_translate_if_no_vi: formData.get('translation_enabled') === 'on',
             translation_batch_concurrency: Number(formData.get('translation_batch_concurrency')) || 5,
             new_media_delay_seconds: Number(formData.get('new_media_delay_seconds')) || 0,
+            translation_system_prompt_template: (formData.get('translation_system_prompt_template') || '').toString(),
+            sync_system_prompt_template: (formData.get('sync_system_prompt_template') || '').toString(),
         };
 
         try {

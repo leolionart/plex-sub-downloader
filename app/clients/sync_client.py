@@ -17,6 +17,7 @@ import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.models.runtime_config import RuntimeConfig
+from app.models.settings import DEFAULT_SYNC_SYSTEM_PROMPT_TEMPLATE
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -331,17 +332,9 @@ class SubtitleSyncClient:
             for i, e in enumerate(target_sample)
         )
 
-        system_prompt = (
-            "You are a subtitle alignment tool. Match Vietnamese subtitle entries "
-            "to their corresponding English subtitle entries based on meaning/content.\n\n"
-            "Rules:\n"
-            "- Each Vietnamese entry should match exactly one English entry\n"
-            "- Match by semantic meaning, not by position\n"
-            "- If no good match exists, skip that entry\n"
-            "- Return ONLY a JSON array of matches\n"
-            "- Format: [{\"vi\": <VI-index>, \"en\": <EN-index>}, ...]\n"
-            "- Use the exact index numbers shown in brackets"
-        )
+        system_prompt = self._config.subtitle_settings.sync_system_prompt_template
+        if not system_prompt.strip():
+            system_prompt = DEFAULT_SYNC_SYSTEM_PROMPT_TEMPLATE
 
         user_prompt = (
             f"English subtitles (with timing):\n{ref_text}\n\n"

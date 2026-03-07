@@ -13,6 +13,7 @@ import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.models.runtime_config import RuntimeConfig
+from app.models.settings import DEFAULT_TRANSLATION_SYSTEM_PROMPT_TEMPLATE
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -140,19 +141,26 @@ class OpenAITranslationClient:
             raise TranslationClientError("Translation disabled - no API key")
 
         # Create prompt — numbered format for reliable parsing
-        system_prompt = (
-            f"You are a professional subtitle translator from {from_lang} to {to_lang}.\n\n"
-            f"STRICT RULES:\n"
-            f"1. Output ONLY the {to_lang} translation — NEVER include the original {from_lang} text\n"
-            f"2. Return exactly {len(texts)} numbered translations matching input order\n"
-            f"3. Keep translations concise and natural for subtitle display\n"
-            f"4. Preserve line breaks within each entry (use the same number of lines)\n"
-            f"5. Do NOT merge, combine, or skip any entries\n"
-            f"6. Do NOT add explanations, notes, or extra text\n\n"
-            f"Response format (one translation per number):\n"
-            f"[1] translated text\n"
-            f"[2] translated text"
-        )
+        prompt_template = self._config.subtitle_settings.translation_system_prompt_template
+        if not prompt_template.strip():
+            prompt_template = DEFAULT_TRANSLATION_SYSTEM_PROMPT_TEMPLATE
+
+        try:
+            system_prompt = prompt_template.format(
+                from_lang=from_lang,
+                to_lang=to_lang,
+                count=len(texts),
+            )
+        except Exception as e:
+            logger.warning(
+                "Invalid translation_system_prompt_template format, using default: %s",
+                e,
+            )
+            system_prompt = DEFAULT_TRANSLATION_SYSTEM_PROMPT_TEMPLATE.format(
+                from_lang=from_lang,
+                to_lang=to_lang,
+                count=len(texts),
+            )
 
         # Build numbered input
         numbered_lines = []

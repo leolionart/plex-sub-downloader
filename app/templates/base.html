@@ -240,6 +240,9 @@
         .sidebar-footer {
             padding: 16px 20px;
             border-top: 1px solid var(--border-subtle);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
         }
 
         .sidebar-footer .version {
@@ -813,7 +816,12 @@
             }
 
             .page-header {
-                padding: 20px 16px 16px 56px;
+                padding: 20px 16px 16px 72px;
+            }
+
+            .page-header h1 {
+                font-size: 22px;
+                line-height: 1.25;
             }
 
             .page-body {
@@ -880,6 +888,11 @@
             font-size: 12px;
             font-weight: 600;
             transition: all var(--transition-normal);
+            width: fit-content;
+        }
+
+        .service-status.in-sidebar {
+            margin-top: 2px;
         }
 
         .service-status.running {
@@ -923,7 +936,7 @@
         .page-header-row {
             display: flex;
             align-items: center;
-            justify-content: space-between;
+            justify-content: flex-start;
             gap: 12px;
         }
 
@@ -1008,6 +1021,10 @@
             </nav>
 
             <div class="sidebar-footer">
+                <span id="service-status" class="service-status in-sidebar checking">
+                    <span class="pulse"></span>
+                    <span class="status-label">Checking...</span>
+                </span>
                 <span class="version">Plex Subtitle Service v0.3.0</span>
             </div>
         </aside>
@@ -1017,10 +1034,6 @@
             <div class="page-header">
                 <div class="page-header-row">
                     <h1>{% block page_title %}{% endblock %}</h1>
-                    <span id="service-status" class="service-status checking">
-                        <span class="pulse"></span>
-                        <span class="status-label">Checking...</span>
-                    </span>
                 </div>
                 <p class="page-description">{% block page_description %}{% endblock %}</p>
             </div>

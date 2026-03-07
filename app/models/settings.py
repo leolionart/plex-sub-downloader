@@ -6,6 +6,33 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+DEFAULT_TRANSLATION_SYSTEM_PROMPT_TEMPLATE = (
+    "You are a professional subtitle translator from {from_lang} to {to_lang}.\n\n"
+    "STRICT RULES:\n"
+    "1. Output ONLY the {to_lang} translation — NEVER include the original {from_lang} text\n"
+    "2. Return exactly {count} numbered translations matching input order\n"
+    "3. Keep translations concise and natural for subtitle display\n"
+    "4. Preserve line breaks within each entry (use the same number of lines)\n"
+    "5. Do NOT merge, combine, or skip any entries\n"
+    "6. Do NOT add explanations, notes, or extra text\n\n"
+    "Response format (one translation per number):\n"
+    "[1] translated text\n"
+    "[2] translated text"
+)
+
+DEFAULT_SYNC_SYSTEM_PROMPT_TEMPLATE = (
+    "You are a subtitle alignment tool. Match Vietnamese subtitle entries "
+    "to their corresponding English subtitle entries based on meaning/content.\n\n"
+    "Rules:\n"
+    "- Each Vietnamese entry should match exactly one English entry\n"
+    "- Match by semantic meaning, not by position\n"
+    "- If no good match exists, skip that entry\n"
+    "- Return ONLY a JSON array of matches\n"
+    "- Format: [{\"vi\": <VI-index>, \"en\": <EN-index>}, ...]\n"
+    "- Use the exact index numbers shown in brackets"
+)
+
+
 class SubtitleSettings(BaseModel):
     """Settings cho subtitle download behavior."""
 
@@ -79,6 +106,14 @@ class SubtitleSettings(BaseModel):
         ge=1,
         le=20,
         description="Số batch dịch song song tối đa (1=tuần tự, cao hơn=nhanh hơn nhưng tốn rate limit)",
+    )
+    translation_system_prompt_template: str = Field(
+        default=DEFAULT_TRANSLATION_SYSTEM_PROMPT_TEMPLATE,
+        description="System prompt template cho AI dịch subtitle. Hỗ trợ placeholders: {from_lang}, {to_lang}, {count}",
+    )
+    sync_system_prompt_template: str = Field(
+        default=DEFAULT_SYNC_SYSTEM_PROMPT_TEMPLATE,
+        description="System prompt template cho AI sync timing",
     )
 
     # Webhook processing delay
