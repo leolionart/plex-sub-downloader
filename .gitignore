@@ -69,7 +69,9 @@ dmypy.json
 .ruff_cache/
 
 # Runtime data
-data/
+# Keep real runtime config out of git, but keep a safe template file.
+data/*
+!data/config.example.json
 
 # Playwright MCP
 .playwright-mcp/
