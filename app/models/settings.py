@@ -70,10 +70,6 @@ class SubtitleSettings(BaseModel):
         default=False,
         description="Bật/tắt dịch subtitle (EN → VI) khi không tìm thấy Vietsub"
     )
-    translation_requires_approval: bool = Field(
-        default=True,
-        description="Yêu cầu duyệt trước khi dịch tự động"
-    )
     auto_translate_if_no_vi: bool = Field(
         default=False,
         description="Chủ động dịch Eng→Viet khi có Engsub nhưng không có Vietsub"

@@ -430,17 +430,6 @@
                     </div>
                 </label>
 
-                <label class="setting-row" for="translation_requires_approval">
-                    <div class="setting-info">
-                        <div class="setting-title">Require Approval</div>
-                        <div class="setting-desc">Duyệt trước khi dịch (Web UI / Telegram)</div>
-                    </div>
-                    <div class="toggle-switch">
-                        <input type="checkbox" id="translation_requires_approval" name="translation_requires_approval" checked>
-                        <span class="toggle-slider"></span>
-                    </div>
-                </label>
-
                 <div class="setting-row">
                     <div class="setting-info">
                         <div class="setting-title">Parallel Batches</div>
@@ -673,7 +662,6 @@
             document.getElementById('min_quality_threshold').value = settings.min_quality_threshold;
             document.getElementById('auto_sync_timing').checked = settings.auto_sync_timing ?? true;
             document.getElementById('translation_enabled').checked = (settings.translation_enabled || settings.auto_translate_if_no_vi) ?? false;
-            document.getElementById('translation_requires_approval').checked = settings.translation_requires_approval ?? true;
             document.getElementById('translation_batch_concurrency').value = settings.translation_batch_concurrency ?? 5;
             document.getElementById('new_media_delay_seconds').value = settings.new_media_delay_seconds ?? 30;
         } catch (error) {
@@ -704,7 +692,6 @@
             auto_sync_timing: formData.get('auto_sync_timing') === 'on',
             translation_enabled: formData.get('translation_enabled') === 'on',
             auto_translate_if_no_vi: formData.get('translation_enabled') === 'on',
-            translation_requires_approval: formData.get('translation_requires_approval') === 'on',
             translation_batch_concurrency: Number(formData.get('translation_batch_concurrency')) || 5,
             new_media_delay_seconds: Number(formData.get('new_media_delay_seconds')) || 0,
         };

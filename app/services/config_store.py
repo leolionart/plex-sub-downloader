@@ -27,7 +27,6 @@ class ConfigStore:
         "sync_enabled": "auto_sync_timing",
         "auto_sync_after_download": "auto_sync_timing",
         "translation_enabled": "translation_enabled",
-        "translation_requires_approval": "translation_requires_approval",
         "proactive_translation": "auto_translate_if_no_vi",
     }
 

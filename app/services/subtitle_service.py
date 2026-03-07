@@ -71,9 +71,6 @@ class SubtitleService:
         # Persistent stats store (survives restarts)
         self.stats = StatsStore()
 
-        # Pending translation queue (for approval mode)
-        self._pending_translations: dict[str, dict] = {}
-
         # Translation history (persisted to JSON)
         self._history_path = Path("data") / "translation_history.json"
         self._history_lock = RLock()
@@ -1157,13 +1154,10 @@ class SubtitleService:
         """
         Chủ động dịch subtitle sang Vietnamese cho media item.
 
-        Hỗ trợ bất kỳ ngôn ngữ nguồn nào (EN, KO, JA, ZH, v.v.) vì AI translate
-        không bị giới hạn ngôn ngữ.
-
         Args:
             rating_key: Plex ratingKey
             request_id: Request ID for logging
-            from_lang: Source language code (default: "en")
+            from_lang: Source language request từ UI (chỉ dùng cho observability)
 
         Returns:
             Dict với status và translation result
@@ -1173,23 +1167,147 @@ class SubtitleService:
         if not self.translation_client.enabled:
             return {"status": "error", "message": "Translation disabled — no OpenAI API key"}
 
-        log.info(f"[Translate] Manual translation requested for ratingKey: {rating_key} (from_lang={from_lang})")
+        log.info(f"[Translate] Manual translation requested for ratingKey: {rating_key} (requested_from_lang={from_lang})")
 
         video = await asyncio.to_thread(self.plex_client.get_video, rating_key)
         metadata = await asyncio.to_thread(self.plex_client.extract_metadata, video)
 
+        resolved_source = await self._resolve_manual_translation_source(
+            metadata=metadata,
+            video=video,
+            log=log,
+        )
+        if not resolved_source:
+            return {
+                "status": "error",
+                "message": "No suitable subtitle source found (Subsource target/EN and Plex fallback all failed)",
+            }
+
+        source_strategy = cast(str, resolved_source["source_strategy"])
+        source_origin = cast(str, resolved_source["source_origin"])
+        effective_from_lang = cast(str, resolved_source["effective_from_lang"])
+        source_subtitle_path = cast(Path, resolved_source["source_subtitle_path"])
+        used_final_fallback = source_strategy == "plex_source_fallback"
+
+        log.info(
+            f"[TranslatePath] strategy={source_strategy} origin={source_origin} "
+            f"effective_from_lang={effective_from_lang}"
+        )
+        if used_final_fallback:
+            log.warning("[TranslatePath] Using Plex subtitle fallback as last-resort source")
+
         result = await self._execute_translation(
             metadata=metadata,
             video=video,
-            from_lang=from_lang,
+            from_lang=effective_from_lang,
             to_lang=self.runtime_config.default_language,
             log=log,
+            source_subtitle_path=source_subtitle_path,
+            source_strategy=source_strategy,
+            source_origin=source_origin,
+            used_final_fallback=used_final_fallback,
         )
 
         if not result:
             return {"status": "error", "message": "Translation failed"}
 
         return result
+
+    async def _resolve_manual_translation_source(
+        self,
+        *,
+        metadata: MediaMetadata,
+        video: Video,
+        log: RequestContextLogger,
+    ) -> dict[str, Any] | None:
+        """
+        Resolve source subtitle cho manual translation theo thứ tự cố định:
+        1) Subsource target language
+        2) Subsource English
+        3) Plex subtitle fallback (EN trước, rồi ngôn ngữ khác != target)
+        """
+        target_lang = self.runtime_config.default_language
+
+        # 1) Subsource target language
+        target_results = await self._find_subtitles(metadata, log, language=target_lang)
+        if target_results:
+            downloaded_target = await self._download_first_available(target_results, metadata, log)
+            if downloaded_target:
+                subtitle, subtitle_path = downloaded_target
+                log.info(f"[TranslatePath] Resolved from Subsource target ({target_lang}): {subtitle.name}")
+                return {
+                    "source_subtitle_path": subtitle_path,
+                    "effective_from_lang": target_lang,
+                    "source_strategy": "subsource_target_preferred",
+                    "source_origin": "subsource",
+                }
+        log.info(f"[TranslatePath] Subsource target ({target_lang}) unavailable or download failed")
+
+        # 2) Subsource English
+        if target_lang != "en":
+            video_filename = None
+            try:
+                if video.media and video.media[0].parts:
+                    video_filename = Path(video.media[0].parts[0].file).name
+            except Exception:
+                pass
+
+            en_params = SubtitleSearchParams(
+                language="en",
+                title=metadata.search_title,
+                year=metadata.year,
+                imdb_id=metadata.imdb_id,
+                tmdb_id=metadata.tmdb_id,
+                season=metadata.season_number,
+                episode=metadata.episode_number,
+                video_filename=video_filename,
+            )
+            en_results = await self._search_subtitles_by_params(en_params, log)
+            if en_results:
+                downloaded_en = await self._download_first_available(en_results, metadata, log)
+                if downloaded_en:
+                    subtitle, subtitle_path = downloaded_en
+                    log.info(f"[TranslatePath] Resolved from Subsource English: {subtitle.name}")
+                    return {
+                        "source_subtitle_path": subtitle_path,
+                        "effective_from_lang": "en",
+                        "source_strategy": "subsource_en_translation",
+                        "source_origin": "subsource",
+                    }
+            log.info("[TranslatePath] Subsource English unavailable or download failed")
+
+        # 3) Plex subtitle fallback (last-resort)
+        dest_dir = self.temp_dir / metadata.rating_key
+        dest_dir.mkdir(parents=True, exist_ok=True)
+
+        plex_langs = await asyncio.to_thread(self.plex_client._get_existing_subtitle_languages, video)
+        if not plex_langs:
+            log.info("[TranslatePath] Plex fallback unavailable: no subtitle language on Plex")
+            return None
+
+        fallback_langs: list[str] = []
+        if "en" in plex_langs and target_lang != "en":
+            fallback_langs.append("en")
+        fallback_langs.extend(sorted(lang for lang in plex_langs if lang not in {target_lang, "en"}))
+
+        for lang in fallback_langs:
+            plex_path = await asyncio.to_thread(
+                self.plex_client.download_existing_subtitle,
+                video,
+                lang,
+                dest_dir,
+            )
+            if plex_path:
+                log.info(f"[TranslatePath] Resolved from Plex fallback language: {lang}")
+                return {
+                    "source_subtitle_path": plex_path,
+                    "effective_from_lang": lang,
+                    "source_strategy": "plex_source_fallback",
+                    "source_origin": "plex",
+                }
+
+        log.info("[TranslatePath] Plex fallback failed: no downloadable text subtitle")
+        return None
 
     async def _try_translation_fallback(
         self,
@@ -1248,42 +1366,13 @@ class SubtitleService:
             log.warning("No English subtitle found on Subsource")
             return None
 
-        subtitle_source = en_results[0].name
-
-        # Check if requires approval
-        if self.config.subtitle_settings.translation_requires_approval:
-            # Add to pending queue
-            self.add_pending_translation(
-                rating_key=metadata.rating_key,
-                metadata=metadata,
-                from_lang="en",
-                to_lang=self.runtime_config.default_language,
-            )
-
-            await self.telegram_client.send_message(
-                f"🔔 *Translation Approval Required*\n\n"
-                f"📺 *Title:* {metadata}\n"
-                f"🌐 *Translation:* en → vi\n"
-                f"📄 *Source:* {subtitle_source}\n\n"
-                f"Open Web UI to approve/reject.",
-                parse_mode="Markdown",
-            )
-
-            log.warning("Translation requires approval — added to pending queue")
-
-            return {
-                "status": "pending_approval",
-                "message": "Translation request added to queue. Check Web UI to approve.",
-            }
-
-        # Auto mode - execute immediately
-        log.info("Auto-translation enabled, executing...")
+        log.info("Translation fallback ready, executing direct translation...")
 
         return await self._execute_translation(
             metadata=metadata,
             video=video,
             from_lang="en",
-            to_lang="vi",
+            to_lang=self.runtime_config.default_language,
             log=log,
             source_subtitle_path=None,
             approval_type="auto_approved",
@@ -1340,46 +1429,12 @@ class SubtitleService:
                 continue
         return None
 
-    def add_pending_translation(
-        self,
-        rating_key: str,
-        metadata: MediaMetadata,
-        from_lang: str = "en",
-        to_lang: str = "vi",
-    ) -> None:
-        """
-        Add translation request vào pending queue.
-
-        User sẽ approve/reject qua Web UI.
-        """
-        self._pending_translations[rating_key] = {
-            "rating_key": rating_key,
-            "title": str(metadata),
-            "from_lang": from_lang,
-            "to_lang": to_lang,
-            "added_at": datetime.now().isoformat(),
-            "metadata": metadata.model_dump(),
-        }
-
-        logger.info(f"Added pending translation: {metadata} ({from_lang} → {to_lang})")
-
-    def get_pending_translations(self) -> list[dict]:
-        """Get list of pending translations."""
-        return list(self._pending_translations.values())
-
-    def remove_pending_translation(self, rating_key: str) -> None:
-        """Remove translation từ pending queue."""
-        if rating_key in self._pending_translations:
-            del self._pending_translations[rating_key]
-            logger.info(f"Removed pending translation: {rating_key}")
-
     def get_translation_stats(self) -> dict:
         """Get translation statistics (from persistent store)."""
         all_stats = self.stats.get_all()
         return {
             "total_translations": all_stats["total_translations"],
             "total_lines": all_stats["total_translation_lines"],
-            "pending_count": len(self._pending_translations),
         }
 
     # ── Translation History ─────────────────────────────────────────────
@@ -1417,6 +1472,9 @@ class SubtitleService:
         lines_translated: int = 0,
         cost_usd: float = 0.0,
         model: str = "",
+        source_strategy: str | None = None,
+        source_origin: str | None = None,
+        used_final_fallback: bool = False,
     ) -> None:
         """
         Ghi một entry vào translation history.
@@ -1433,6 +1491,9 @@ class SubtitleService:
             "lines_translated": lines_translated,
             "cost_usd": cost_usd,
             "model": model,
+            "source_strategy": source_strategy,
+            "source_origin": source_origin,
+            "used_final_fallback": used_final_fallback,
             "timestamp": datetime.now().isoformat(),
         }
         with self._history_lock:
@@ -1523,6 +1584,9 @@ class SubtitleService:
         log: RequestContextLogger,
         source_subtitle_path: Path | None = None,
         approval_type: str = "approved",
+        source_strategy: str | None = None,
+        source_origin: str | None = None,
+        used_final_fallback: bool = False,
     ) -> dict[str, str] | None:
         """
         Execute translation (called after approval).
@@ -1616,10 +1680,10 @@ class SubtitleService:
                 lines_translated=stats["lines_translated"],
                 cost_usd=stats.get("cost_usd", 0.0),
                 model=stats.get("model", ""),
+                source_strategy=source_strategy,
+                source_origin=source_origin,
+                used_final_fallback=used_final_fallback,
             )
-
-            # Remove from pending queue if exists
-            self.remove_pending_translation(metadata.rating_key)
 
             return {
                 "status": "success",

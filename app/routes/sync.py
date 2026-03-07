@@ -26,12 +26,6 @@ class SyncRequest(BaseModel):
     source_lang: str = "en"
 
 
-class TranslateRequest(BaseModel):
-    """Request để translate subtitle sang Vietnamese."""
-    rating_key: str
-    from_lang: str = "en"
-
-
 class ResolveUrlRequest(BaseModel):
     """Request để resolve Plex URL/share link thành rating key."""
     input: str
@@ -79,29 +73,6 @@ async def execute_sync(request: SyncRequest):
         rating_key=request.rating_key,
         subtitle_id=request.subtitle_id,
         source_lang=request.source_lang,
-    )
-
-    if result["status"] == "error":
-        raise HTTPException(status_code=400, detail=result["message"])
-
-    return result
-
-
-@router.post("/translate")
-async def translate_for_media(request: TranslateRequest):
-    """
-    Chủ động dịch English subtitle sang Vietnamese.
-
-    Dùng khi không tìm được Vietnamese subtitle phù hợp.
-    """
-    service = get_subtitle_service()
-
-    if not service.runtime_config.ai_available:
-        raise HTTPException(status_code=400, detail="OpenAI API key required for translation")
-
-    result = await service.execute_translate_for_media(
-        rating_key=request.rating_key,
-        from_lang=request.from_lang,
     )
 
     if result["status"] == "error":

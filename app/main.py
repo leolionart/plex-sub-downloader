@@ -202,7 +202,7 @@ async def logs_ui(request: Request) -> HTMLResponse:
 
 @app.get("/translation", response_class=HTMLResponse)
 async def translation_ui(request: Request) -> HTMLResponse:
-    """Translation approval UI."""
+    """Translation UI."""
     if not subtitle_service or not runtime_config:
         return HTMLResponse("Service not initialized", status_code=503)
     configured = _is_configured(runtime_config)

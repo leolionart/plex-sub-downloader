@@ -1,96 +1,263 @@
 {% extends "base.html" %}
 
-{% block title %}Translation Approval - Plex Subtitle Service{% endblock %}
+{% block title %}Subtitle Translation - Plex Subtitle Service{% endblock %}
 {% block nav_translation %}active{% endblock %}
-{% block page_title %}Translation Approval{% endblock %}
-{% block page_description %}Review và approve yêu cầu dịch subtitle{% endblock %}
+{% block page_title %}Subtitle Translation{% endblock %}
+{% block page_description %}Chọn phim đang phát hoặc nhập link Plex để dịch subtitle nhanh{% endblock %}
 
 {% block extra_styles %}
 <style>
-    .pending-item {
+    .translate-form {
         background: var(--bg-surface);
         border: 1px solid var(--border-subtle);
         border-radius: var(--radius-lg);
-        padding: 20px;
-        margin-bottom: 12px;
-        transition: border-color var(--transition-fast);
+        padding: 24px;
+        margin-bottom: 24px;
     }
 
-    .pending-item:hover {
-        border-color: var(--border-default);
-    }
-
-    .pending-item-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        margin-bottom: 16px;
-        gap: 12px;
-    }
-
-    .pending-item h3 {
+    .translate-form h3 {
         font-size: 16px;
         font-weight: 600;
+        margin-bottom: 16px;
         color: var(--text-primary);
-        margin-bottom: 4px;
     }
 
-    .pending-item .meta {
-        font-size: 13px;
-        color: var(--text-muted);
+    .translate-input-row {
+        display: flex;
+        gap: 12px;
+        align-items: flex-end;
     }
 
-    .estimate-box {
+    .translate-input-row .form-group {
+        flex: 1;
+        margin-bottom: 0;
+    }
+
+    .translate-input-row .btn {
+        flex-shrink: 0;
+        height: 42px;
+    }
+
+    .result-card {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        margin-bottom: 16px;
+        animation: fadeIn 0.3s ease;
+    }
+
+    .result-header {
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--border-subtle);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .result-header h3 {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .result-body {
+        padding: 16px 20px;
+    }
+
+    .sub-info {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
         background: var(--bg-input);
         border-radius: var(--radius-md);
-        padding: 14px 16px;
-        margin: 12px 0;
-        border: 1px solid var(--border-subtle);
-    }
-
-    .estimate-loading {
-        color: var(--text-muted);
-        font-size: 13px;
-    }
-
-    .estimate-row {
-        display: flex;
-        justify-content: space-between;
-        padding: 4px 0;
+        margin-bottom: 8px;
         font-size: 13px;
         color: var(--text-secondary);
     }
 
-    .estimate-row span:last-child {
-        color: var(--text-primary);
-        font-weight: 500;
+    .sub-info .icon {
+        flex-shrink: 0;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
     }
 
-    .estimate-row.total {
-        border-top: 1px solid var(--border-subtle);
-        margin-top: 8px;
-        padding-top: 10px;
-        font-weight: 600;
-        font-size: 15px;
-    }
+    .sub-info .icon.ok { background: var(--success); }
+    .sub-info .icon.missing { background: var(--error); }
 
-    .estimate-row.total span:last-child {
-        color: var(--plex-gold);
-    }
-
-    .pending-actions {
+    .action-buttons {
         display: flex;
-        gap: 8px;
+        gap: 10px;
         margin-top: 16px;
     }
 
-    .pending-actions .btn {
+    .action-buttons .btn {
         flex: 1;
-        font-size: 13px;
-        padding: 9px 16px;
+        padding: 12px 16px;
     }
 
-    /* ── History Section ── */
+    .progress-bar-container {
+        margin: 16px 0;
+        display: none;
+    }
+
+    .progress-bar-bg {
+        height: 6px;
+        background: var(--bg-elevated);
+        border-radius: 3px;
+        overflow: hidden;
+    }
+
+    .progress-bar-fill {
+        height: 100%;
+        background: var(--plex-gold);
+        border-radius: 3px;
+        width: 0%;
+        transition: width 0.5s ease;
+    }
+
+    .progress-label {
+        font-size: 13px;
+        color: var(--text-muted);
+        margin-top: 6px;
+    }
+
+    .translate-help {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        padding: 24px;
+    }
+
+    .translate-help h3 {
+        font-size: 16px;
+        font-weight: 600;
+        margin-bottom: 16px;
+        color: var(--text-primary);
+    }
+
+    .step-list {
+        list-style: none;
+        padding: 0;
+    }
+
+    .step-list li {
+        display: flex;
+        gap: 12px;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--border-subtle);
+        font-size: 14px;
+        color: var(--text-secondary);
+    }
+
+    .step-list li:last-child {
+        border-bottom: none;
+    }
+
+    .step-num {
+        width: 28px;
+        height: 28px;
+        background: var(--plex-gold-dim);
+        color: var(--plex-gold);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        font-weight: 700;
+        flex-shrink: 0;
+    }
+
+    .media-card-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 12px;
+    }
+
+    .media-card {
+        background: var(--bg-input);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
+        padding: 10px;
+        cursor: pointer;
+        transition: all var(--transition-fast);
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .media-card:hover {
+        border-color: var(--plex-gold);
+        background: var(--bg-surface-hover, var(--bg-surface));
+    }
+
+    .media-card:active {
+        transform: scale(0.97);
+    }
+
+    .media-card.selected {
+        border-color: var(--plex-gold);
+        box-shadow: 0 0 0 1px var(--plex-gold);
+        background: var(--plex-gold-dim);
+    }
+
+    .media-card .media-thumb {
+        width: 100%;
+        aspect-ratio: 2/3;
+        background: var(--bg-elevated);
+        border-radius: var(--radius-sm);
+        overflow: hidden;
+    }
+
+    .media-card .media-thumb img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .media-card .media-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-primary);
+        line-height: 1.3;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    .media-card .media-meta {
+        font-size: 11px;
+        color: var(--text-muted);
+    }
+
+    .media-card .media-player {
+        font-size: 11px;
+        color: var(--plex-gold);
+    }
+
+    .media-card .progress-mini {
+        height: 3px;
+        background: var(--bg-elevated);
+        border-radius: 2px;
+        overflow: hidden;
+    }
+
+    .media-card .progress-mini-fill {
+        height: 100%;
+        background: var(--plex-gold);
+        border-radius: 2px;
+    }
+
+    .section-header {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 16px;
+    }
+
     .section-divider {
         margin: 40px 0 24px;
         display: flex;
@@ -180,6 +347,26 @@
         color: var(--error);
     }
 
+    .source-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 600;
+        margin-top: 6px;
+        border: 1px solid var(--border-subtle);
+        color: var(--text-secondary);
+        background: var(--bg-input);
+    }
+
+    .source-badge.fallback {
+        border-color: var(--warning);
+        color: var(--warning);
+        background: color-mix(in srgb, var(--warning) 12%, transparent);
+    }
+
     .history-empty {
         text-align: center;
         padding: 32px;
@@ -208,7 +395,6 @@
         color: var(--text-primary);
     }
 
-    /* ── Preview Modal ── */
     .modal-overlay {
         display: none;
         position: fixed;
@@ -356,11 +542,15 @@
     }
 
     @media (max-width: 768px) {
-        .pending-item-header {
+        .translate-input-row {
             flex-direction: column;
         }
-        .pending-actions {
+        .action-buttons {
             flex-direction: column;
+        }
+        .media-card-grid {
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 10px;
         }
         .history-table th:nth-child(3),
         .history-table td:nth-child(3),
@@ -377,11 +567,62 @@
 {% endblock %}
 
 {% block content %}
-<div id="pending-list">
-    <div class="empty-state">
-        <div class="empty-icon"><span class="spinner" style="width:32px;height:32px;border-width:3px;"></span></div>
-        <h2>Loading...</h2>
+<!-- Now Playing -->
+<div id="now-playing-section" style="display: none;">
+    <div class="translate-form">
+        <div class="section-header">Now Playing</div>
+        <p style="font-size: 13px; color: var(--text-muted); margin: -4px 0 12px;">Chọn phim đang xem để dịch subtitle nhanh</p>
+        <div id="now-playing-cards" class="media-card-grid"></div>
     </div>
+</div>
+
+<!-- Manual Translate Form -->
+<div class="translate-form">
+    <h3>Manual Translate</h3>
+    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
+        Paste Plex share link, web URL, hoặc nhập rating key.
+    </p>
+
+    <div class="translate-input-row">
+        <div class="form-group">
+            <label for="rating-key">Rating Key or Plex Link</label>
+            <input type="text" id="rating-key" class="form-input" placeholder="12345 or https://l.plex.tv/...">
+        </div>
+        <button class="btn btn-secondary" onclick="previewTranslation()" id="btn-preview">Preview</button>
+    </div>
+
+    <div class="progress-bar-container" id="progress-container">
+        <div class="progress-bar-bg">
+            <div class="progress-bar-fill" id="progress-fill"></div>
+        </div>
+        <p class="progress-label" id="progress-label">Processing...</p>
+    </div>
+</div>
+
+<!-- Preview / Results Area -->
+<div id="results-area"></div>
+
+<!-- How it works -->
+<div class="translate-help">
+    <h3>Cách hoạt động</h3>
+    <ul class="step-list">
+        <li>
+            <span class="step-num">1</span>
+            <span><b>Preview:</b> Kiểm tra source subtitle khả dụng trên Plex + Subsource</span>
+        </li>
+        <li>
+            <span class="step-num">2</span>
+            <span><b>Select Media:</b> Chọn phim đang phát hoặc nhập link/rating key</span>
+        </li>
+        <li>
+            <span class="step-num">3</span>
+            <span><b>Translate:</b> Dịch trực tiếp subtitle nguồn sang ngôn ngữ mặc định</span>
+        </li>
+        <li>
+            <span class="step-num">4</span>
+            <span><b>Upload:</b> Subtitle đã dịch được upload lên Plex</span>
+        </li>
+    </ul>
 </div>
 
 <!-- Translation History -->
@@ -415,191 +656,311 @@
 
 {% block scripts %}
 <script>
-    let pendingItems = [];
+    let currentRatingKey = '';
+    let previewData = null;
+    let autoSelected = false;
+    let previewAbortController = null;
 
-    async function loadPending() {
-        try {
-            const response = await fetch('/api/translation/pending');
-            const data = await response.json();
-
-            pendingItems = data.items;
-            renderPending();
-        } catch (error) {
-            showAlert('Error loading pending translations: ' + error.message, 'error');
-        }
-    }
-
-    function renderPending() {
-        const container = document.getElementById('pending-list');
-
-        if (pendingItems.length === 0) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-icon">
-                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                            <polyline points="22 4 12 14.01 9 11.01"/>
-                        </svg>
-                    </div>
-                    <h2>No Pending Translations</h2>
-                    <p>All translation requests have been processed</p>
-                </div>
-            `;
+    async function previewTranslation() {
+        let ratingKey = document.getElementById('rating-key').value.trim();
+        if (!ratingKey) {
+            showAlert('Vui lòng nhập Rating Key hoặc Plex link', 'warning');
             return;
         }
 
-        container.innerHTML = pendingItems.map(item => `
-            <div class="pending-item" id="item-${item.rating_key}">
-                <div class="pending-item-header">
-                    <div>
-                        <h3>${item.title}</h3>
-                        <p class="meta">
-                            ${item.from_lang.toUpperCase()} &rarr; ${item.to_lang.toUpperCase()} &nbsp;&middot;&nbsp;
-                            Added: ${new Date(item.added_at).toLocaleString()}
-                        </p>
+        if (previewAbortController) {
+            previewAbortController.abort();
+        }
+        previewAbortController = new AbortController();
+        const signal = previewAbortController.signal;
+
+        let previewTimedOut = false;
+        const previewTimeoutId = setTimeout(() => {
+            previewTimedOut = true;
+            previewAbortController.abort();
+        }, 60000);
+
+        const btn = document.getElementById('btn-preview');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>';
+
+        try {
+            if (!/^\d+$/.test(ratingKey)) {
+                const resolveRes = await fetch('/api/sync/resolve-url', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ input: ratingKey }),
+                    signal,
+                });
+                if (!resolveRes.ok) {
+                    const err = await resolveRes.json();
+                    throw new Error(err.detail || 'Could not resolve link');
+                }
+                const resolved = await resolveRes.json();
+                ratingKey = resolved.rating_key;
+                document.getElementById('rating-key').value = ratingKey;
+            }
+
+            currentRatingKey = ratingKey;
+
+            document.getElementById('results-area').innerHTML = `
+                <div class="result-card">
+                    <div class="result-body" style="color:var(--text-muted);font-size:13px;display:flex;align-items:center;gap:10px;padding:20px;">
+                        <span class="spinner" style="flex-shrink:0;"></span>
+                        <span>Đang kiểm tra subtitle trên Plex và Subsource…</span>
                     </div>
-                    <span class="tag tag-warning" id="badge-${item.rating_key}">Pending</span>
-                </div>
+                </div>`;
 
-                <div id="estimate-${item.rating_key}" class="estimate-box">
-                    <p class="estimate-loading">Click "Estimate Cost" to see translation cost</p>
-                </div>
+            const res = await fetch('/api/sync/preview', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ rating_key: ratingKey }),
+                signal,
+            });
 
-                <div class="pending-actions">
-                    <button class="btn btn-info" onclick="estimateCost('${item.rating_key}', '${item.from_lang}', '${item.to_lang}')">
-                        Estimate Cost
-                    </button>
-                    <button class="btn btn-success" onclick="approve('${item.rating_key}', '${item.from_lang}', '${item.to_lang}')" disabled id="approve-${item.rating_key}">
-                        Approve &amp; Translate
-                    </button>
-                    <button class="btn btn-danger" onclick="reject('${item.rating_key}')">
-                        Reject
-                    </button>
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || 'Preview failed');
+            }
+
+            previewData = await res.json();
+            renderPreview(previewData);
+
+        } catch (e) {
+            if (e.name === 'AbortError') {
+                if (previewTimedOut) {
+                    document.getElementById('results-area').innerHTML = '';
+                    showAlert('Preview timeout — Subsource không phản hồi sau 60s. Thử lại sau.', 'warning');
+                } else {
+                    document.getElementById('results-area').innerHTML = '';
+                }
+                return;
+            }
+            document.getElementById('results-area').innerHTML = '';
+            showAlert('Error: ' + e.message, 'error');
+        } finally {
+            clearTimeout(previewTimeoutId);
+            btn.disabled = false;
+            btn.textContent = 'Preview';
+        }
+    }
+
+    function renderPreview(data) {
+        const area = document.getElementById('results-area');
+        const src = data.source_status || {};
+        const srcLang = (data.source_lang || 'en').toUpperCase();
+
+        let subInfoHtml = '';
+
+        if (src.available) {
+            subInfoHtml += `
+                <div class="sub-info">
+                    <span class="icon ok"></span>
+                    <span>${srcLang} subtitle: ${src.detail || 'Available'}</span>
+                </div>
+            `;
+        } else {
+            subInfoHtml += `
+                <div class="sub-info">
+                    <span class="icon missing"></span>
+                    <span>Source subtitle: ${src.detail || 'Not found (Plex & Subsource)'}</span>
+                </div>
+            `;
+        }
+
+        let actionsHtml = '<div class="action-buttons">';
+        if (src.available && data.can_translate) {
+            actionsHtml += `
+                <button class="btn btn-info" onclick="executeTranslation()" id="btn-translate">
+                    AI Translate (${srcLang} &rarr; VI)
+                </button>
+            `;
+        } else {
+            actionsHtml += `
+                <button class="btn btn-secondary" disabled>
+                    Chưa thể dịch (thiếu source subtitle)
+                </button>
+            `;
+        }
+        actionsHtml += '</div>';
+
+        const statusTag = (src.available && data.can_translate)
+            ? `<span class="tag tag-info">Ready to Translate</span>`
+            : `<span class="tag tag-error">Source subtitle not found</span>`;
+
+        area.innerHTML = `
+            <div class="result-card">
+                <div class="result-header">
+                    <h3>${data.title}</h3>
+                    ${statusTag}
+                </div>
+                <div class="result-body">
+                    ${subInfoHtml}
+                    ${actionsHtml}
                 </div>
             </div>
-        `).join('');
+        `;
     }
 
-    async function estimateCost(ratingKey, fromLang, toLang) {
-        const estimateBox = document.getElementById(`estimate-${ratingKey}`);
-        estimateBox.innerHTML = '<p class="estimate-loading"><span class="spinner"></span> &nbsp;Calculating cost...</p>';
-
-        try {
-            const response = await fetch('/api/translation/estimate', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    rating_key: ratingKey,
-                    from_lang: fromLang,
-                    to_lang: toLang
-                })
-            });
-
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.detail || 'Estimation failed');
-            }
-
-            const estimate = await response.json();
-
-            estimateBox.innerHTML = `
-                <div class="estimate-row">
-                    <span>Subtitle Lines:</span>
-                    <span>${estimate.subtitle_entries.toLocaleString()}</span>
-                </div>
-                <div class="estimate-row">
-                    <span>Characters:</span>
-                    <span>${estimate.total_characters.toLocaleString()}</span>
-                </div>
-                <div class="estimate-row">
-                    <span>Est. Tokens:</span>
-                    <span>${estimate.estimated_tokens.toLocaleString()}</span>
-                </div>
-                <div class="estimate-row">
-                    <span>Model:</span>
-                    <span>${estimate.model}</span>
-                </div>
-                <div class="estimate-row total">
-                    <span>Estimated Cost:</span>
-                    <span>$${estimate.estimated_cost_usd.toFixed(4)} USD</span>
-                </div>
-            `;
-
-            document.getElementById(`approve-${ratingKey}`).disabled = false;
-
-        } catch (error) {
-            estimateBox.innerHTML = `<p style="color: var(--error);">Error: ${error.message}</p>`;
-        }
-    }
-
-    async function approve(ratingKey, fromLang, toLang) {
-        if (!confirm('Approve this translation? This will consume OpenAI API credits.')) {
+    async function executeTranslation() {
+        if (!currentRatingKey) {
+            showAlert('No media selected', 'warning');
             return;
         }
 
-        const badge = document.getElementById(`badge-${ratingKey}`);
-        badge.className = 'tag tag-info';
-        badge.textContent = 'Processing...';
+        const srcLang = (previewData?.source_lang || 'en').toUpperCase();
+        if (!confirm(`Dịch ${srcLang} subtitle sang Vietnamese? Sẽ sử dụng AI API credits.`)) return;
 
-        const itemEl = document.getElementById(`item-${ratingKey}`);
-        const buttons = itemEl.querySelectorAll('button');
-        buttons.forEach(btn => btn.disabled = true);
+        setButtonsLoading(true);
+        showProgress('Translating subtitle...');
 
         try {
-            const response = await fetch('/api/translation/approve', {
+            const res = await fetch('/api/translation/execute', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
-                    rating_key: ratingKey,
-                    from_lang: fromLang,
-                    to_lang: toLang
+                    rating_key: currentRatingKey,
+                    from_lang: previewData?.source_lang || 'en',
                 })
             });
 
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.detail || 'Translation failed');
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || 'Translation failed');
             }
 
-            const result = await response.json();
-            showAlert(result.message, 'success');
+            const result = await res.json();
+            finishProgress();
+            showAlert(result.message || 'Translation completed', 'success');
 
-            setTimeout(() => { loadPending(); loadHistory(); }, 2000);
+            setTimeout(() => {
+                previewTranslation();
+                loadHistory();
+            }, 2000);
 
-        } catch (error) {
-            showAlert('Translation failed: ' + error.message, 'error');
-            buttons.forEach(btn => btn.disabled = false);
-            badge.className = 'tag tag-warning';
-            badge.textContent = 'Pending';
+        } catch (e) {
+            hideProgress();
+            showAlert('Translation failed: ' + e.message, 'error');
+        } finally {
+            setButtonsLoading(false);
         }
     }
 
-    async function reject(ratingKey) {
-        if (!confirm('Reject this translation request?')) {
-            return;
-        }
+    let progressInterval = null;
 
+    function showProgress(label) {
+        const container = document.getElementById('progress-container');
+        const fill = document.getElementById('progress-fill');
+        const labelEl = document.getElementById('progress-label');
+        container.style.display = 'block';
+        fill.style.width = '0%';
+        labelEl.textContent = label;
+
+        let progress = 0;
+        progressInterval = setInterval(() => {
+            progress = Math.min(progress + 3, 90);
+            fill.style.width = progress + '%';
+
+            if (progress < 35) labelEl.textContent = 'Preparing source subtitle...';
+            else if (progress < 70) labelEl.textContent = 'AI translating...';
+            else labelEl.textContent = 'Uploading to Plex...';
+        }, 500);
+    }
+
+    function finishProgress() {
+        if (progressInterval) clearInterval(progressInterval);
+        document.getElementById('progress-fill').style.width = '100%';
+        document.getElementById('progress-label').textContent = 'Done!';
+    }
+
+    function hideProgress() {
+        if (progressInterval) clearInterval(progressInterval);
+        document.getElementById('progress-container').style.display = 'none';
+    }
+
+    function setButtonsLoading(loading) {
+        const btnTranslate = document.getElementById('btn-translate');
+        const btnPreview = document.getElementById('btn-preview');
+
+        if (btnTranslate) btnTranslate.disabled = loading;
+        if (btnPreview) btnPreview.disabled = loading;
+
+        if (loading && btnTranslate) btnTranslate.innerHTML = '<span class="spinner"></span> Processing...';
+        if (!loading && btnTranslate) {
+            const srcLang = (previewData?.source_lang || 'en').toUpperCase();
+            btnTranslate.innerHTML = `AI Translate (${srcLang} &rarr; VI)`;
+        }
+    }
+
+    async function loadNowPlaying() {
         try {
-            const response = await fetch('/api/translation/reject', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({rating_key: ratingKey})
-            });
+            const res = await fetch('/api/sync/now-playing');
+            if (!res.ok) return;
+            const data = await res.json();
 
-            if (!response.ok) {
-                throw new Error('Rejection failed');
+            const section = document.getElementById('now-playing-section');
+            const container = document.getElementById('now-playing-cards');
+
+            if (data.sessions && data.sessions.length > 0) {
+                container.innerHTML = data.sessions.map(item =>
+                    renderMediaCard(item, item.rating_key === currentRatingKey)
+                ).join('');
+                section.style.display = 'block';
+
+                if (!autoSelected && !currentRatingKey) {
+                    autoSelected = true;
+                    selectMedia(data.sessions[0].rating_key);
+                }
+            } else {
+                container.innerHTML = '<p class="empty-state">Không có phim nào đang phát</p>';
+                section.style.display = 'block';
             }
-
-            showAlert('Translation request rejected', 'success');
-            loadPending();
-            loadHistory();
-
-        } catch (error) {
-            showAlert('Error: ' + error.message, 'error');
+        } catch (e) {
+            console.error('Failed to load now playing:', e);
         }
     }
 
-    // ── History ──────────────────────────────────────────────────────
+    function renderMediaCard(item, isSelected = false) {
+        const thumbSrc = `/api/sync/thumb/${item.rating_key}`;
+        const thumbHtml = item.thumb
+            ? `<img src="${thumbSrc}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='<div style=\\'display:flex;align-items:center;justify-content:center;height:100%;font-size:28px;color:var(--text-muted)\\'>&#127910;</div>'">`
+            : `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:28px;color:var(--text-muted)">&#127910;</div>`;
+
+        const playerTitle = item.player?.title && item.player.title !== 'null' ? item.player.title : null;
+        const playerHtml = playerTitle
+            ? `<div class="media-player">&#9654; ${playerTitle}</div>`
+            : '';
+
+        const progressHtml = item.progress !== undefined
+            ? `<div class="progress-mini"><div class="progress-mini-fill" style="width:${item.progress}%"></div></div>`
+            : '';
+
+        const selectedClass = isSelected ? ' selected' : '';
+
+        return `
+            <div class="media-card${selectedClass}" data-key="${item.rating_key}" onclick="selectMedia('${item.rating_key}')">
+                <div class="media-thumb">${thumbHtml}</div>
+                <div class="media-title">${item.title}</div>
+                <div class="media-meta">${item.media_type}${item.year ? ' &middot; ' + item.year : ''}</div>
+                ${playerHtml}
+                ${progressHtml}
+            </div>
+        `;
+    }
+
+    function selectMedia(ratingKey) {
+        document.querySelectorAll('.media-card').forEach(c => c.classList.remove('selected'));
+        const card = document.querySelector(`.media-card[data-key="${ratingKey}"]`);
+        if (card) card.classList.add('selected');
+
+        if (ratingKey !== currentRatingKey) {
+            document.getElementById('results-area').innerHTML = '';
+            previewData = null;
+        }
+
+        document.getElementById('rating-key').value = ratingKey;
+        previewTranslation();
+    }
 
     const statusLabels = {
         approved: 'Approved',
@@ -611,6 +972,12 @@
         approved: '&#10003;',
         auto_approved: '&#9889;',
         rejected: '&#10007;',
+    };
+
+    const sourceLabels = {
+        subsource_target_preferred: 'Subsource target',
+        subsource_en_translation: 'Subsource EN',
+        plex_source_fallback: 'Plex fallback',
     };
 
     async function loadHistory() {
@@ -634,7 +1001,6 @@
             return;
         }
 
-        // Stats summary
         const approved = items.filter(i => i.status === 'approved').length;
         const auto = items.filter(i => i.status === 'auto_approved').length;
         const rejected = items.filter(i => i.status === 'rejected').length;
@@ -662,11 +1028,16 @@
                 <tbody>
                     ${items.map(item => {
                         const canPreview = item.status !== 'rejected' && item.lines_translated > 0;
+                        const sourceLabel = sourceLabels[item.source_strategy] || item.source_strategy;
+                        const sourceBadge = item.source_strategy
+                            ? `<div class="source-badge${item.used_final_fallback ? ' fallback' : ''}">${item.used_final_fallback ? 'Plex fallback (last-resort)' : sourceLabel}${item.source_origin ? ' &middot; ' + item.source_origin : ''}</div>`
+                            : '';
                         return `
                         <tr>
                             <td>
                                 <div class="history-title">${item.title}</div>
                                 <div class="history-meta">${item.from_lang.toUpperCase()} &rarr; ${item.to_lang.toUpperCase()}${item.model ? ' &middot; ' + item.model : ''}</div>
+                                ${sourceBadge}
                             </td>
                             <td>
                                 <span class="status-badge status-${item.status}">
@@ -689,7 +1060,6 @@
         const now = new Date();
         const diff = now - d;
 
-        // Trong vòng 24h → hiện "x giờ trước"
         if (diff < 86400000) {
             const hours = Math.floor(diff / 3600000);
             if (hours < 1) {
@@ -699,7 +1069,6 @@
             return `${hours}h ago`;
         }
 
-        // Trong vòng 7 ngày → hiện "x ngày trước"
         if (diff < 604800000) {
             const days = Math.floor(diff / 86400000);
             return `${days}d ago`;
@@ -707,8 +1076,6 @@
 
         return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
     }
-
-    // ── Subtitle Preview ──────────────────────────────────────────
 
     function openPreview(ratingKey, lang, title) {
         const modal = document.getElementById('preview-modal');
@@ -755,18 +1122,22 @@
         document.body.style.overflow = '';
     }
 
-    document.addEventListener('keydown', e => {
-        if (e.key === 'Escape') closePreview();
-    });
-
     function escapeHtml(text) {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
     }
 
-    setInterval(loadPending, 30000);
-    loadPending();
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') closePreview();
+    });
+
+    document.getElementById('rating-key').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') previewTranslation();
+    });
+
+    loadNowPlaying();
     loadHistory();
+    setInterval(loadNowPlaying, 30000);
 </script>
 {% endblock %}

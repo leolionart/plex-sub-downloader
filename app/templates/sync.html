@@ -3,7 +3,7 @@
 {% block title %}Subtitle Sync - Plex Subtitle Service{% endblock %}
 {% block nav_sync %}active{% endblock %}
 {% block page_title %}Subtitle Sync{% endblock %}
-{% block page_description %}Đồng bộ timing Vietsub hoặc dịch sub chủ động{% endblock %}
+{% block page_description %}Đồng bộ timing subtitle bằng AI{% endblock %}
 
 {% block extra_styles %}
 <style>
@@ -575,7 +575,7 @@
 
 <!-- Manual Sync Form -->
 <div class="sync-form">
-    <h3>Manual Sync / Translate</h3>
+    <h3>Manual Sync</h3>
     <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
         Paste Plex share link, web URL, hoặc nhập rating key.
     </p>
@@ -614,11 +614,7 @@
         </li>
         <li>
             <span class="step-num">3</span>
-            <span><b>Hoặc AI Translate:</b> Dịch Engsub sang Tiếng Việt khi không có Vietsub phù hợp</span>
-        </li>
-        <li>
-            <span class="step-num">4</span>
-            <span><b>Upload:</b> Subtitle đã xử lý được upload lại lên Plex</span>
+            <span><b>Upload:</b> Subtitle đã sync timing được upload lại lên Plex</span>
         </li>
     </ul>
 </div>
@@ -854,15 +850,6 @@
             `;
         }
 
-        if (src.available && data.can_translate) {
-            const srcLang = (data.source_lang || 'en').toUpperCase();
-            actionsHtml += `
-                <button class="btn btn-info" onclick="executeTranslate()" id="btn-translate">
-                    AI Translate (${srcLang} &rarr; VI)
-                </button>
-            `;
-        }
-
         actionsHtml += '</div>';
 
         // Determine status tag
@@ -871,10 +858,6 @@
             statusTag = data.has_vi_on_plex
                 ? '<span class="tag tag-info">Re-sync Timing</span>'
                 : '<span class="tag tag-info">Ready to Sync</span>';
-        } else if (data.can_translate) {
-            const srcLang = (data.source_lang || 'en').toUpperCase();
-            const translateLabel = srcLang === 'EN' ? 'Translate Only' : `Translate (${srcLang} → VI)`;
-            statusTag = `<span class="tag tag-warning">${translateLabel}</span>`;
         } else if (data.has_vi_on_plex) {
             // VI có sẵn nhưng không tìm được source sub để sync
             statusTag = '<span class="tag tag-warning">Thiếu source sub để sync</span>';
@@ -882,7 +865,7 @@
             // Không tìm được sub nguồn nào → không làm gì được
             statusTag = '<span class="tag tag-error">Không tìm thấy sub nguồn</span>';
         } else {
-            // Có source sub nhưng không có target sub và translate bị tắt
+            // Có source sub nhưng không có target sub
             statusTag = '<span class="tag tag-error">Không tìm thấy VI sub</span>';
         }
 
@@ -949,49 +932,6 @@
         }
     }
 
-    // Execute translate
-    async function executeTranslate() {
-        if (!currentRatingKey) {
-            showAlert('No media selected', 'warning');
-            return;
-        }
-
-        const srcLang = (previewData?.source_lang || 'en').toUpperCase();
-        if (!confirm(`Dịch ${srcLang} subtitle sang Vietnamese? Sẽ sử dụng AI API credits.`)) return;
-
-        setButtonsLoading(true);
-        showProgress('Translating subtitle...');
-
-        try {
-            const res = await fetch('/api/sync/translate', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    rating_key: currentRatingKey,
-                    from_lang: previewData?.source_lang || 'en',
-                })
-            });
-
-            if (!res.ok) {
-                const err = await res.json();
-                throw new Error(err.detail || 'Translation failed');
-            }
-
-            const result = await res.json();
-            finishProgress();
-            showAlert(result.message || 'Translation completed', 'success');
-
-            // Re-preview to update status
-            setTimeout(() => previewSync(), 2000);
-
-        } catch (e) {
-            hideProgress();
-            showAlert('Translation failed: ' + e.message, 'error');
-        } finally {
-            setButtonsLoading(false);
-        }
-    }
-
     // Progress helpers
     let progressInterval = null;
 
@@ -1028,11 +968,9 @@
 
     function setButtonsLoading(loading) {
         const btnSync = document.getElementById('btn-sync');
-        const btnTranslate = document.getElementById('btn-translate');
         const btnPreview = document.getElementById('btn-preview');
 
         if (btnSync) btnSync.disabled = loading;
-        if (btnTranslate) btnTranslate.disabled = loading;
         if (btnPreview) btnPreview.disabled = loading;
 
         if (loading && btnSync) btnSync.innerHTML = '<span class="spinner"></span> Processing...';
