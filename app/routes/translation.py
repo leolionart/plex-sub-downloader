@@ -16,6 +16,11 @@ class TranslationRequest(BaseModel):
     from_lang: str = "en"
 
 
+class ImproveRequest(BaseModel):
+    """Request để execute subtitle improve."""
+    rating_key: str
+
+
 def get_subtitle_service():
     """Get subtitle service instance từ main app."""
     from app.main import subtitle_service
@@ -37,6 +42,26 @@ async def execute_translation(request: TranslationRequest):
     result = await service.execute_translate_for_media(
         rating_key=request.rating_key,
         from_lang=request.from_lang,
+    )
+
+    if result["status"] == "error":
+        raise HTTPException(status_code=400, detail=result["message"])
+
+    return result
+
+
+@router.post("/improve")
+async def execute_improve(request: ImproveRequest):
+    """
+    Execute subtitle improve cho một media item.
+    """
+    service = get_subtitle_service()
+
+    if not service.runtime_config.ai_available:
+        raise HTTPException(status_code=400, detail="OpenAI API key required for translation")
+
+    result = await service.execute_improve_for_media(
+        rating_key=request.rating_key,
     )
 
     if result["status"] == "error":

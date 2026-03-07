@@ -775,7 +775,17 @@
                     AI Translate (${srcLang} &rarr; VI)
                 </button>
             `;
-        } else {
+        }
+
+        if (data.can_improve) {
+            actionsHtml += `
+                <button class="btn btn-secondary" onclick="executeImprove()" id="btn-improve">
+                    AI Improve (VI &rarr; VI)
+                </button>
+            `;
+        }
+
+        if (!src.available && !data.can_improve) {
             actionsHtml += `
                 <button class="btn btn-secondary" disabled>
                     Chưa thể dịch (thiếu source subtitle)
@@ -786,7 +796,9 @@
 
         const statusTag = (src.available && data.can_translate)
             ? `<span class="tag tag-info">Ready to Translate</span>`
-            : `<span class="tag tag-error">Source subtitle not found</span>`;
+            : (data.can_improve
+                ? `<span class="tag tag-info">Ready to Improve</span>`
+                : `<span class="tag tag-error">Source subtitle not found</span>`);
 
         area.innerHTML = `
             <div class="result-card">
@@ -807,9 +819,6 @@
             showAlert('No media selected', 'warning');
             return;
         }
-
-        const srcLang = (previewData?.source_lang || 'en').toUpperCase();
-        if (!confirm(`Dịch ${srcLang} subtitle sang Vietnamese? Sẽ sử dụng AI API credits.`)) return;
 
         setButtonsLoading(true);
         showProgress('Translating subtitle...');
@@ -841,6 +850,46 @@
         } catch (e) {
             hideProgress();
             showAlert('Translation failed: ' + e.message, 'error');
+        } finally {
+            setButtonsLoading(false);
+        }
+    }
+
+    async function executeImprove() {
+        if (!currentRatingKey) {
+            showAlert('No media selected', 'warning');
+            return;
+        }
+
+        setButtonsLoading(true);
+        showProgress('Improving subtitle...');
+
+        try {
+            const res = await fetch('/api/translation/improve', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    rating_key: currentRatingKey,
+                })
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || 'Improve failed');
+            }
+
+            const result = await res.json();
+            finishProgress();
+            showAlert(result.message || 'Improve completed', 'success');
+
+            setTimeout(() => {
+                previewTranslation();
+                loadHistory();
+            }, 2000);
+
+        } catch (e) {
+            hideProgress();
+            showAlert('Improve failed: ' + e.message, 'error');
         } finally {
             setButtonsLoading(false);
         }
@@ -880,15 +929,22 @@
 
     function setButtonsLoading(loading) {
         const btnTranslate = document.getElementById('btn-translate');
+        const btnImprove = document.getElementById('btn-improve');
         const btnPreview = document.getElementById('btn-preview');
 
         if (btnTranslate) btnTranslate.disabled = loading;
+        if (btnImprove) btnImprove.disabled = loading;
         if (btnPreview) btnPreview.disabled = loading;
 
         if (loading && btnTranslate) btnTranslate.innerHTML = '<span class="spinner"></span> Processing...';
+        if (loading && btnImprove) btnImprove.innerHTML = '<span class="spinner"></span> Processing...';
+
         if (!loading && btnTranslate) {
             const srcLang = (previewData?.source_lang || 'en').toUpperCase();
             btnTranslate.innerHTML = `AI Translate (${srcLang} &rarr; VI)`;
+        }
+        if (!loading && btnImprove) {
+            btnImprove.innerHTML = 'AI Improve (VI &rarr; VI)';
         }
     }
 
@@ -978,6 +1034,7 @@
         subsource_target_preferred: 'Subsource target',
         subsource_en_translation: 'Subsource EN',
         plex_source_fallback: 'Plex fallback',
+        plex_target_improve: 'Plex target improve',
     };
 
     async function loadHistory() {

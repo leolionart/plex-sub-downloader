@@ -919,6 +919,7 @@ class SubtitleService:
 
             can_sync = has_source_available and has_target_available
             can_translate = has_source_available and self.translation_client.enabled
+            can_improve = has_vi_text and self.translation_client.enabled
 
             return {
                 "rating_key": rating_key,
@@ -932,6 +933,7 @@ class SubtitleService:
                 "vi_candidates": vi_candidates,
                 "can_sync": can_sync,
                 "can_translate": can_translate,
+                "can_improve": can_improve,
                 "source_lang": source_lang,
                 "sync_enabled": self.runtime_config.ai_available,
             }
@@ -1212,6 +1214,69 @@ class SubtitleService:
             return {"status": "error", "message": "Translation failed"}
 
         return result
+
+    async def execute_improve_for_media(
+        self,
+        rating_key: str,
+        request_id: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Improve subtitle target hiện có trên Plex bằng AI (same-language refine).
+
+        Args:
+            rating_key: Plex ratingKey
+            request_id: Request ID for logging
+
+        Returns:
+            Dict với status và improve result
+        """
+        log = RequestContextLogger(logger, request_id or rating_key[:8])
+
+        if not self.translation_client.enabled:
+            return {"status": "error", "message": "Translation disabled — no OpenAI API key"}
+
+        video = await asyncio.to_thread(self.plex_client.get_video, rating_key)
+        metadata = await asyncio.to_thread(self.plex_client.extract_metadata, video)
+        target_lang = self.runtime_config.default_language
+
+        dest_dir = self.temp_dir / f"{rating_key}_improve"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            source_subtitle_path = await asyncio.to_thread(
+                self.plex_client.download_existing_subtitle,
+                video,
+                target_lang,
+                dest_dir,
+            )
+
+            if not source_subtitle_path:
+                return {
+                    "status": "error",
+                    "message": (
+                        f"No text-based {target_lang.upper()} subtitle found on Plex to improve"
+                    ),
+                }
+
+            result = await self._execute_translation(
+                metadata=metadata,
+                video=video,
+                from_lang=target_lang,
+                to_lang=target_lang,
+                log=log,
+                source_subtitle_path=source_subtitle_path,
+                source_strategy="plex_target_improve",
+                source_origin="plex",
+                used_final_fallback=False,
+            )
+
+            if not result:
+                return {"status": "error", "message": "Improve failed"}
+
+            return result
+        finally:
+            import shutil
+            shutil.rmtree(dest_dir, ignore_errors=True)
 
     async def _resolve_manual_translation_source(
         self,
