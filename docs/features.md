@@ -30,7 +30,11 @@ Bấm Preview (hoặc chọn video đang play) → service kiểm tra:
 - Sub nào có thể tải từ Subsource
 - Trạng thái: Ready to Sync / Translate Only / Đã có Vietsub...
 
-**Tối ưu:** Nếu target language sub đã có dạng text-based trên Plex → không gọi Subsource, trả về ngay.
+**Lưu ý:** Auto mode vẫn có thể skip khi target subtitle đã tồn tại để tránh trùng lặp.
+Nhưng trong manual preview, service vẫn tiếp tục tìm candidate trên Subsource để user có thể:
+- thay subtitle hiện có nếu nghi sai episode / sai bản phát hành
+- sync lại với source subtitle khác
+- dịch AI nếu chưa có target subtitle phù hợp
 
 ### Status Tags
 
@@ -38,6 +42,7 @@ Bấm Preview (hoặc chọn video đang play) → service kiểm tra:
 |-----|---------|
 | `Ready to Sync` | Có source sub + target sub, sync khả dụng |
 | `Re-sync Timing` | Target đã có trên Plex, có thể re-sync |
+| `Có Vietsub khác để thử` | Plex đã có target sub, nhưng Subsource có candidate khác để thay thử |
 | `Translate (KO → VI)` | Có source sub (KO), có thể dịch sang target |
 | `Translate Only` | Có EN source, không có target, chỉ translate được |
 | `Thiếu source sub` | Target đã có nhưng không tìm được source để sync |

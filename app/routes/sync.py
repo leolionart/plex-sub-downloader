@@ -26,6 +26,12 @@ class SyncRequest(BaseModel):
     source_lang: str = "en"
 
 
+class UploadTargetRequest(BaseModel):
+    """Request để upload target subtitle thủ công từ Subsource."""
+    rating_key: str
+    subtitle_id: str | None = None
+
+
 class ResolveUrlRequest(BaseModel):
     """Request để resolve Plex URL/share link thành rating key."""
     input: str
@@ -73,6 +79,27 @@ async def execute_sync(request: SyncRequest):
         rating_key=request.rating_key,
         subtitle_id=request.subtitle_id,
         source_lang=request.source_lang,
+    )
+
+    if result["status"] == "error":
+        raise HTTPException(status_code=400, detail=result["message"])
+
+    return result
+
+
+@router.post("/upload-target")
+async def upload_target_subtitle(request: UploadTargetRequest):
+    """
+    Chủ động tìm và upload target subtitle từ Subsource.
+
+    Dùng cho trường hợp subtitle hiện có trên Plex sai episode
+    hoặc user muốn thử một bản khác dù auto mode đã skip.
+    """
+    service = get_subtitle_service()
+
+    result = await service.execute_manual_target_upload_for_media(
+        rating_key=request.rating_key,
+        subtitle_id=request.subtitle_id,
     )
 
     if result["status"] == "error":

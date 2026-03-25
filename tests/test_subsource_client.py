@@ -119,6 +119,15 @@ class TestSearchSubtitles:
 class TestRankAndFilter:
     """Test _rank_and_filter method."""
 
+    def test_extract_season_pack(self, subsource_client):
+        """Test parse season pack như S01.COMPLETE."""
+        season, episode = subsource_client._extract_season_episode(
+            "Daredevil.Born.Again.S01.COMPLETE.DSNP.WEB-DL"
+        )
+
+        assert season == 1
+        assert episode is None
+
     def test_filter_by_language(self, subsource_client):
         """Test filter subtitles theo language."""
         results = [
@@ -168,6 +177,32 @@ class TestRankAndFilter:
         assert sorted_results[0].quality_type == "retail"
         assert sorted_results[1].quality_type == "translated"
         assert sorted_results[2].quality_type == "ai"
+
+    def test_wrong_season_pack_not_used_as_untagged_fallback(self, subsource_client):
+        """Test season pack sai mùa không bị coi là untagged fallback."""
+        results = [
+            SubtitleResult(
+                id="1",
+                name="Daredevil.Born.Again.S01.COMPLETE.DSNP.WEB-DL",
+                language="en",
+                download_url="http://test.com/1",
+                quality_type="retail",
+                season=1,
+                episode=None,
+            ),
+        ]
+
+        params = SubtitleSearchParams(
+            language="en",
+            title="Daredevil: Born Again",
+            season=2,
+            episode=1,
+            video_filename="Daredevil.Born.Again.S02E01.mkv",
+        )
+
+        filtered = subsource_client._rank_and_filter(results, params)
+
+        assert filtered == []
 
 
 @pytest.mark.asyncio

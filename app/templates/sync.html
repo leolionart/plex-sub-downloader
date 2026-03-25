@@ -762,14 +762,18 @@
         const area = document.getElementById('results-area');
         const src = data.source_status || {};
         const vi = data.vi_status || {};
+        const hasViCandidates = Array.isArray(data.vi_candidates) && data.vi_candidates.length > 0;
+        const hasAnyVi = data.has_vi_on_plex || hasViCandidates;
+        const srcLangLabel = data.source_lang
+            ? data.source_lang.toUpperCase()
+            : 'Source';
+
+        selectedSubtitleId = null;
 
         // Build subtitle info section
         let subInfoHtml = '';
 
         // Source subtitle (any language except target, used for sync/translate)
-        const srcLangLabel = data.source_lang
-            ? data.source_lang.toUpperCase()
-            : 'Source';
         if (src.available) {
             const srcFrom = src.source === 'plex' ? 'Plex' : 'Subsource';
             subInfoHtml += `
@@ -807,11 +811,14 @@
             `;
         }
 
-        if (!data.has_vi_on_plex && data.vi_candidates.length > 0) {
+        if (hasViCandidates) {
+            const viCandidateLabel = data.has_vi_on_plex
+                ? `${data.vi_candidates.length} bản Vietsub khác tìm thấy trên Subsource`
+                : `${data.vi_candidates.length} bản Vietsub tìm thấy trên Subsource`;
             subInfoHtml += `
                 <div class="sub-info">
                     <span class="icon ok"></span>
-                    <span>${data.vi_candidates.length} bản Vietsub tìm thấy trên Subsource</span>
+                    <span>${viCandidateLabel}</span>
                 </div>
                 <select class="sub-select" id="vi-sub-select" onchange="onSubSelect(this.value)">
                     ${data.vi_candidates.map((c, i) => `
@@ -822,7 +829,7 @@
                 </select>
             `;
             selectedSubtitleId = data.vi_candidates[0].id;
-        } else if (!data.has_vi_on_plex && data.vi_candidates.length === 0 && !vi.detail) {
+        } else if (!data.has_vi_on_plex && !vi.detail) {
             subInfoHtml += `
                 <div class="sub-info">
                     <span class="icon missing"></span>
@@ -833,6 +840,15 @@
 
         // Action buttons
         let actionsHtml = '<div class="action-buttons">';
+
+        if (hasViCandidates) {
+            const uploadLabel = data.has_vi_on_plex ? 'Thử / Thay Vietsub' : 'Upload Vietsub';
+            actionsHtml += `
+                <button class="btn btn-primary" onclick="executeUploadTarget()" id="btn-upload-target">
+                    ${uploadLabel}
+                </button>
+            `;
+        }
 
         if (data.can_sync && data.sync_enabled) {
             const syncLabel = data.has_vi_on_plex ? 'Re-sync Timing (optional)' : 'Sync Timing';
@@ -850,6 +866,14 @@
             `;
         }
 
+        if (!hasAnyVi && data.can_translate) {
+            actionsHtml += `
+                <button class="btn btn-info" onclick="executeTranslation()" id="btn-translate">
+                    AI Translate (${srcLangLabel} &rarr; VI)
+                </button>
+            `;
+        }
+
         actionsHtml += '</div>';
 
         // Determine status tag
@@ -858,6 +882,12 @@
             statusTag = data.has_vi_on_plex
                 ? '<span class="tag tag-info">Re-sync Timing</span>'
                 : '<span class="tag tag-info">Ready to Sync</span>';
+        } else if (!hasAnyVi && data.can_translate) {
+            statusTag = `<span class="tag tag-info">Translate Only</span>`;
+        } else if (hasViCandidates && data.has_vi_on_plex) {
+            statusTag = '<span class="tag tag-info">Có Vietsub khác để thử</span>';
+        } else if (hasViCandidates) {
+            statusTag = '<span class="tag tag-info">Có Vietsub trên Subsource</span>';
         } else if (data.has_vi_on_plex) {
             // VI có sẵn nhưng không tìm được source sub để sync
             statusTag = '<span class="tag tag-warning">Thiếu source sub để sync</span>';
@@ -885,6 +915,48 @@
 
     function onSubSelect(subtitleId) {
         selectedSubtitleId = subtitleId;
+    }
+
+    async function executeUploadTarget() {
+        if (!currentRatingKey) {
+            showAlert('No media selected', 'warning');
+            return;
+        }
+
+        if (!selectedSubtitleId) {
+            showAlert('Chưa có Vietsub candidate nào được chọn', 'warning');
+            return;
+        }
+
+        setButtonsLoading(true);
+        showProgress('Downloading subtitle...');
+
+        try {
+            const res = await fetch('/api/sync/upload-target', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    rating_key: currentRatingKey,
+                    subtitle_id: selectedSubtitleId,
+                })
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || 'Upload failed');
+            }
+
+            const result = await res.json();
+            finishProgress();
+            showAlert(result.message, 'success');
+
+            setTimeout(() => previewSync(), 1500);
+        } catch (e) {
+            hideProgress();
+            showAlert('Upload failed: ' + e.message, 'error');
+        } finally {
+            setButtonsLoading(false);
+        }
     }
 
     // Execute sync
@@ -932,6 +1004,43 @@
         }
     }
 
+    async function executeTranslation() {
+        if (!currentRatingKey) {
+            showAlert('No media selected', 'warning');
+            return;
+        }
+
+        setButtonsLoading(true);
+        showProgress('Translating subtitle...');
+
+        try {
+            const res = await fetch('/api/translation/execute', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    rating_key: currentRatingKey,
+                    from_lang: previewData?.source_lang || 'en',
+                })
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || 'Translation failed');
+            }
+
+            const result = await res.json();
+            finishProgress();
+            showAlert(result.message || 'Translation completed', 'success');
+
+            setTimeout(() => previewSync(), 1500);
+        } catch (e) {
+            hideProgress();
+            showAlert('Translation failed: ' + e.message, 'error');
+        } finally {
+            setButtonsLoading(false);
+        }
+    }
+
     // Progress helpers
     let progressInterval = null;
 
@@ -968,13 +1077,29 @@
 
     function setButtonsLoading(loading) {
         const btnSync = document.getElementById('btn-sync');
+        const btnUploadTarget = document.getElementById('btn-upload-target');
+        const btnTranslate = document.getElementById('btn-translate');
         const btnPreview = document.getElementById('btn-preview');
 
         if (btnSync) btnSync.disabled = loading;
+        if (btnUploadTarget) btnUploadTarget.disabled = loading;
+        if (btnTranslate) btnTranslate.disabled = loading;
         if (btnPreview) btnPreview.disabled = loading;
 
         if (loading && btnSync) btnSync.innerHTML = '<span class="spinner"></span> Processing...';
-        if (!loading && btnSync) btnSync.textContent = 'Sync Timing';
+        if (loading && btnUploadTarget) btnUploadTarget.innerHTML = '<span class="spinner"></span> Processing...';
+        if (loading && btnTranslate) btnTranslate.innerHTML = '<span class="spinner"></span> Processing...';
+
+        if (!loading && btnSync) {
+            btnSync.textContent = previewData?.has_vi_on_plex ? 'Re-sync Timing (optional)' : 'Sync Timing';
+        }
+        if (!loading && btnUploadTarget) {
+            btnUploadTarget.textContent = previewData?.has_vi_on_plex ? 'Thử / Thay Vietsub' : 'Upload Vietsub';
+        }
+        if (!loading && btnTranslate) {
+            const srcLangLabel = previewData?.source_lang ? previewData.source_lang.toUpperCase() : 'EN';
+            btnTranslate.textContent = `AI Translate (${srcLangLabel} → VI)`;
+        }
     }
 
     function renderSyncResult(result) {

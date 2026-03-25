@@ -531,20 +531,23 @@ class SubtitleService:
         video: Video,
         subtitle_path: Path,
         log: RequestContextLogger,
+        force_replace: bool = False,
     ) -> None:
         """
         Upload subtitle file lên Plex.
-        Nếu replace_existing=True, xóa subtitle cũ cùng language trước khi upload.
+        Nếu replace_existing=True hoặc force_replace=True, xóa subtitle cũ cùng language
+        trước khi upload.
 
         Args:
             video: Plex Video object
             subtitle_path: Path to .srt file
             log: Logger instance
+            force_replace: Always remove external subtitle cùng language trước khi upload
         """
         language = self.runtime_config.default_language
 
-        # Remove existing external subtitles if replace mode is on
-        if self.config.subtitle_settings.replace_existing:
+        # Manual actions can force replacement even when auto replace is off.
+        if force_replace or self.config.subtitle_settings.replace_existing:
             removed = await asyncio.to_thread(
                 self.plex_client.remove_external_subtitles,
                 video,
@@ -756,8 +759,8 @@ class SubtitleService:
                 pass
 
             # --- Target subtitle (ngôn ngữ user chọn trong settings) ---
-            # Kiểm tra target lang trên Plex ngay đầu tiên (fast, không gọi Subsource).
-            # Nếu đã có → không cần translate/search → bỏ qua toàn bộ AI search.
+            # Kiểm tra target lang trên Plex ngay đầu tiên để biết trạng thái hiện tại.
+            # Manual preview vẫn có thể tiếp tục tìm candidate thay thế trên Subsource.
             target_details = await asyncio.to_thread(
                 self.plex_client.get_subtitle_details, video, lang,
             )
@@ -769,7 +772,6 @@ class SubtitleService:
 
             # --- Source subtitle (bất kỳ lang nào ≠ target, dùng cho sync/translate) ---
             # Ưu tiên: Plex trước (tất cả langs có sẵn, trừ target) → Subsource.
-            # Chỉ chạy khi target chưa có trên Plex (nếu có rồi, translate không cần).
             source_status: dict[str, Any] = {"available": False, "source": None}
             source_lang = "en"
             source_candidates: list[dict] = []
@@ -838,81 +840,79 @@ class SubtitleService:
                     f"Plex có {vi_details['subtitle_count']} {lang_name} sub nhưng {reason}"
                 )
 
-            # 2) Tìm trên Subsource — chỉ khi target chưa có trên Plex.
-            # Dùng multi-lang search: movie lookup 1 lần, subtitle queries song song.
+            # 2) Tìm trên Subsource cho manual preview.
+            # Dù target đã có trên Plex, vẫn trả về candidate thay thế để user chủ động chọn.
             vi_candidates: list[dict] = []
-            if not has_vi_text:
-                # Xây danh sách ngôn ngữ cần tìm
-                source_search_order = ["en"] + [
-                    l for l in _FALLBACK_SOURCE_LANGS if l != "en" and l != lang
-                ]
-                if has_source_available:
-                    # Đã có source trên Plex → chỉ cần tìm target lang
-                    langs_to_search = [lang]
-                    source_search_order = []
-                else:
-                    # Cần tìm cả target lang + tất cả fallback source langs
-                    langs_to_search = [lang] + source_search_order
+            source_search_order = ["en"] + [
+                l for l in _FALLBACK_SOURCE_LANGS if l != "en" and l != lang
+            ]
+            langs_to_search = [lang]
+            if not has_source_available:
+                langs_to_search.extend(source_search_order)
 
-                base_params = SubtitleSearchParams(
-                    language=lang,
-                    title=metadata.search_title,
-                    year=metadata.year,
-                    imdb_id=metadata.imdb_id,
-                    tmdb_id=metadata.tmdb_id,
-                    season=metadata.season_number,
-                    episode=metadata.episode_number,
-                    video_filename=video_filename,
+            base_params = SubtitleSearchParams(
+                language=lang,
+                title=metadata.search_title,
+                year=metadata.year,
+                imdb_id=metadata.imdb_id,
+                tmdb_id=metadata.tmdb_id,
+                season=metadata.season_number,
+                episode=metadata.episode_number,
+                video_filename=video_filename,
+            )
+
+            try:
+                multi_results = await self.subsource_client.search_subtitles_multi_lang(
+                    base_params, langs_to_search,
                 )
+            except Exception as e:
+                log.warning(f"[Preview] Subsource multi-lang search failed: {e}")
+                multi_results = {}
 
-                try:
-                    multi_results = await self.subsource_client.search_subtitles_multi_lang(
-                        base_params, langs_to_search,
-                    )
-                except Exception as e:
-                    log.warning(f"[Preview] Subsource multi-lang search failed: {e}")
-                    multi_results = {}
+            # Kết quả target lang (VI)
+            target_results = multi_results.get(lang, [])
+            vi_candidates = [
+                {
+                    "id": r.id,
+                    "name": r.name,
+                    "quality": r.quality_type,
+                    "downloads": r.downloads,
+                    "rating": r.rating,
+                    "score": r.priority_score,
+                }
+                for r in target_results
+            ]
 
-                # Kết quả target lang (VI)
-                target_results = multi_results.get(lang, [])
-                vi_candidates = [
-                    {
-                        "id": r.id,
-                        "name": r.name,
-                        "quality": r.quality_type,
-                        "downloads": r.downloads,
-                        "rating": r.rating,
-                        "score": r.priority_score,
-                    }
-                    for r in target_results
-                ]
+            # Kết quả source lang (nếu chưa tìm được trên Plex)
+            if not has_source_available:
+                for fb_lang in source_search_order:
+                    fb_results = multi_results.get(fb_lang, [])
+                    if fb_results:
+                        source_lang = fb_lang
+                        lang_name = LANGUAGE_MAP.get(fb_lang, fb_lang).title()
+                        source_candidates = [
+                            {
+                                "id": r.id,
+                                "name": r.name,
+                                "quality": r.quality_type,
+                                "downloads": r.downloads,
+                                "rating": r.rating,
+                                "score": r.priority_score,
+                            }
+                            for r in fb_results
+                        ]
+                        source_status["available"] = True
+                        has_source_available = True
+                        source_status["source"] = "subsource"
+                        source_status["detail"] = f"Tìm được {len(source_candidates)} {lang_name} sub trên Subsource"
+                        log.info(f"[Preview] Source sub from Subsource: {fb_lang} ({len(source_candidates)})")
+                        break
 
-                # Kết quả source lang (nếu chưa tìm được trên Plex)
-                if not has_source_available:
-                    for fb_lang in source_search_order:
-                        fb_results = multi_results.get(fb_lang, [])
-                        if fb_results:
-                            source_lang = fb_lang
-                            lang_name = LANGUAGE_MAP.get(fb_lang, fb_lang).title()
-                            source_candidates = [
-                                {
-                                    "id": r.id,
-                                    "name": r.name,
-                                    "quality": r.quality_type,
-                                    "downloads": r.downloads,
-                                    "rating": r.rating,
-                                    "score": r.priority_score,
-                                }
-                                for r in fb_results
-                            ]
-                            source_status["available"] = True
-                            has_source_available = True
-                            source_status["source"] = "subsource"
-                            source_status["detail"] = f"Tìm được {len(source_candidates)} {lang_name} sub trên Subsource"
-                            log.info(f"[Preview] Source sub from Subsource: {fb_lang} ({len(source_candidates)})")
-                            break
-
-                    if not source_status["available"]:
+                if not source_status["available"]:
+                    existing_detail = source_status.get("detail")
+                    if existing_detail:
+                        source_status["detail"] = f"{existing_detail}; Subsource không có bản phù hợp"
+                    else:
                         source_status["detail"] = "Không tìm thấy sub nguồn trên Plex hoặc Subsource"
 
             has_target_available = has_vi_text or len(vi_candidates) > 0
@@ -1146,6 +1146,80 @@ class SubtitleService:
         subtitle, path = downloaded
         log.info(f"[Sync] Downloaded Vietsub from Subsource: {subtitle.name}")
         return path
+
+    async def execute_manual_target_upload_for_media(
+        self,
+        rating_key: str,
+        subtitle_id: str | None = None,
+        request_id: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Chủ động tìm và upload target subtitle từ Subsource, bỏ qua skip rule của auto mode.
+
+        Dùng cho trường hợp subtitle hiện có trên Plex sai episode hoặc user muốn thử bản khác.
+        """
+        log = RequestContextLogger(logger, request_id or rating_key[:8])
+        lang = self.runtime_config.default_language
+
+        log.info(f"[ManualUpload] Requested target subtitle upload for ratingKey: {rating_key}")
+
+        video = await asyncio.to_thread(self.plex_client.get_video, rating_key)
+        metadata = await asyncio.to_thread(self.plex_client.extract_metadata, video)
+
+        dest_dir = self.temp_dir / f"{rating_key}_manual_upload"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            results = await self._find_subtitles(metadata, log, language=lang)
+            if not results:
+                return {
+                    "status": "error",
+                    "message": f"Không tìm thấy {lang.upper()} subtitle phù hợp trên Subsource",
+                }
+
+            selected_results = results
+            if subtitle_id:
+                selected = next((r for r in results if r.id == subtitle_id), None)
+                if not selected:
+                    return {
+                        "status": "error",
+                        "message": f"Subtitle ID {subtitle_id} không còn nằm trong kết quả hiện tại",
+                    }
+                selected_results = [selected]
+
+            downloaded = await self._download_first_available(selected_results, metadata, log)
+            if not downloaded:
+                return {
+                    "status": "error",
+                    "message": f"Không tải được {lang.upper()} subtitle đã chọn",
+                }
+
+            subtitle, subtitle_path = downloaded
+            await self._upload_to_plex(video, subtitle_path, log, force_replace=True)
+
+            self.stats.increment("total_downloads")
+
+            await self.telegram_client.notify_subtitle_downloaded(
+                title=str(metadata),
+                subtitle_name=subtitle.name,
+                language=lang,
+                quality=subtitle.quality_type,
+            )
+
+            return {
+                "status": "success",
+                "message": f"Uploaded {lang.upper()} subtitle: {subtitle.name}",
+                "subtitle": {
+                    "id": subtitle.id,
+                    "name": subtitle.name,
+                    "quality": subtitle.quality_type,
+                    "downloads": subtitle.downloads,
+                    "rating": subtitle.rating,
+                },
+            }
+        finally:
+            import shutil
+            shutil.rmtree(dest_dir, ignore_errors=True)
 
     async def execute_translate_for_media(
         self,

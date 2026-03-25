@@ -363,7 +363,7 @@ class SubsourceClient:
     def _extract_season_episode(name: str) -> tuple[int | None, int | None]:
         """
         Extract season/episode from release name.
-        Handles: S01E03, s02e01, S1E5, Season.2.Episode.1, etc.
+        Handles: S01E03, s02e01, S1E5, Season.2.Episode.1, S01.COMPLETE, etc.
         """
         if not name:
             return None, None
@@ -377,6 +377,15 @@ class SubsourceClient:
         match = re.search(r"[Ss]eason\s*\.?\s*(\d{1,2})\s*\.?\s*[Ee]pisode\s*\.?\s*(\d{1,2})", name, re.IGNORECASE)
         if match:
             return int(match.group(1)), int(match.group(2))
+
+        # Season pack patterns: ".S01.", " Season 2 ", "S01.COMPLETE", etc.
+        match = re.search(r"(?:^|[.\s_\-\[])[Ss](\d{1,2})(?=$|[.\s_\-\]])", name)
+        if match:
+            return int(match.group(1)), None
+
+        match = re.search(r"[Ss]eason\s*\.?\s*(\d{1,2})(?!\d)", name, re.IGNORECASE)
+        if match:
+            return int(match.group(1)), None
 
         return None, None
 

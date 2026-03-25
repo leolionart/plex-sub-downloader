@@ -64,6 +64,9 @@ Kiểm tra subtitle có sẵn cho một media item.
 }
 ```
 
+Manual preview sẽ vẫn trả về `vi_candidates` ngay cả khi Plex đã có subtitle target,
+để UI cho phép thay thử subtitle khác từ Subsource.
+
 ### `POST /api/sync/execute`
 Thực hiện sync timing.
 
@@ -84,6 +87,31 @@ Thực hiện sync timing.
   "status": "success",
   "message": "Timing synced (42 anchors, ref: EN from plex, vi: subsource)",
   "stats": {"anchors_found": 42, "avg_offset_ms": 150}
+}
+```
+
+### `POST /api/sync/upload-target`
+Tìm và upload target subtitle thủ công từ Subsource.
+
+**Request:**
+```json
+{
+  "rating_key": "12345",
+  "subtitle_id": "abc123"
+}
+```
+- `subtitle_id`: subtitle ID từ `vi_candidates` (optional, nếu bỏ qua sẽ dùng bản đầu tiên tải được)
+
+**Response:**
+```json
+{
+  "status": "success",
+  "message": "Uploaded VI subtitle: Breaking.Bad.S01E01.VI",
+  "subtitle": {
+    "id": "abc123",
+    "name": "Breaking.Bad.S01E01.VI",
+    "quality": "translated"
+  }
 }
 ```
 
