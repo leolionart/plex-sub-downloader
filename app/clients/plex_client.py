@@ -141,9 +141,14 @@ class PlexClient:
             item = self.server.fetchItem(int(rating_key))
 
             # Verify it's a video type we support
-            if not isinstance(item, (Movie, Episode)):
+            if isinstance(item, (Show, Season)):
                 raise PlexClientError(
                     f"Item {rating_key} is not a movie or episode (type: {type(item).__name__})"
+                )
+
+            if not isinstance(item, (Movie, Episode)):
+                raise PlexClientError(
+                    f"Item {rating_key} is not a supported video type (type: {type(item).__name__})"
                 )
 
             logger.info(f"Found video: {item.title} ({item.type})")
@@ -185,7 +190,7 @@ class PlexClient:
                 tmdb_id=self._extract_guid(video, "tmdb"),
                 **base_data,
             )
-        else:
+        elif isinstance(video, Episode):
             # Episode metadata
             episode = cast(Episode, video)
             show = episode.show()
@@ -197,6 +202,29 @@ class PlexClient:
                 episode_number=episode.episodeNumber,
                 imdb_id=self._extract_guid(show, "imdb"),  # Show's IMDb ID
                 tmdb_id=self._extract_guid(show, "tmdb"),  # Show's TMDb ID
+                **base_data,
+            )
+        elif isinstance(video, Show):
+            metadata = MediaMetadata(
+                media_type="show",
+                imdb_id=self._extract_guid(video, "imdb"),
+                tmdb_id=self._extract_guid(video, "tmdb"),
+                **base_data,
+            )
+        elif isinstance(video, Season):
+            show = video.show()
+            metadata = MediaMetadata(
+                media_type="season",
+                show_title=show.title,
+                season_number=video.seasonNumber,
+                imdb_id=self._extract_guid(show, "imdb"),
+                tmdb_id=self._extract_guid(show, "tmdb"),
+                **base_data,
+            )
+        else:
+            # Fallback for unknown video types
+            metadata = MediaMetadata(
+                media_type="movie",  # Default to movie if unknown
                 **base_data,
             )
 

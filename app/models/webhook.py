@@ -55,7 +55,7 @@ class MediaMetadata(BaseModel):
     """
 
     rating_key: str = Field(..., description="Plex ratingKey")
-    media_type: Literal["movie", "episode"] = Field(..., description="Type of media")
+    media_type: Literal["movie", "episode", "show", "season"] = Field(..., description="Type of media")
 
     # Common fields
     title: str = Field(..., description="Title của movie/episode")
@@ -92,5 +92,11 @@ class MediaMetadata(BaseModel):
     def __str__(self) -> str:
         if self.is_movie:
             return f"{self.title} ({self.year})"
-        else:
+        elif self.is_episode:
             return f"{self.show_title} S{self.season_number:02d}E{self.episode_number:02d}"
+        elif self.media_type == "show":
+            return f"Show: {self.title}"
+        elif self.media_type == "season":
+            return f"Season: {self.title}"
+        else:
+            return self.title
