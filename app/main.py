@@ -326,26 +326,26 @@ async def handle_webhook(
             extra={"rating_key": payload.get("rating_key")},
         )
 
-    # Extract rating_key and media_type
-    rating_key = payload.get("rating_key")
-    media_type = payload.get("media_type")
+        # Extract rating_key and media_type
+        rating_key = payload.get("rating_key")
+        media_type = payload.get("media_type")
 
-    if not rating_key:
-        logger.warning(f"[{request_id}] No ratingKey in webhook payload")
-        return JSONResponse(
-            status_code=400,
-            content={"error": "Missing ratingKey in payload"},
-        )
+        if not rating_key:
+            logger.warning(f"[{request_id}] No ratingKey in webhook payload")
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Missing ratingKey in payload"},
+            )
 
-    # Skip Show/Season events early
-    if media_type in ("show", "season"):
-        logger.info(f"[{request_id}] Ignoring Show/Season event: {media_type}")
-        return JSONResponse(
-            status_code=200,
-            content={"status": "ignored", "message": f"Skipping {media_type} metadata update"},
-        )
+        # Skip Show/Season events early
+        if media_type in ("show", "season"):
+            logger.info(f"[{request_id}] Ignoring Show/Season event: {media_type}")
+            return JSONResponse(
+                status_code=200,
+                content={"status": "ignored", "message": f"Skipping {media_type} metadata update"},
+            )
 
-    # Filter events we care about
+        # Filter events we care about
         event = payload.get("event", "")
         if not _should_process_event(event):
             logger.info(f"[{request_id}] Ignoring event: {event}")
