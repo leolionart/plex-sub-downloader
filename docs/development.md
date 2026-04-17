@@ -95,6 +95,20 @@ Subsource API calls dùng tenacity với retry chỉ cho network errors:
 ```
 Không retry khi "movie not found" (deterministic response).
 
+### Subtitle Matching Strategy
+
+Logic matching nằm chủ yếu trong `app/clients/subsource_client.py`:
+
+- `_search_movie()`:
+  - ưu tiên IMDb ID từ Plex
+  - fallback sang title scoring theo title/year/season khi thiếu external ID
+- `_rank_and_filter()`:
+  - lọc exact episode trước, rồi season pack, rồi untagged fallback có kiểm soát
+  - rerank theo `video_filename` để chọn đúng release hơn
+- `_extract_subtitle_from_zip()`:
+  - nếu ZIP có nhiều subtitle files, chấm điểm từng file con theo season/episode + filename similarity
+  - tránh việc lấy `.srt` đầu tiên trong season pack
+
 ## Adding a New Language to Search Fallback
 
 Trong `app/services/subtitle_service.py`:

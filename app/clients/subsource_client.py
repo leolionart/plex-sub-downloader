@@ -10,6 +10,7 @@ Flow:
 
 import asyncio
 import logging
+import math
 import re
 import zipfile
 from difflib import SequenceMatcher
@@ -115,6 +116,125 @@ class SubsourceClient:
             return f"imdb:{params.imdb_id}"
         return f"title:{params.title}:{params.year}"
 
+    @staticmethod
+    def _normalize_match_text(value: str) -> str:
+        """Normalize titles/release names for similarity scoring."""
+        value = Path(value).stem
+        value = value.lower()
+        value = re.sub(r"\b(web[ ._-]?dl)\b", "webdl", value)
+        value = re.sub(r"\b(web[ ._-]?rip)\b", "webrip", value)
+        value = re.sub(r"\bblu[ -]?ray\b", "bluray", value)
+        value = re.sub(r"\bhd[ -]?tv\b", "hdtv", value)
+        value = re.sub(r"\b(ddp)[ ._-]?([257]\.1)\b", r"\1\2", value)
+        value = re.sub(r"\b(h[ ._-]?264|x[ ._-]?264|avc)\b", "h264", value)
+        value = re.sub(r"\b(h[ ._-]?265|x[ ._-]?265|hevc)\b", "h265", value)
+        value = re.sub(r"[\[\](){}]", " ", value)
+        value = re.sub(r"[^a-z0-9]+", " ", value)
+        return re.sub(r"\s+", " ", value).strip()
+
+    @classmethod
+    def _tokenize_match_text(cls, value: str) -> list[str]:
+        normalized = cls._normalize_match_text(value)
+        return normalized.split() if normalized else []
+
+    @staticmethod
+    def _release_token_weight(token: str) -> float:
+        """Higher weights for release-specific tokens than for title words."""
+        high_signal = {
+            "webdl", "webrip", "bluray", "hdtv", "remux", "dvdrip",
+            "amzn", "nf", "dsnp", "hmax", "atvp", "pcok", "1080p",
+            "2160p", "720p", "h264", "h265", "ddp51", "aac", "proper",
+            "repack",
+        }
+        if token in high_signal:
+            return 3.0
+        if re.fullmatch(r"s\d{1,2}e\d{1,2}", token):
+            return 2.5
+        if re.fullmatch(r"\d{3,4}p", token):
+            return 2.5
+        if re.fullmatch(r"\d{4}", token):
+            return 0.5
+        if len(token) <= 2:
+            return 0.2
+        return 1.0
+
+    @classmethod
+    def _weighted_token_overlap(cls, left: list[str], right: list[str]) -> float:
+        if not left or not right:
+            return 0.0
+
+        left_counts: dict[str, int] = {}
+        right_counts: dict[str, int] = {}
+        for token in left:
+            left_counts[token] = left_counts.get(token, 0) + 1
+        for token in right:
+            right_counts[token] = right_counts.get(token, 0) + 1
+
+        all_tokens = set(left_counts) | set(right_counts)
+        if not all_tokens:
+            return 0.0
+
+        intersection = 0.0
+        union = 0.0
+        for token in all_tokens:
+            weight = cls._release_token_weight(token)
+            intersection += min(left_counts.get(token, 0), right_counts.get(token, 0)) * weight
+            union += max(left_counts.get(token, 0), right_counts.get(token, 0)) * weight
+
+        return intersection / union if union else 0.0
+
+    @classmethod
+    def _title_similarity(cls, left: str, right: str) -> float:
+        left_norm = cls._normalize_match_text(left)
+        right_norm = cls._normalize_match_text(right)
+        if not left_norm or not right_norm:
+            return 0.0
+
+        sequence_score = SequenceMatcher(None, left_norm, right_norm).ratio()
+        token_score = cls._weighted_token_overlap(
+            cls._tokenize_match_text(left_norm),
+            cls._tokenize_match_text(right_norm),
+        )
+        exact_bonus = 1.0 if left_norm == right_norm else 0.0
+        return min(1.0, sequence_score * 0.55 + token_score * 0.35 + exact_bonus * 0.10)
+
+    def _movie_match_score(
+        self,
+        movie: dict[str, Any],
+        title: str,
+        year: int | None = None,
+        season: int | None = None,
+    ) -> float:
+        """Score a movie/show result when IMDb/TMDb IDs are unavailable."""
+        movie_title = str(movie.get("title") or "")
+        score = self._title_similarity(title, movie_title)
+
+        if year:
+            release_year = movie.get("releaseYear")
+            if isinstance(release_year, int):
+                if release_year == year:
+                    score += 0.25
+                else:
+                    score -= min(abs(release_year - year) * 0.08, 0.40)
+
+        if season:
+            movie_season = movie.get("season")
+            if isinstance(movie_season, int):
+                if movie_season == season:
+                    score += 0.20
+                else:
+                    score -= 0.20
+            else:
+                parsed_season, _ = self._extract_season_episode(movie_title)
+                if parsed_season == season:
+                    score += 0.15
+
+        subtitle_count = movie.get("subtitleCount")
+        if isinstance(subtitle_count, int) and subtitle_count > 0:
+            score += min(math.log10(subtitle_count + 1) * 0.03, 0.10)
+
+        return score
+
     # ── Movie search ──────────────────────────────────────────────
 
     @retry(
@@ -201,20 +321,23 @@ class SubsourceClient:
 
             movies = data.get("data", [])
             if movies:
-                # Pick best match (first result, optionally filter by year)
-                for movie in movies:
-                    if year and movie.get("releaseYear") == year:
-                        logger.info(
-                            f"Found movie via title+year: {movie['title']} "
-                            f"(movieId={movie['movieId']})"
-                        )
-                        return movie["movieId"]
+                scored_movies = [
+                    (
+                        movie,
+                        self._movie_match_score(movie, title, year=year, season=season),
+                    )
+                    for movie in movies
+                    if movie.get("movieId") is not None
+                ]
+                if not scored_movies:
+                    return None
 
-                # Fallback to first result
-                movie_id = movies[0]["movieId"]
+                scored_movies.sort(key=lambda item: item[1], reverse=True)
+                best_movie, best_score = scored_movies[0]
+                movie_id = best_movie["movieId"]
                 logger.info(
-                    f"Found movie via title: {movies[0]['title']} "
-                    f"(movieId={movie_id})"
+                    f"Found movie via title match: {best_movie['title']} "
+                    f"(movieId={movie_id}, score={best_score:.2f})"
                 )
                 return movie_id
 
@@ -363,13 +486,51 @@ class SubsourceClient:
     def _extract_season_episode(name: str) -> tuple[int | None, int | None]:
         """
         Extract season/episode from release name.
-        Handles: S01E03, s02e01, S1E5, Season.2.Episode.1, S01.COMPLETE, etc.
+        Handles: S01E03, s02e01, S1E5, Season.2.Episode.1, S01.COMPLETE,
+        first season, 4th season, etc.
         """
         if not name:
             return None, None
 
+        word_to_num = {
+            "first": 1,
+            "one": 1,
+            "second": 2,
+            "two": 2,
+            "third": 3,
+            "three": 3,
+            "fourth": 4,
+            "four": 4,
+            "fifth": 5,
+            "five": 5,
+            "sixth": 6,
+            "six": 6,
+            "seventh": 7,
+            "seven": 7,
+            "eighth": 8,
+            "eight": 8,
+            "ninth": 9,
+            "nine": 9,
+            "tenth": 10,
+            "ten": 10,
+        }
+
         # Standard SxxEyy pattern (most common)
         match = re.search(r"[Ss](\d{1,2})[Ee](\d{1,2})", name)
+        if match:
+            return int(match.group(1)), int(match.group(2))
+
+        # XxY pattern: 4x05, 04x5
+        match = re.search(r"\b(\d{1,2})[xX](\d{1,2})\b", name)
+        if match:
+            return int(match.group(1)), int(match.group(2))
+
+        # Season/episode aliases: season-4-ep-5, episode.05, ep05
+        match = re.search(
+            r"[Ss]eason[\s._-]*(\d{1,2})[\s._-]*(?:[Ee][Pp]?(?:isode)?)?[\s._-]*(\d{1,2})",
+            name,
+            re.IGNORECASE,
+        )
         if match:
             return int(match.group(1)), int(match.group(2))
 
@@ -387,29 +548,64 @@ class SubsourceClient:
         if match:
             return int(match.group(1)), None
 
+        # Textual season patterns: "first season", "season four", "4th season"
+        match = re.search(
+            r"\b(?:(\d{1,2})(?:st|nd|rd|th)?|(first|one|second|two|third|three|fourth|four|fifth|five|sixth|six|seventh|seven|eighth|eight|ninth|nine|tenth|ten))[\s._-]+season(?=$|[\s._-])",
+            name,
+            re.IGNORECASE,
+        )
+        if match:
+            if match.group(1):
+                return int(match.group(1)), None
+            if match.group(2):
+                return word_to_num[match.group(2).lower()], None
+
+        match = re.search(
+            r"\bseason[\s._-]+(?:(\d{1,2})(?:st|nd|rd|th)?|(first|one|second|two|third|three|fourth|four|fifth|five|sixth|six|seventh|seven|eighth|eight|ninth|nine|tenth|ten))(?=$|[\s._-])",
+            name,
+            re.IGNORECASE,
+        )
+        if match:
+            if match.group(1):
+                return int(match.group(1)), None
+            if match.group(2):
+                return word_to_num[match.group(2).lower()], None
+
         return None, None
+
+    def _result_sort_key(
+        self,
+        result: SubtitleResult,
+        params: SubtitleSearchParams,
+    ) -> tuple[float, int]:
+        """Sort results by release similarity first, then quality score."""
+        similarity = 0.0
+        if params.video_filename:
+            similarity = self._filename_similarity(params.video_filename, result.name)
+
+        return (similarity, result.priority_score)
 
     @staticmethod
     def _filename_similarity(video_filename: str, release_name: str) -> float:
         """
         Tính độ tương đồng giữa video filename và subtitle release name.
-        Normalize cả hai: bỏ extension, lowercase, tách tokens.
+        Kết hợp weighted token overlap + sequence similarity cho release names.
 
         Returns:
             float 0.0 - 1.0 (1.0 = giống hoàn toàn)
         """
-        def normalize(name: str) -> str:
-            # Bỏ extension và path
-            name = Path(name).stem
-            # Lowercase, thay dấu phân cách thành space
-            name = re.sub(r"[.\-_\[\]()]", " ", name.lower())
-            # Gộp multiple spaces
-            return re.sub(r"\s+", " ", name).strip()
+        norm_video = SubsourceClient._normalize_match_text(video_filename)
+        norm_release = SubsourceClient._normalize_match_text(release_name)
+        if not norm_video or not norm_release:
+            return 0.0
 
-        norm_video = normalize(video_filename)
-        norm_release = normalize(release_name)
+        sequence_score = SequenceMatcher(None, norm_video, norm_release).ratio()
+        token_score = SubsourceClient._weighted_token_overlap(
+            SubsourceClient._tokenize_match_text(norm_video),
+            SubsourceClient._tokenize_match_text(norm_release),
+        )
 
-        return SequenceMatcher(None, norm_video, norm_release).ratio()
+        return sequence_score * 0.40 + token_score * 0.60
 
     def _parse_subtitle_results(self, data: dict[str, Any]) -> list[SubtitleResult]:
         """Parse Subsource API v1 subtitle response."""
@@ -482,8 +678,16 @@ class SubsourceClient:
         For TV episodes (season + episode set):
         1. Hard filter: only keep subtitles matching the exact SxxEyy
         2. If no exact match, try season-only match (subtitle packs)
-        3. Subtitles without parseable season/episode are kept as fallback
+        3. Subtitles without parseable season/episode are only used when
+           filename similarity is strong enough
         """
+        if not results:
+            return []
+
+        results = [
+            r for r in results
+            if not params.language or r.language.lower() == params.language.lower()
+        ]
         if not results:
             return []
 
@@ -520,35 +724,50 @@ class SubsourceClient:
                     f"Episode filter: no exact match, using {len(season_matches)} season-{params.season} packs "
                     f"(filtered out {len(results) - len(season_matches)} non-matching)"
                 )
-            elif unknown_matches:
-                # Rank untagged subs by filename similarity (nếu có video_filename)
-                if params.video_filename and len(unknown_matches) > 1:
-                    scored = [
-                        (r, self._filename_similarity(params.video_filename, r.name))
-                        for r in unknown_matches
-                    ]
-                    scored.sort(key=lambda x: x[1], reverse=True)
-                    filtered = [r for r, _ in scored]
+            elif unknown_matches and params.video_filename:
+                # Safer fallback for untagged releases:
+                # only accept candidates that look substantially like the exact file.
+                similarity_threshold = 0.75
+                scored = [
+                    (r, self._filename_similarity(params.video_filename, r.name))
+                    for r in unknown_matches
+                ]
+                scored.sort(key=lambda x: x[1], reverse=True)
+                filtered = [
+                    r for r, similarity in scored
+                    if similarity >= similarity_threshold
+                ]
+
+                if filtered:
                     logger.info(
-                        f"Episode filter: no exact match, using {len(filtered)} untagged subs "
-                        f"ranked by filename similarity (best: {scored[0][1]:.2f} — {scored[0][0].name})"
+                        f"Episode filter: no exact match, keeping {len(filtered)} untagged subs "
+                        f"with filename similarity >= {similarity_threshold:.2f} "
+                        f"(best: {scored[0][1]:.2f} — {scored[0][0].name})"
                     )
                 else:
-                    filtered = unknown_matches
+                    filtered = []
                     logger.warning(
-                        f"Episode filter: no season/episode match for S{params.season:02d}E{params.episode:02d}, "
-                        f"falling back to {len(unknown_matches)} untagged subtitles"
+                        f"Episode filter: rejecting {len(unknown_matches)} untagged subtitles "
+                        f"for S{params.season:02d}E{params.episode:02d}; "
+                        f"best filename similarity only {scored[0][1]:.2f}"
                     )
             else:
                 filtered = []
                 logger.warning(
-                    f"Episode filter: all {len(results)} results are from wrong episodes "
-                    f"(wanted S{params.season:02d}E{params.episode:02d}), returning empty"
+                    f"Episode filter: no safe match for S{params.season:02d}E{params.episode:02d}; "
+                    f"returning empty instead of guessing"
                 )
         else:
             filtered = results
 
-        sorted_results = sorted(filtered)
+        if params.video_filename:
+            sorted_results = sorted(
+                filtered,
+                key=lambda r: self._result_sort_key(r, params),
+                reverse=True,
+            )
+        else:
+            sorted_results = sorted(filtered)
 
         if sorted_results:
             logger.info(
@@ -570,6 +789,9 @@ class SubsourceClient:
         self,
         subtitle: SubtitleResult,
         dest_dir: Path,
+        expected_season: int | None = None,
+        expected_episode: int | None = None,
+        video_filename: str | None = None,
     ) -> Path:
         """
         Download subtitle file (usually a ZIP containing .srt).
@@ -596,7 +818,13 @@ class SubsourceClient:
                 zip_path = dest_dir / f"{subtitle.id}.zip"
                 zip_path.write_bytes(response.content)
                 logger.debug(f"Extracting ZIP: {zip_path}")
-                return self._extract_subtitle_from_zip(zip_path, dest_dir)
+                return self._extract_subtitle_from_zip(
+                    zip_path,
+                    dest_dir,
+                    expected_season=expected_season,
+                    expected_episode=expected_episode,
+                    video_filename=video_filename,
+                )
             else:
                 srt_path = dest_dir / f"{subtitle.id}.srt"
                 srt_path.write_bytes(response.content)
@@ -610,7 +838,48 @@ class SubsourceClient:
         except Exception as e:
             raise SubsourceClientError(f"Download error: {e}") from e
 
-    def _extract_subtitle_from_zip(self, zip_path: Path, dest_dir: Path) -> Path:
+    def _zip_member_sort_key(
+        self,
+        member: str,
+        expected_season: int | None = None,
+        expected_episode: int | None = None,
+        video_filename: str | None = None,
+    ) -> tuple[int, float, int]:
+        """Score ZIP members to prefer the correct episode/release."""
+        member_name = Path(member).name
+        parsed_season, parsed_episode = self._extract_season_episode(member_name)
+
+        match_rank = 0
+        if expected_season is not None and expected_episode is not None:
+            if parsed_season == expected_season and parsed_episode == expected_episode:
+                match_rank = 4
+            elif parsed_season == expected_season and parsed_episode is None:
+                match_rank = 2
+            elif parsed_season is None and parsed_episode is None:
+                match_rank = 1
+        elif expected_season is not None:
+            if parsed_season == expected_season:
+                match_rank = 2
+            elif parsed_season is None:
+                match_rank = 1
+        else:
+            match_rank = 1
+
+        similarity = 0.0
+        if video_filename:
+            similarity = self._filename_similarity(video_filename, member_name)
+
+        # Prefer shallower paths when everything else ties.
+        return (match_rank, similarity, -member.count("/"))
+
+    def _extract_subtitle_from_zip(
+        self,
+        zip_path: Path,
+        dest_dir: Path,
+        expected_season: int | None = None,
+        expected_episode: int | None = None,
+        video_filename: str | None = None,
+    ) -> Path:
         """Extract subtitle file from ZIP archive. Supports .srt, .vtt, .ass, .ssa, .sub."""
         SUBTITLE_EXTS = {".srt", ".vtt", ".ass", ".ssa", ".sub"}
 
@@ -627,10 +896,18 @@ class SubsourceClient:
                         f"No subtitle file found in ZIP (files: {zip_ref.namelist()})"
                     )
 
-                # Prefer .srt, then others
+                # Prefer .srt, then choose the member that best matches the target episode/file.
                 srt_files = [f for f in all_subs if f.lower().endswith(".srt")]
-
-                chosen = srt_files[0] if srt_files else all_subs[0]
+                candidate_files = srt_files if srt_files else all_subs
+                chosen = max(
+                    candidate_files,
+                    key=lambda member: self._zip_member_sort_key(
+                        member,
+                        expected_season=expected_season,
+                        expected_episode=expected_episode,
+                        video_filename=video_filename,
+                    ),
+                )
                 zip_ref.extract(chosen, dest_dir)
                 extracted_path = dest_dir / chosen
 

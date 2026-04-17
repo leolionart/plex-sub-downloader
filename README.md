@@ -16,6 +16,8 @@ Plex/Tautulli ──webhook──▶ Subtitle Service ──▶ Subsource (tìm 
 
 - **Auto-download** — tải và upload subtitle khi có media mới hoặc khi bắt đầu play
 - **Multi-language** — hỗ trợ mọi ngôn ngữ trên Subsource, không chỉ tiếng Việt
+- **IMDb-first matching** — ưu tiên IMDb ID từ Plex để tìm đúng phim/show trên Subsource trước khi xét title fallback
+- **Release-aware subtitle selection** — ưu tiên subtitle khớp season/episode, bản phát hành và filename video để giảm nhầm sub
 - **Sync timing** — tự động căn chỉnh timing của sub theo bản gốc bằng AI
 - **AI Translate** — dịch từ bất kỳ ngôn ngữ nguồn nào sang target lang (không chỉ EN→VI)
 - **Translation approval** — chế độ yêu cầu duyệt trước khi dịch, tránh tốn API credits
@@ -23,6 +25,13 @@ Plex/Tautulli ──webhook──▶ Subtitle Service ──▶ Subsource (tìm 
 - **Telegram notifications** — thông báo download, sync, translate, lỗi
 - **Quality filtering** — Retail > Translated > AI, threshold tùy chỉnh
 - **Smart skip** — bỏ qua nếu đã có sub, nếu là embedded/image-based, nếu chất lượng đủ tốt
+
+## Vì sao service này tìm sub chính xác hơn
+
+- **IMDb trước, title sau**: nếu Plex có IMDb ID cho movie/show, service dùng ID đó để tìm đúng `movieId` trên Subsource trước khi làm bất kỳ title match nào.
+- **Title fallback có chấm điểm**: khi thiếu IMDb/TMDb, service không lấy kết quả đầu tiên; nó chấm điểm theo title similarity, year, season và subtitle count để chọn đúng media hơn.
+- **Match theo bản phát hành**: trong các candidate cùng season/episode, service ưu tiên release name giống với filename video thực tế như `AMZN`, `WEB-DL`, `BluRay`, `H.264`, `DDP5.1`.
+- **Season pack vẫn an toàn hơn**: nếu Subsource trả về season pack ZIP, service sẽ cố chọn file bên trong khớp đúng episode cần upload thay vì lấy `.srt` đầu tiên.
 
 ## Cài đặt nhanh
 

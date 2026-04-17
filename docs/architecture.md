@@ -72,12 +72,38 @@ Nhận webhook (library.new / media.play)
     │   - min_quality_threshold: chất lượng sub hiện tại có đủ cao?
     │
     ├─ Search target lang sub trên Subsource
+    │   - Ưu tiên IMDb ID của movie/show từ Plex
+    │   - Nếu thiếu ID: title/year/season scoring để chọn đúng movieId
+    │   - Rank subtitle candidates theo episode/season + release similarity
     │
     ├─ Download + upload lên Plex
+    │   - Nếu ZIP chứa nhiều subtitle files: chọn file con khớp episode tốt nhất
     │
     └─ Nếu không tìm được: fallback AI translate
         (nếu translation_enabled và có OpenAI key)
 ```
+
+## Subsource Matching Strategy
+
+`SubsourceClient` dùng nhiều lớp matching để giảm nhầm subtitle:
+
+1. **Media lookup**
+   - IMDb ID từ Plex show/movie là đường ưu tiên số 1
+   - Nếu không có IMDb/TMDb: chấm điểm kết quả theo title similarity, year, season
+
+2. **Subtitle filtering**
+   - Exact `SxxEyy` match ưu tiên cao nhất
+   - Nếu user chấp nhận season pack: giữ các result đúng season nhưng chưa có episode
+   - Untagged releases chỉ được dùng khi giống filename video đủ mạnh
+
+3. **Release-aware ranking**
+   - So khớp `video_filename` với `release_info`
+   - Weighted tokens cho platform/source/codec/resolution như `AMZN`, `WEB-DL`, `BluRay`, `H.264`, `1080p`
+   - Khi nhiều result cùng đúng episode, candidate giống bản phát hành thật hơn sẽ lên trước
+
+4. **ZIP member selection**
+   - Nếu subtitle tải về là season pack, service chấm điểm từng file con
+   - Ưu tiên exact episode trong ZIP trước, rồi mới fallback sang similarity theo filename
 
 ## Preview Flow (Sync UI)
 

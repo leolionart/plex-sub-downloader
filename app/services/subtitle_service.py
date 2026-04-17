@@ -191,7 +191,11 @@ class SubtitleService:
 
             # Step 4: Search subtitle
             log.info(f"[Step 4/7] Searching {self.runtime_config.default_language} subtitle")
-            subtitles = await self._find_subtitles(metadata, log)
+            subtitles = await self._find_subtitles(
+                metadata,
+                log,
+                video_filename=self._get_video_filename(video),
+            )
             if not subtitles:
                 log.warning(f"[Step 4/7] ✗ No {self.runtime_config.default_language} subtitle found for: {metadata.title}")
 
@@ -257,7 +261,12 @@ class SubtitleService:
                     continue
                 try:
                     log.info(f"[Step 6/7] Downloading subtitle ({i+1}/{len(subtitles)}): {candidate.name}")
-                    subtitle_path = await self._download_subtitle(candidate, metadata, log)
+                    subtitle_path = await self._download_subtitle(
+                        candidate,
+                        metadata,
+                        log,
+                        video_filename=self._get_video_filename(video),
+                    )
                     subtitle = candidate
                     log.info(f"[Step 6/7] ✓ Downloaded to: {subtitle_path}")
                     break
@@ -387,6 +396,16 @@ class SubtitleService:
 
         return True, "All checks passed"
 
+    @staticmethod
+    def _get_video_filename(video: Video) -> str | None:
+        """Best-effort extract filename from Plex media parts for subtitle matching."""
+        try:
+            if video.media and video.media[0].parts:
+                return Path(video.media[0].parts[0].file).name
+        except Exception:
+            return None
+        return None
+
     def _meets_quality_threshold(self, subtitle: SubtitleResult) -> bool:
         """
         Check xem subtitle có đáp ứng quality threshold không.
@@ -500,6 +519,7 @@ class SubtitleService:
         subtitle: SubtitleResult,
         metadata: MediaMetadata,
         log: RequestContextLogger,
+        video_filename: str | None = None,
     ) -> Path:
         """
         Download subtitle vào temp directory.
@@ -521,6 +541,9 @@ class SubtitleService:
         subtitle_path = await self.subsource_client.download_subtitle(
             subtitle,
             dest_dir,
+            expected_season=metadata.season_number,
+            expected_episode=metadata.episode_number,
+            video_filename=video_filename,
         )
 
         log.info(f"✓ Downloaded to: {subtitle_path}")
@@ -975,6 +998,7 @@ class SubtitleService:
         video = await asyncio.to_thread(self.plex_client.get_video, rating_key)
         metadata = await asyncio.to_thread(self.plex_client.extract_metadata, video)
         log.info(f"[Sync] Media: {metadata}")
+        video_filename = self._get_video_filename(video)
 
         dest_dir = self.temp_dir / f"{rating_key}_sync"
         dest_dir.mkdir(parents=True, exist_ok=True)
@@ -995,9 +1019,19 @@ class SubtitleService:
             # 2) Try source_lang on Subsource
             if not ref_path:
                 log.info(f"[Sync] No text-based {source_lang.upper()} sub on Plex — searching Subsource...")
-                ref_results = await self._find_subtitles(metadata, log, language=source_lang)
+                ref_results = await self._find_subtitles(
+                    metadata,
+                    log,
+                    language=source_lang,
+                    video_filename=video_filename,
+                )
                 if ref_results:
-                    downloaded = await self._download_first_available(ref_results, metadata, log)
+                    downloaded = await self._download_first_available(
+                        ref_results,
+                        metadata,
+                        log,
+                        video_filename=video_filename,
+                    )
                     if downloaded:
                         _, ref_path = downloaded
                         ref_source = "subsource"
@@ -1009,9 +1043,19 @@ class SubtitleService:
                     l for l in _FALLBACK_SOURCE_LANGS if l != source_lang and l != "en"
                 ]
                 for fb_lang in fallback_order:
-                    fb_results = await self._find_subtitles(metadata, log, language=fb_lang)
+                    fb_results = await self._find_subtitles(
+                        metadata,
+                        log,
+                        language=fb_lang,
+                        video_filename=video_filename,
+                    )
                     if fb_results:
-                        downloaded = await self._download_first_available(fb_results, metadata, log)
+                        downloaded = await self._download_first_available(
+                            fb_results,
+                            metadata,
+                            log,
+                            video_filename=video_filename,
+                        )
                         if downloaded:
                             _, ref_path = downloaded
                             ref_source = "subsource"
@@ -1038,7 +1082,7 @@ class SubtitleService:
             if not vi_path:
                 log.info("[Sync] No Vietsub on Plex — searching Subsource...")
                 vi_path = await self._get_vietsub_from_subsource(
-                    metadata, log, dest_dir, subtitle_id,
+                    metadata, log, dest_dir, subtitle_id, video_filename=video_filename,
                 )
                 vi_source = "subsource"
 
@@ -1110,6 +1154,7 @@ class SubtitleService:
         log: RequestContextLogger,
         dest_dir: Path,
         subtitle_id: str | None = None,
+        video_filename: str | None = None,
     ) -> Path | None:
         """
         Tìm và download Vietnamese subtitle từ Subsource.
@@ -1124,7 +1169,12 @@ class SubtitleService:
             Path đến file .srt hoặc None
         """
         lang = self.runtime_config.default_language
-        results = await self._find_subtitles(metadata, log, language=lang)
+        results = await self._find_subtitles(
+            metadata,
+            log,
+            language=lang,
+            video_filename=video_filename,
+        )
 
         if not results:
             log.warning("[Sync] No Vietnamese subtitle found on Subsource")
@@ -1138,7 +1188,12 @@ class SubtitleService:
             else:
                 log.warning(f"[Sync] Subtitle ID {subtitle_id} not found, using best match")
 
-        downloaded = await self._download_first_available(results, metadata, log)
+        downloaded = await self._download_first_available(
+            results,
+            metadata,
+            log,
+            video_filename=video_filename,
+        )
         if not downloaded:
             log.warning("[Sync] All Subsource downloads failed")
             return None
@@ -1165,12 +1220,18 @@ class SubtitleService:
 
         video = await asyncio.to_thread(self.plex_client.get_video, rating_key)
         metadata = await asyncio.to_thread(self.plex_client.extract_metadata, video)
+        video_filename = self._get_video_filename(video)
 
         dest_dir = self.temp_dir / f"{rating_key}_manual_upload"
         dest_dir.mkdir(parents=True, exist_ok=True)
 
         try:
-            results = await self._find_subtitles(metadata, log, language=lang)
+            results = await self._find_subtitles(
+                metadata,
+                log,
+                language=lang,
+                video_filename=video_filename,
+            )
             if not results:
                 return {
                     "status": "error",
@@ -1187,7 +1248,12 @@ class SubtitleService:
                     }
                 selected_results = [selected]
 
-            downloaded = await self._download_first_available(selected_results, metadata, log)
+            downloaded = await self._download_first_available(
+                selected_results,
+                metadata,
+                log,
+                video_filename=video_filename,
+            )
             if not downloaded:
                 return {
                     "status": "error",
@@ -1369,9 +1435,19 @@ class SubtitleService:
         target_lang = self.runtime_config.default_language
 
         # 1) Subsource target language
-        target_results = await self._find_subtitles(metadata, log, language=target_lang)
+        target_results = await self._find_subtitles(
+            metadata,
+            log,
+            language=target_lang,
+            video_filename=self._get_video_filename(video),
+        )
         if target_results:
-            downloaded_target = await self._download_first_available(target_results, metadata, log)
+            downloaded_target = await self._download_first_available(
+                target_results,
+                metadata,
+                log,
+                video_filename=self._get_video_filename(video),
+            )
             if downloaded_target:
                 subtitle, subtitle_path = downloaded_target
                 log.info(f"[TranslatePath] Resolved from Subsource target ({target_lang}): {subtitle.name}")
@@ -1404,7 +1480,12 @@ class SubtitleService:
             )
             en_results = await self._search_subtitles_by_params(en_params, log)
             if en_results:
-                downloaded_en = await self._download_first_available(en_results, metadata, log)
+                downloaded_en = await self._download_first_available(
+                    en_results,
+                    metadata,
+                    log,
+                    video_filename=video_filename,
+                )
                 if downloaded_en:
                     subtitle, subtitle_path = downloaded_en
                     log.info(f"[TranslatePath] Resolved from Subsource English: {subtitle.name}")
@@ -1550,6 +1631,7 @@ class SubtitleService:
         subtitles: list[SubtitleResult],
         metadata: MediaMetadata,
         log: RequestContextLogger,
+        video_filename: str | None = None,
     ) -> tuple[SubtitleResult, Path] | None:
         """
         Thử download lần lượt từng subtitle cho đến khi thành công.
@@ -1560,7 +1642,12 @@ class SubtitleService:
         for i, candidate in enumerate(subtitles):
             try:
                 log.info(f"Downloading subtitle ({i+1}/{len(subtitles)}): {candidate.name}")
-                path = await self._download_subtitle(candidate, metadata, log)
+                path = await self._download_subtitle(
+                    candidate,
+                    metadata,
+                    log,
+                    video_filename=video_filename,
+                )
                 return candidate, path
             except Exception as e:
                 log.warning(f"Download failed for '{candidate.name}': {e}")

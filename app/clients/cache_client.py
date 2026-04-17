@@ -85,6 +85,7 @@ class CacheClient:
             f"year={params.year}" if params.year else "",
             f"s={params.season}" if params.season else "",
             f"e={params.episode}" if params.episode else "",
+            f"vf={params.video_filename}" if params.video_filename else "",
         ]
 
         key_string = ":".join(filter(None, key_parts))
