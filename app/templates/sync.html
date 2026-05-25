@@ -813,8 +813,8 @@
 
         if (hasViCandidates) {
             const viCandidateLabel = data.has_vi_on_plex
-                ? `${data.vi_candidates.length} bản Vietsub khác tìm thấy trên Subsource`
-                : `${data.vi_candidates.length} bản Vietsub tìm thấy trên Subsource`;
+                ? `${data.vi_candidates.length} bản Vietsub khác tìm thấy`
+                : `${data.vi_candidates.length} bản Vietsub tìm thấy`;
             subInfoHtml += `
                 <div class="sub-info">
                     <span class="icon ok"></span>
@@ -822,13 +822,13 @@
                 </div>
                 <select class="sub-select" id="vi-sub-select" onchange="onSubSelect(this.value)">
                     ${data.vi_candidates.map((c, i) => `
-                        <option value="${c.id}" ${i === 0 ? 'selected' : ''}>
-                            ${c.name} (${c.quality}, ${c.downloads} downloads${c.rating ? ', rating: ' + c.rating.toFixed(1) : ''})
+                        <option value="${c.provider}:${c.id}" ${i === 0 ? 'selected' : ''}>
+                            [${c.provider}] ${c.name} (${c.quality}, ${c.downloads ?? 0} downloads${c.rating ? ', rating: ' + c.rating.toFixed(1) : ''})
                         </option>
                     `).join('')}
                 </select>
             `;
-            selectedSubtitleId = data.vi_candidates[0].id;
+            selectedSubtitleId = `${data.vi_candidates[0].provider}:${data.vi_candidates[0].id}`;
         } else if (!data.has_vi_on_plex && !vi.detail) {
             subInfoHtml += `
                 <div class="sub-info">

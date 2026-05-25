@@ -85,6 +85,7 @@ class SubsourceClient:
     """
 
     def __init__(self, config: RuntimeConfig) -> None:
+        self.name = "subsource"
         self._config = config
         self.base_url = config.subsource_base_url.rstrip("/")
         self.api_key = config.subsource_api_key
@@ -648,6 +649,7 @@ class SubsourceClient:
 
                 result = SubtitleResult(
                     id=subtitle_id,
+                    provider=self.name,
                     name=name,
                     language=item.get("language", ""),
                     download_url=download_url,

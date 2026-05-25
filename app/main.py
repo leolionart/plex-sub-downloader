@@ -149,7 +149,10 @@ def verify_webhook_secret(x_webhook_secret: str | None = Header(None)) -> None:
 
 
 def _is_configured(rc: RuntimeConfig | None) -> bool:
-    return bool(rc and rc.plex_url and rc.plex_token and rc.subsource_api_key)
+    has_provider = bool(
+        rc and (rc.subsource_api_key or rc.opensubtitles_api_key or rc.subdl_api_key)
+    )
+    return bool(rc and rc.plex_url and rc.plex_token and has_provider)
 
 
 @app.get("/setup", response_class=HTMLResponse)

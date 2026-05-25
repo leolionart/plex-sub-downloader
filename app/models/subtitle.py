@@ -16,6 +16,7 @@ class SubtitleResult(BaseModel):
 
     # Basic info
     id: str = Field(..., description="Subtitle ID")
+    provider: str = Field(default="subsource", description="Subtitle provider name")
     name: str = Field(..., description="Subtitle filename")
     language: str = Field(..., description="Language code (vi, en, etc.)")
 

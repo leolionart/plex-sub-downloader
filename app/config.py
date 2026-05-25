@@ -4,7 +4,7 @@ Configuration module using Pydantic Settings.
 """
 
 from typing import Literal
-from pydantic import Field, field_validator
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -36,6 +36,29 @@ class Settings(BaseSettings):
     # Retry Configuration (for API clients)
     max_retries: int = Field(default=3, ge=1, le=10, description="Max retries for API calls")
     retry_delay: int = Field(default=2, ge=1, description="Initial retry delay in seconds")
+
+    # Runtime config seed values (used only when data/config.json does not exist)
+    plex_url: str | None = None
+    plex_token: str | None = None
+    subsource_api_key: str | None = None
+    subsource_base_url: str = "https://api.subsource.net/api"
+    opensubtitles_api_key: str | None = None
+    opensubtitles_username: str | None = None
+    opensubtitles_password: str | None = None
+    opensubtitles_base_url: str = "https://api.opensubtitles.com/api/v1"
+    subdl_api_key: str | None = None
+    subdl_base_url: str = "https://api.subdl.com/api/v1"
+    default_language: str = "vi"
+    openai_api_key: str | None = None
+    openai_base_url: str = "https://api.openai.com/v1"
+    openai_model: str = "gpt-4o-mini"
+    telegram_bot_token: str | None = None
+    telegram_chat_id: str | None = None
+    webhook_secret: str | None = None
+    cache_enabled: bool = True
+    redis_url: str | None = None
+    cache_ttl_seconds: int = 3600
+    temp_dir: str = "/tmp/plex-subtitles"
 
     # Development/Testing
     mock_mode: bool = Field(

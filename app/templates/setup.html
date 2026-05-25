@@ -245,20 +245,60 @@
     </div>
 </div>
 
-<!-- 2) Subsource API -->
+<!-- 2) Subtitle Providers -->
 <div class="setup-section">
     <div class="setup-section-header">
         <span class="step-number">2</span>
-        <h2>Subsource API</h2>
+        <h2>Subtitle Providers</h2>
     </div>
     <div class="setup-section-body">
-        <div class="form-group" style="margin-bottom: 0;">
-            <label for="subsource_api_key">Subsource API Key</label>
-            <div class="secret-wrapper">
-                <input id="subsource_api_key" class="form-input" placeholder="Subsource API key">
-                <span id="subsource_api_key_badge" class="secret-badge">Configured</span>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="subsource_api_key">Subsource API Key</label>
+                <div class="secret-wrapper">
+                    <input id="subsource_api_key" class="form-input" placeholder="Subsource API key">
+                    <span id="subsource_api_key_badge" class="secret-badge">Configured</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="opensubtitles_api_key">OpenSubtitles API Key</label>
+                <div class="secret-wrapper">
+                    <input id="opensubtitles_api_key" class="form-input" placeholder="OpenSubtitles API key">
+                    <span id="opensubtitles_api_key_badge" class="secret-badge">Configured</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="subdl_api_key">SubDL API Key</label>
+                <div class="secret-wrapper">
+                    <input id="subdl_api_key" class="form-input" placeholder="SubDL API key">
+                    <span id="subdl_api_key_badge" class="secret-badge">Configured</span>
+                </div>
             </div>
         </div>
+        <details style="margin-top: 10px;">
+            <summary style="cursor:pointer; color: var(--text-muted); font-size: 13px;">OpenSubtitles login & provider URLs</summary>
+            <div class="form-row" style="margin-top: 8px;">
+                <div class="form-group">
+                    <label for="opensubtitles_username">OpenSubtitles Username</label>
+                    <input id="opensubtitles_username" class="form-input" placeholder="username">
+                </div>
+                <div class="form-group">
+                    <label for="opensubtitles_password">OpenSubtitles Password</label>
+                    <div class="secret-wrapper">
+                        <input id="opensubtitles_password" class="form-input" placeholder="password" type="password">
+                        <span id="opensubtitles_password_badge" class="secret-badge">Configured</span>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="opensubtitles_base_url">OpenSubtitles Base URL</label>
+                    <input id="opensubtitles_base_url" class="form-input" value="https://api.opensubtitles.com/api/v1">
+                </div>
+                <div class="form-group">
+                    <label for="subdl_base_url">SubDL Base URL</label>
+                    <input id="subdl_base_url" class="form-input" value="https://api.subdl.com/api/v1">
+                </div>
+            </div>
+        </details>
     </div>
 </div>
 
@@ -361,7 +401,7 @@
     const $ = (id) => document.getElementById(id);
 
     // ── Secret fields ──────────────────────────────────────
-    const _secretFields = ['plex_token', 'subsource_api_key', 'openai_api_key', 'webhook_secret', 'telegram_bot_token'];
+    const _secretFields = ['plex_token', 'subsource_api_key', 'opensubtitles_api_key', 'opensubtitles_password', 'subdl_api_key', 'openai_api_key', 'webhook_secret', 'telegram_bot_token'];
     const _secretConfigured = {};
     const _secretDirty = {};
 
@@ -398,6 +438,9 @@
 
         fill('plex_url', data.plex_url);
         fill('openai_model', data.openai_model || 'gpt-4o-mini');
+        fill('opensubtitles_username', data.opensubtitles_username || '');
+        fill('opensubtitles_base_url', data.opensubtitles_base_url || 'https://api.opensubtitles.com/api/v1');
+        fill('subdl_base_url', data.subdl_base_url || 'https://api.subdl.com/api/v1');
         fill('telegram_chat_id', data.telegram_chat_id || '');
         fill('redis_url', data.redis_url || '');
         fill('cache_ttl_seconds', data.cache_ttl_seconds || 3600);
@@ -428,8 +471,8 @@
     function renderStatus(data) {
         const hasToken = data.plex_token && data.plex_token !== '';
         const hasUrl = data.plex_url && data.plex_url !== '';
-        const hasSubsource = data.subsource_api_key && data.subsource_api_key !== '';
-        const ok = hasUrl && hasToken && hasSubsource;
+        const hasProvider = Boolean(data.subsource_api_key || data.opensubtitles_api_key || data.subdl_api_key);
+        const ok = hasUrl && hasToken && hasProvider;
         $('plex-status').innerHTML = ok
             ? '<span class="status-badge ok"><span class="status-dot ok"></span>Connected</span>'
             : '<span class="status-badge missing"><span class="status-dot error"></span>Missing</span>';
@@ -441,6 +484,9 @@
             plex_url: $('plex_url').value.trim() || null,
             openai_model: $('openai_model').value.trim() || 'gpt-4o-mini',
             openai_base_url: $('openai_base_url').value.trim() || 'https://api.openai.com/v1',
+            opensubtitles_username: $('opensubtitles_username').value.trim() || null,
+            opensubtitles_base_url: $('opensubtitles_base_url').value.trim() || 'https://api.opensubtitles.com/api/v1',
+            subdl_base_url: $('subdl_base_url').value.trim() || 'https://api.subdl.com/api/v1',
             telegram_chat_id: $('telegram_chat_id').value.trim() || null,
             cache_enabled: $('cache_enabled').value === 'true',
             redis_url: $('redis_url').value.trim() || null,

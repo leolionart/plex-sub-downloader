@@ -3,7 +3,6 @@ Runtime configuration model persisted in JSON store.
 Represents dynamic secrets and feature flags managed via setup UI.
 """
 
-from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 from app.models.settings import SubtitleSettings
@@ -19,6 +18,18 @@ class RuntimeConfig(BaseModel):
     subsource_base_url: str = Field(
         default="https://api.subsource.net/api",
         description="Subsource API base URL",
+    )
+    opensubtitles_api_key: str | None = Field(default=None, description="OpenSubtitles API key")
+    opensubtitles_username: str | None = Field(default=None, description="OpenSubtitles username")
+    opensubtitles_password: str | None = Field(default=None, description="OpenSubtitles password")
+    opensubtitles_base_url: str = Field(
+        default="https://api.opensubtitles.com/api/v1",
+        description="OpenSubtitles REST API base URL",
+    )
+    subdl_api_key: str | None = Field(default=None, description="SubDL API key")
+    subdl_base_url: str = Field(
+        default="https://api.subdl.com/api/v1",
+        description="SubDL API base URL",
     )
 
     default_language: str = Field(
@@ -62,6 +73,11 @@ class RuntimeConfig(BaseModel):
     def strip_subsource_trailing_slash(cls, v: str) -> str:
         return v.rstrip("/") if v else v
 
+    @field_validator("opensubtitles_base_url", "subdl_base_url", mode="before")
+    @classmethod
+    def strip_provider_trailing_slash(cls, v: str) -> str:
+        return v.rstrip("/") if v else v
+
     @property
     def ai_available(self) -> bool:
         """Check if AI features (translation/sync) are available."""
@@ -72,6 +88,9 @@ class RuntimeConfig(BaseModel):
         return self.model_copy(update={
             "plex_token": "***" if self.plex_token else None,
             "subsource_api_key": "***" if self.subsource_api_key else None,
+            "opensubtitles_api_key": "***" if self.opensubtitles_api_key else None,
+            "opensubtitles_password": "***" if self.opensubtitles_password else None,
+            "subdl_api_key": "***" if self.subdl_api_key else None,
             "openai_api_key": "***" if self.openai_api_key else None,
             "telegram_bot_token": "***" if self.telegram_bot_token else None,
             "webhook_secret": "***" if self.webhook_secret else None,

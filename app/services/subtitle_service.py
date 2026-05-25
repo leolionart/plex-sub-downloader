@@ -4,7 +4,6 @@ Subtitle service - orchestrates subtitle search và upload workflow.
 
 import asyncio
 import json
-import logging
 from pathlib import Path
 from threading import RLock
 from typing import Any, cast
@@ -13,11 +12,8 @@ from datetime import datetime
 from plexapi.video import Video
 
 from app.clients.plex_client import PlexClient, PlexClientError
-from app.clients.subsource_client import SubsourceClient, SubsourceClientError, LANGUAGE_MAP
-
-# Languages to try as source for AI translation when EN not available
-# Ordered by prevalence on Subsource
-_FALLBACK_SOURCE_LANGS = ["ko", "ja", "zh", "fr", "es", "de", "pt", "ru", "it", "ar"]
+from app.clients.subsource_client import SubsourceClientError, LANGUAGE_MAP
+from app.clients.subtitle_provider_manager import SubtitleProviderManager
 from app.clients.telegram_client import TelegramClient
 from app.clients.cache_client import CacheClient
 from app.clients.openai_translation_client import OpenAITranslationClient, TranslationClientError
@@ -30,6 +26,9 @@ from app.models.settings import ServiceConfig, SubtitleSettings
 from app.utils.logger import get_logger, RequestContextLogger
 
 logger = get_logger(__name__)
+
+# Languages to try as source for AI translation when EN not available.
+_FALLBACK_SOURCE_LANGS = ["ko", "ja", "zh", "fr", "es", "de", "pt", "ru", "it", "ar"]
 
 
 class SubtitleServiceError(Exception):
@@ -56,7 +55,7 @@ class SubtitleService:
 
         from app.config import settings as infra_settings
         self.plex_client = PlexClient(runtime_config, mock_mode=infra_settings.mock_mode)
-        self.subsource_client = SubsourceClient(runtime_config)
+        self.subtitle_provider_manager = SubtitleProviderManager(runtime_config)
         self.telegram_client = TelegramClient(runtime_config)
         self.cache_client = CacheClient(runtime_config)
         self.translation_client = OpenAITranslationClient(runtime_config)
@@ -83,7 +82,7 @@ class SubtitleService:
 
     async def close(self) -> None:
         """Cleanup resources."""
-        await self.subsource_client.close()
+        await self.subtitle_provider_manager.close()
         await self.telegram_client.close()
         await self.cache_client.close()
         await self.translation_client.close()
@@ -107,7 +106,7 @@ class SubtitleService:
         # Re-init clients with new credentials
         from app.config import settings as infra_settings
         self.plex_client = PlexClient(new_runtime, mock_mode=infra_settings.mock_mode)
-        self.subsource_client = SubsourceClient(new_runtime)
+        self.subtitle_provider_manager = SubtitleProviderManager(new_runtime)
         self.telegram_client = TelegramClient(new_runtime)
         self.cache_client = CacheClient(new_runtime)
         self.translation_client = OpenAITranslationClient(new_runtime)
@@ -478,13 +477,14 @@ class SubtitleService:
             log.info(f"Cache hit: {len(cached_results)} subtitle(s)")
             return cached_results
 
-        log.info("Cache miss — querying Subsource API")
+        log.info("Cache miss — querying subtitle providers")
         # Search via API — errors treated as "not found" so fallback can kick in
         try:
-            results = await self.subsource_client.search_subtitles(search_params)
-            log.info(f"Subsource API returned {len(results)} result(s)")
-        except SubsourceClientError as e:
-            log.error(f"Subsource API error: {e}")
+            results = await self.subtitle_provider_manager.search_subtitles(search_params)
+            providers = sorted({r.provider for r in results})
+            log.info(f"Subtitle providers returned {len(results)} result(s)", providers=providers)
+        except Exception as e:
+            log.error(f"Subtitle provider search error: {e}")
             results = []
 
         # Cache results
@@ -538,7 +538,7 @@ class SubtitleService:
 
         log.info("Downloading subtitle", url=str(subtitle.download_url))
 
-        subtitle_path = await self.subsource_client.download_subtitle(
+        subtitle_path = await self.subtitle_provider_manager.download_subtitle(
             subtitle,
             dest_dir,
             expected_season=metadata.season_number,
@@ -885,7 +885,7 @@ class SubtitleService:
             )
 
             try:
-                multi_results = await self.subsource_client.search_subtitles_multi_lang(
+                multi_results = await self.subtitle_provider_manager.search_subtitles_multi_lang(
                     base_params, langs_to_search,
                 )
             except Exception as e:
@@ -897,6 +897,7 @@ class SubtitleService:
             vi_candidates = [
                 {
                     "id": r.id,
+                    "provider": r.provider,
                     "name": r.name,
                     "quality": r.quality_type,
                     "downloads": r.downloads,
@@ -916,6 +917,7 @@ class SubtitleService:
                         source_candidates = [
                             {
                                 "id": r.id,
+                                "provider": r.provider,
                                 "name": r.name,
                                 "quality": r.quality_type,
                                 "downloads": r.downloads,
@@ -1182,7 +1184,7 @@ class SubtitleService:
 
         # Nếu user chỉ định subtitle_id, tìm subtitle đó
         if subtitle_id:
-            target = next((r for r in results if r.id == subtitle_id), None)
+            target = next((r for r in results if self._subtitle_id_matches(r, subtitle_id)), None)
             if target:
                 results = [target]
             else:
@@ -1240,7 +1242,7 @@ class SubtitleService:
 
             selected_results = results
             if subtitle_id:
-                selected = next((r for r in results if r.id == subtitle_id), None)
+                selected = next((r for r in results if self._subtitle_id_matches(r, subtitle_id)), None)
                 if not selected:
                     return {
                         "status": "error",
@@ -1277,6 +1279,7 @@ class SubtitleService:
                 "message": f"Uploaded {lang.upper()} subtitle: {subtitle.name}",
                 "subtitle": {
                     "id": subtitle.id,
+                    "provider": subtitle.provider,
                     "name": subtitle.name,
                     "quality": subtitle.quality_type,
                     "downloads": subtitle.downloads,
@@ -1616,9 +1619,9 @@ class SubtitleService:
             return cached_results
 
         try:
-            results = await self.subsource_client.search_subtitles(params)
-        except SubsourceClientError as e:
-            log.warning(f"Subsource search failed: {e} — treating as no results")
+            results = await self.subtitle_provider_manager.search_subtitles(params)
+        except Exception as e:
+            log.warning(f"Subtitle provider search failed: {e} — treating as no results")
             results = []
 
         if results:
@@ -1655,6 +1658,14 @@ class SubtitleService:
                     log.info("Trying next subtitle...")
                 continue
         return None
+
+    @staticmethod
+    def _subtitle_id_matches(subtitle: SubtitleResult, requested_id: str) -> bool:
+        """Accept legacy raw IDs and provider-qualified IDs from the UI."""
+        return requested_id in {
+            subtitle.id,
+            f"{subtitle.provider}:{subtitle.id}",
+        }
 
     def get_translation_stats(self) -> dict:
         """Get translation statistics (from persistent store)."""

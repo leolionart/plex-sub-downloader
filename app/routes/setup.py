@@ -127,7 +127,12 @@ async def reload_config_from_disk() -> dict[str, str]:
 @router.get("/status")
 async def setup_status() -> dict[str, Any]:
     _, _, runtime_config = _get_services()
-    configured = bool(runtime_config.plex_url and runtime_config.plex_token and runtime_config.subsource_api_key)
+    has_provider = bool(
+        runtime_config.subsource_api_key
+        or runtime_config.opensubtitles_api_key
+        or runtime_config.subdl_api_key
+    )
+    configured = bool(runtime_config.plex_url and runtime_config.plex_token and has_provider)
     return {"configured": configured}
 
 

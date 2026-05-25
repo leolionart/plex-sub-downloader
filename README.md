@@ -39,7 +39,7 @@ Plex/Tautulli ──webhook──▶ Subtitle Service ──▶ Subsource (tìm 
 
 - Docker & Docker Compose
 - Plex Media Server (với Webhooks enabled — Plex Pass)
-- Tài khoản [Subsource](https://subsource.net) + API key
+- Ít nhất một subtitle provider API key: [Subsource](https://subsource.net), [OpenSubtitles](https://www.opensubtitles.com), hoặc [SubDL](https://subdl.com)
 
 ### Docker Compose
 
@@ -55,6 +55,8 @@ services:
       - PLEX_URL=http://192.168.1.x:32400
       - PLEX_TOKEN=your_plex_token
       - SUBSOURCE_API_KEY=your_subsource_key
+      - OPENSUBTITLES_API_KEY=your_opensubtitles_key
+      - SUBDL_API_KEY=your_subdl_key
     restart: unless-stopped
 ```
 
@@ -67,7 +69,7 @@ docker compose up -d
 ![1771806404878](image/README/1771806404878.png)
 
 1. Mở **http://your-server:8000/setup**
-2. Nhập Plex URL, Plex Token, Subsource API Key
+2. Nhập Plex URL, Plex Token và ít nhất một subtitle provider API key
 3. (Tuỳ chọn) Cấu hình OpenAI key để bật AI sync/translate
 4. Lưu → kiểm tra kết nối
 
