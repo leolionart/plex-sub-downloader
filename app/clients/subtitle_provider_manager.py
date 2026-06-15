@@ -23,7 +23,10 @@ class SubtitleProviderManager:
     """Search multiple subtitle providers concurrently."""
 
     def __init__(self, config: RuntimeConfig) -> None:
-        providers: list[SubtitleProvider] = [SubsourceClient(config)]
+        self._config = config
+        providers: list[SubtitleProvider] = []
+        if config.subsource_api_key:
+            providers.append(SubsourceClient(config))
         if config.opensubtitles_api_key:
             providers.append(OpenSubtitlesClient(config))
         if config.subdl_api_key:
@@ -31,6 +34,51 @@ class SubtitleProviderManager:
 
         self.providers = providers
         self._by_name = {provider.name: provider for provider in providers}
+        enabled = ", ".join(self.provider_names)
+        skipped = [
+            item["name"] for item in self.provider_status()
+            if not item["enabled"]
+        ]
+        logger.info(f"Subtitle providers enabled: {enabled}")
+        if skipped:
+            logger.info(f"Subtitle providers skipped: {', '.join(skipped)}")
+
+    @property
+    def provider_names(self) -> list[str]:
+        """Enabled provider names in search order."""
+        return [provider.name for provider in self.providers]
+
+    @property
+    def cache_scope(self) -> str:
+        """Cache namespace; avoids stale one-provider results after config changes."""
+        return ",".join(self.provider_names) or "none"
+
+    def provider_status(self) -> list[dict[str, str | bool]]:
+        """Return configured/enabled status for every supported provider."""
+        return [
+            {
+                "name": "subsource",
+                "enabled": bool(self._config.subsource_api_key),
+                "configured": bool(self._config.subsource_api_key),
+                "reason": "configured" if self._config.subsource_api_key else "missing subsource_api_key",
+            },
+            {
+                "name": "opensubtitles",
+                "enabled": bool(self._config.opensubtitles_api_key),
+                "configured": bool(self._config.opensubtitles_api_key),
+                "reason": (
+                    "configured"
+                    if self._config.opensubtitles_api_key
+                    else "missing opensubtitles_api_key"
+                ),
+            },
+            {
+                "name": "subdl",
+                "enabled": bool(self._config.subdl_api_key),
+                "configured": bool(self._config.subdl_api_key),
+                "reason": "configured" if self._config.subdl_api_key else "missing subdl_api_key",
+            },
+        ]
 
     async def close(self) -> None:
         await asyncio.gather(
@@ -39,6 +87,17 @@ class SubtitleProviderManager:
         )
 
     async def search_subtitles(self, params: SubtitleSearchParams) -> list[SubtitleResult]:
+        logger.info(
+            "Searching subtitle providers",
+            extra={
+                "providers": self.provider_names,
+                "language": params.language,
+                "title": params.title,
+                "imdb_id": params.imdb_id,
+                "season": params.season,
+                "episode": params.episode,
+            },
+        )
         tasks = [provider.search_subtitles(params) for provider in self.providers]
         responses = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -47,10 +106,22 @@ class SubtitleProviderManager:
             if isinstance(response, Exception):
                 logger.warning(f"{provider.name} search failed: {response}")
                 continue
-            logger.info(f"{provider.name} returned {len(response)} subtitle(s)")
+            logger.info(
+                f"{provider.name} returned {len(response)} subtitle(s)",
+                extra={"provider": provider.name, "result_count": len(response)},
+            )
             merged.extend(response)
 
-        return self._sort_results(merged, params)
+        sorted_results = self._sort_results(merged, params)
+        logger.info(
+            f"Subtitle provider search merged {len(sorted_results)} result(s)",
+            extra={
+                "providers": self.provider_names,
+                "result_count": len(sorted_results),
+                "result_providers": sorted({result.provider for result in sorted_results}),
+            },
+        )
+        return sorted_results
 
     async def search_subtitles_multi_lang(
         self,
@@ -68,6 +139,11 @@ class SubtitleProviderManager:
             if isinstance(response, Exception):
                 logger.warning(f"{provider.name} multi-language search failed: {response}")
                 continue
+            per_lang_counts = {lang: len(results) for lang, results in response.items()}
+            logger.info(
+                f"{provider.name} multi-language search returned {per_lang_counts}",
+                extra={"provider": provider.name, "languages": languages},
+            )
             for lang, results in response.items():
                 merged.setdefault(lang, []).extend(results)
 

@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from app.clients.subtitle_provider_manager import SubtitleProviderManager
+from app.models.runtime_config import RuntimeConfig
 from app.models.subtitle import SubtitleResult, SubtitleSearchParams
 
 
@@ -93,3 +94,23 @@ async def test_download_routes_to_result_provider(tmp_path: Path) -> None:
     assert path.name == "subdl-2.srt"
     assert subsource.downloaded == []
     assert subdl.downloaded == ["2"]
+
+
+@pytest.mark.asyncio
+async def test_provider_status_and_cache_scope_reflect_configured_keys() -> None:
+    manager = SubtitleProviderManager(
+        RuntimeConfig(
+            subsource_api_key="subsource-key",
+            opensubtitles_api_key="opensubtitles-key",
+        )
+    )
+
+    assert manager.provider_names == ["subsource", "opensubtitles"]
+    assert manager.cache_scope == "subsource,opensubtitles"
+
+    status = {item["name"]: item for item in manager.provider_status()}
+    assert status["subsource"]["enabled"] is True
+    assert status["opensubtitles"]["enabled"] is True
+    assert status["subdl"]["enabled"] is False
+    assert status["subdl"]["reason"] == "missing subdl_api_key"
+    await manager.close()

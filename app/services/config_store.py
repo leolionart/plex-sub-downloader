@@ -41,8 +41,9 @@ class ConfigStore:
             try:
                 data = json.loads(self.config_path.read_text(encoding="utf-8"))
                 migrated = self._migrate_settings(data)
+                backfilled = self._backfill_provider_fields_from_env(data)
                 runtime = RuntimeConfig(**data)
-                if migrated:
+                if migrated or backfilled:
                     self._write(runtime)
                 return runtime
             except (json.JSONDecodeError, ValidationError):
@@ -73,6 +74,34 @@ class ConfigStore:
             migrated = True
 
         return migrated
+
+    def _backfill_provider_fields_from_env(self, data: dict[str, Any]) -> bool:
+        """
+        Backfill provider fields added after config.json already existed.
+
+        ConfigStore seeds from env only on first run. Without this, adding
+        OPENSUBTITLES_API_KEY or SUBDL_API_KEY to Docker/env after data/config.json
+        exists will not enable those providers.
+        """
+        backfilled = False
+        env_fields = [
+            "opensubtitles_api_key",
+            "opensubtitles_username",
+            "opensubtitles_password",
+            "opensubtitles_base_url",
+            "subdl_api_key",
+            "subdl_base_url",
+        ]
+
+        for field in env_fields:
+            if data.get(field):
+                continue
+            value = getattr(settings, field, None)
+            if value:
+                data[field] = value
+                backfilled = True
+
+        return backfilled
 
     def _from_env(self) -> RuntimeConfig:
         """Seed RuntimeConfig from existing env-based settings for compatibility."""

@@ -13,7 +13,6 @@ from fastapi import FastAPI, Request, HTTPException, Header, BackgroundTasks
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.models.runtime_config import RuntimeConfig
@@ -27,6 +26,7 @@ from app.routes import translation
 from app.routes import setup
 from app.routes import logs
 from app.routes import sync
+from app.routes import subtitles
 
 # Setup logging
 setup_logging()
@@ -107,6 +107,7 @@ app.include_router(translation.router)
 app.include_router(setup.router)
 app.include_router(logs.router)
 app.include_router(sync.router)
+app.include_router(subtitles.router)
 
 
 @app.middleware("http")
@@ -239,6 +240,12 @@ async def api_info() -> dict[str, Any]:
             "webhook": "/webhook",
             "health": "/health",
             "settings_api": "/api/settings",
+            "subtitle_providers": "/api/subtitles/providers",
+            "subtitle_search": "/api/subtitles/search",
+            "subtitle_download": "/api/subtitles/download",
+            "subtitle_upload": "/api/subtitles/upload",
+            "sync_preview": "/api/sync/preview",
+            "sync_execute": "/api/sync/execute",
             "docs": "/docs",
         },
     }

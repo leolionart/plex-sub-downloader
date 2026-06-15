@@ -1,7 +1,7 @@
 """
 Sync timing API routes.
 Đồng bộ timing Vietsub dựa trên Engsub chuẩn kèm phim.
-Hỗ trợ tìm Vietsub từ Subsource khi chưa có trên Plex.
+Hỗ trợ tìm subtitle từ các provider đã bật khi chưa có trên Plex.
 """
 
 import asyncio
@@ -27,7 +27,7 @@ class SyncRequest(BaseModel):
 
 
 class UploadTargetRequest(BaseModel):
-    """Request để upload target subtitle thủ công từ Subsource."""
+    """Request để upload target subtitle thủ công từ provider."""
     rating_key: str
     subtitle_id: str | None = None
 
@@ -48,7 +48,7 @@ def get_subtitle_service():
 @router.post("/preview")
 async def preview_sync(request: SyncRequest):
     """
-    Preview sync: kiểm tra subtitle có sẵn trên Plex + Subsource.
+    Preview sync: kiểm tra subtitle có sẵn trên Plex + configured providers.
 
     Trả về metadata, trạng thái English sub, danh sách Vietnamese sub candidates.
     """
@@ -68,7 +68,7 @@ async def execute_sync(request: SyncRequest):
     """
     Execute sync timing cho một media item.
 
-    Tìm Engsub trên Plex + Vietsub trên Plex/Subsource, sync timing, upload.
+    Tìm Engsub trên Plex + Vietsub trên Plex/provider, sync timing, upload.
     """
     service = get_subtitle_service()
 
@@ -90,7 +90,7 @@ async def execute_sync(request: SyncRequest):
 @router.post("/upload-target")
 async def upload_target_subtitle(request: UploadTargetRequest):
     """
-    Chủ động tìm và upload target subtitle từ Subsource.
+    Chủ động tìm và upload target subtitle từ configured providers.
 
     Dùng cho trường hợp subtitle hiện có trên Plex sai episode
     hoặc user muốn thử một bản khác dù auto mode đã skip.
@@ -118,6 +118,7 @@ async def get_sync_status():
         "sync_enabled": ss.auto_sync_timing,
         "ai_available": service.runtime_config.ai_available,
         "model": service.runtime_config.openai_model,
+        "subtitle_providers": service.get_subtitle_provider_status(),
     }
 
 

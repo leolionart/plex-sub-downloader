@@ -469,12 +469,24 @@ class SubtitleService:
             video_filename=video_filename,
         )
 
-        log.info(f"Searching subtitles: lang={search_params.language}, title={search_params.title}, imdb={search_params.imdb_id}")
+        cache_scope = self.subtitle_provider_manager.cache_scope
+        log.info(
+            f"Searching subtitles: lang={search_params.language}, title={search_params.title}, "
+            f"imdb={search_params.imdb_id}, providers={cache_scope or 'none'}"
+        )
 
         # Try cache first
-        cached_results = await self.cache_client.get_search_results(search_params)
+        cached_results = await self.cache_client.get_search_results(
+            search_params,
+            scope=cache_scope,
+        )
         if cached_results:
-            log.info(f"Cache hit: {len(cached_results)} subtitle(s)")
+            cached_providers = sorted({r.provider for r in cached_results})
+            log.info(
+                f"Cache hit: {len(cached_results)} subtitle(s)",
+                providers=cached_providers,
+                cache_scope=cache_scope,
+            )
             return cached_results
 
         log.info("Cache miss — querying subtitle providers")
@@ -489,7 +501,11 @@ class SubtitleService:
 
         # Cache results
         if results:
-            await self.cache_client.set_search_results(search_params, results)
+            await self.cache_client.set_search_results(
+                search_params,
+                results,
+                scope=cache_scope,
+            )
 
         if not results:
             log.warning(f"No subtitle found for lang={lang}")
@@ -514,6 +530,127 @@ class SubtitleService:
         )
         return best
 
+    def get_subtitle_provider_status(self) -> dict[str, Any]:
+        """Return subtitle provider status for API/UI diagnostics."""
+        return {
+            "enabled": self.subtitle_provider_manager.provider_names,
+            "cache_scope": self.subtitle_provider_manager.cache_scope,
+            "providers": self.subtitle_provider_manager.provider_status(),
+        }
+
+    @staticmethod
+    def _subtitle_result_payload(result: SubtitleResult) -> dict[str, Any]:
+        """Serialize subtitle result for public API responses."""
+        return {
+            "id": result.id,
+            "provider": result.provider,
+            "provider_id": f"{result.provider}:{result.id}",
+            "name": result.name,
+            "language": result.language,
+            "quality": result.quality_type,
+            "downloads": result.downloads,
+            "rating": result.rating,
+            "score": result.priority_score,
+            "release_info": result.release_info,
+            "season": result.season,
+            "episode": result.episode,
+        }
+
+    async def search_subtitles_for_media(
+        self,
+        rating_key: str,
+        log: RequestContextLogger,
+        language: str | None = None,
+        use_cache: bool = True,
+    ) -> dict[str, Any]:
+        """Search configured providers for a Plex media item."""
+        video = await asyncio.to_thread(self.plex_client.get_video, rating_key)
+        metadata = await asyncio.to_thread(self.plex_client.extract_metadata, video)
+        video_filename = self._get_video_filename(video)
+        lang = language or self.runtime_config.default_language
+
+        params = SubtitleSearchParams(
+            language=lang,
+            title=metadata.search_title,
+            year=metadata.year,
+            imdb_id=metadata.imdb_id,
+            tmdb_id=metadata.tmdb_id,
+            season=metadata.season_number,
+            episode=metadata.episode_number,
+            video_filename=video_filename,
+        )
+        results = await self._search_subtitles_by_params(params, log, use_cache=use_cache)
+
+        return {
+            "rating_key": rating_key,
+            "title": str(metadata),
+            "media_type": metadata.media_type,
+            "language": lang,
+            "query": params.model_dump(),
+            "provider_status": self.get_subtitle_provider_status(),
+            "provider_counts": self._provider_counts(results),
+            "candidates": [self._subtitle_result_payload(result) for result in results],
+        }
+
+    async def download_subtitle_for_media(
+        self,
+        rating_key: str,
+        log: RequestContextLogger,
+        language: str | None = None,
+        subtitle_id: str | None = None,
+        use_cache: bool = True,
+    ) -> dict[str, Any] | None:
+        """Search and download a subtitle file for API clients without uploading it."""
+        video = await asyncio.to_thread(self.plex_client.get_video, rating_key)
+        metadata = await asyncio.to_thread(self.plex_client.extract_metadata, video)
+        video_filename = self._get_video_filename(video)
+        lang = language or self.runtime_config.default_language
+
+        params = SubtitleSearchParams(
+            language=lang,
+            title=metadata.search_title,
+            year=metadata.year,
+            imdb_id=metadata.imdb_id,
+            tmdb_id=metadata.tmdb_id,
+            season=metadata.season_number,
+            episode=metadata.episode_number,
+            video_filename=video_filename,
+        )
+        results = await self._search_subtitles_by_params(params, log, use_cache=use_cache)
+        if subtitle_id:
+            selected = next((r for r in results if self._subtitle_id_matches(r, subtitle_id)), None)
+            results = [selected] if selected else []
+        if not results:
+            return None
+
+        download_metadata = metadata.model_copy(update={"rating_key": f"{rating_key}_api_download"})
+        dest_dir = self.temp_dir / download_metadata.rating_key
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        downloaded = await self._download_first_available(
+            results,
+            download_metadata,
+            log,
+            video_filename=video_filename,
+        )
+        if not downloaded:
+            return None
+
+        subtitle, path = downloaded
+        return {
+            "path": path,
+            "cleanup_dir": dest_dir,
+            "subtitle": self._subtitle_result_payload(subtitle),
+            "title": str(metadata),
+            "language": lang,
+        }
+
+    @staticmethod
+    def _provider_counts(results: list[SubtitleResult]) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for result in results:
+            counts[result.provider] = counts.get(result.provider, 0) + 1
+        return counts
+
     async def _download_subtitle(
         self,
         subtitle: SubtitleResult,
@@ -536,7 +673,12 @@ class SubtitleService:
         dest_dir = self.temp_dir / metadata.rating_key
         dest_dir.mkdir(parents=True, exist_ok=True)
 
-        log.info("Downloading subtitle", url=str(subtitle.download_url))
+        log.info(
+            f"Downloading subtitle via {subtitle.provider}",
+            url=str(subtitle.download_url),
+            provider=subtitle.provider,
+            subtitle_id=subtitle.id,
+        )
 
         subtitle_path = await self.subtitle_provider_manager.download_subtitle(
             subtitle,
@@ -894,6 +1036,11 @@ class SubtitleService:
 
             # Kết quả target lang (VI)
             target_results = multi_results.get(lang, [])
+            target_providers = sorted({r.provider for r in target_results})
+            log.info(
+                f"[Preview] Target provider results: {len(target_results)}",
+                providers=target_providers,
+            )
             vi_candidates = [
                 {
                     "id": r.id,
@@ -928,17 +1075,25 @@ class SubtitleService:
                         ]
                         source_status["available"] = True
                         has_source_available = True
-                        source_status["source"] = "subsource"
-                        source_status["detail"] = f"Tìm được {len(source_candidates)} {lang_name} sub trên Subsource"
-                        log.info(f"[Preview] Source sub from Subsource: {fb_lang} ({len(source_candidates)})")
+                        source_providers = sorted({r.provider for r in fb_results})
+                        source_status["source"] = "provider"
+                        source_status["providers"] = source_providers
+                        source_status["detail"] = (
+                            f"Tìm được {len(source_candidates)} {lang_name} sub "
+                            f"trên {', '.join(source_providers)}"
+                        )
+                        log.info(
+                            f"[Preview] Source sub from providers: {fb_lang} ({len(source_candidates)})",
+                            providers=source_providers,
+                        )
                         break
 
                 if not source_status["available"]:
                     existing_detail = source_status.get("detail")
                     if existing_detail:
-                        source_status["detail"] = f"{existing_detail}; Subsource không có bản phù hợp"
+                        source_status["detail"] = f"{existing_detail}; không có bản phù hợp từ provider đã bật"
                     else:
-                        source_status["detail"] = "Không tìm thấy sub nguồn trên Plex hoặc Subsource"
+                        source_status["detail"] = "Không tìm thấy sub nguồn trên Plex hoặc provider đã bật"
 
             has_target_available = has_vi_text or len(vi_candidates) > 0
 
@@ -956,6 +1111,7 @@ class SubtitleService:
                 "has_vi_on_plex": has_vi_text,
                 "source_candidates": source_candidates,
                 "vi_candidates": vi_candidates,
+                "subtitle_providers": self.subtitle_provider_manager.provider_status(),
                 "can_sync": can_sync,
                 "can_translate": can_translate,
                 "can_improve": can_improve,
@@ -1018,9 +1174,12 @@ class SubtitleService:
                 video, source_lang, dest_dir,
             )
 
-            # 2) Try source_lang on Subsource
+            # 2) Try source_lang on configured subtitle providers
             if not ref_path:
-                log.info(f"[Sync] No text-based {source_lang.upper()} sub on Plex — searching Subsource...")
+                log.info(
+                    f"[Sync] No text-based {source_lang.upper()} sub on Plex — "
+                    "searching subtitle providers..."
+                )
                 ref_results = await self._find_subtitles(
                     metadata,
                     log,
@@ -1035,9 +1194,12 @@ class SubtitleService:
                         video_filename=video_filename,
                     )
                     if downloaded:
-                        _, ref_path = downloaded
-                        ref_source = "subsource"
-                        log.info(f"[Sync] Downloaded {source_lang.upper()} sub from Subsource: {ref_path.name}")
+                        subtitle, ref_path = downloaded
+                        ref_source = subtitle.provider
+                        log.info(
+                            f"[Sync] Downloaded {source_lang.upper()} sub from {subtitle.provider}: "
+                            f"{ref_path.name}"
+                        )
 
             # 3) Fallback: try other languages (EN first if source_lang wasn't EN, then rest)
             if not ref_path:
@@ -1059,21 +1221,23 @@ class SubtitleService:
                             video_filename=video_filename,
                         )
                         if downloaded:
-                            _, ref_path = downloaded
-                            ref_source = "subsource"
+                            subtitle, ref_path = downloaded
+                            ref_source = subtitle.provider
                             ref_lang_used = fb_lang
-                            log.info(f"[Sync] Using fallback {fb_lang.upper()} sub from Subsource")
+                            log.info(
+                                f"[Sync] Using fallback {fb_lang.upper()} sub from {subtitle.provider}"
+                            )
                             break
 
             if not ref_path:
                 return {
                     "status": "error",
-                    "message": "Không tìm được subtitle nào làm timing reference trên Plex hoặc Subsource",
+                    "message": "Không tìm được subtitle nào làm timing reference trên Plex hoặc provider đã bật",
                 }
 
             en_path = ref_path  # Alias for legacy variable used below
 
-            # Download Vietnamese subtitle: Plex first, Subsource fallback
+            # Download Vietnamese subtitle: Plex first, provider fallback
             lang = self.runtime_config.default_language
             vi_path = await asyncio.to_thread(
                 self.plex_client.download_existing_subtitle,
@@ -1082,16 +1246,18 @@ class SubtitleService:
             vi_source = "plex"
 
             if not vi_path:
-                log.info("[Sync] No Vietsub on Plex — searching Subsource...")
-                vi_path = await self._get_vietsub_from_subsource(
+                log.info("[Sync] No Vietsub on Plex — searching subtitle providers...")
+                vi_downloaded = await self._get_target_subtitle_from_providers(
                     metadata, log, dest_dir, subtitle_id, video_filename=video_filename,
                 )
-                vi_source = "subsource"
+                if vi_downloaded:
+                    vi_subtitle, vi_path = vi_downloaded
+                    vi_source = vi_subtitle.provider
 
             if not vi_path:
                 return {
                     "status": "error",
-                    "message": f"No {lang} subtitle found on Plex or Subsource",
+                    "message": f"No {lang} subtitle found on Plex or configured providers",
                 }
 
             log.info(f"[Sync] Using Vietsub from {vi_source}: {vi_path.name}")
@@ -1150,25 +1316,25 @@ class SubtitleService:
             import shutil
             shutil.rmtree(dest_dir, ignore_errors=True)
 
-    async def _get_vietsub_from_subsource(
+    async def _get_target_subtitle_from_providers(
         self,
         metadata: MediaMetadata,
         log: RequestContextLogger,
         dest_dir: Path,
         subtitle_id: str | None = None,
         video_filename: str | None = None,
-    ) -> Path | None:
+    ) -> tuple[SubtitleResult, Path] | None:
         """
-        Tìm và download Vietnamese subtitle từ Subsource.
+        Tìm và download target subtitle từ các provider đã bật.
 
         Args:
             metadata: MediaMetadata
             log: Logger
             dest_dir: Thư mục lưu tạm
-            subtitle_id: Subsource subtitle ID cụ thể (nếu user chọn từ UI)
+            subtitle_id: provider-qualified hoặc legacy raw subtitle ID (nếu user chọn từ UI)
 
         Returns:
-            Path đến file .srt hoặc None
+            Tuple (subtitle, path) hoặc None
         """
         lang = self.runtime_config.default_language
         results = await self._find_subtitles(
@@ -1179,7 +1345,7 @@ class SubtitleService:
         )
 
         if not results:
-            log.warning("[Sync] No Vietnamese subtitle found on Subsource")
+            log.warning("[Sync] No target subtitle found from configured providers")
             return None
 
         # Nếu user chỉ định subtitle_id, tìm subtitle đó
@@ -1197,12 +1363,12 @@ class SubtitleService:
             video_filename=video_filename,
         )
         if not downloaded:
-            log.warning("[Sync] All Subsource downloads failed")
+            log.warning("[Sync] All provider subtitle downloads failed")
             return None
 
         subtitle, path = downloaded
-        log.info(f"[Sync] Downloaded Vietsub from Subsource: {subtitle.name}")
-        return path
+        log.info(f"[Sync] Downloaded target subtitle from {subtitle.provider}: {subtitle.name}")
+        return subtitle, path
 
     async def execute_manual_target_upload_for_media(
         self,
@@ -1606,6 +1772,7 @@ class SubtitleService:
         self,
         params: SubtitleSearchParams,
         log: RequestContextLogger,
+        use_cache: bool = True,
     ) -> list[SubtitleResult]:
         """
         Helper to search subtitles với custom params.
@@ -1614,8 +1781,19 @@ class SubtitleService:
             List of SubtitleResult sorted by priority
         """
         # Try cache first
-        cached_results = await self.cache_client.get_search_results(params)
+        cache_scope = self.subtitle_provider_manager.cache_scope
+        cached_results = (
+            await self.cache_client.get_search_results(params, scope=cache_scope)
+            if use_cache
+            else None
+        )
         if cached_results:
+            cached_providers = sorted({r.provider for r in cached_results})
+            log.info(
+                f"Cache hit: {len(cached_results)} subtitle(s)",
+                providers=cached_providers,
+                cache_scope=cache_scope,
+            )
             return cached_results
 
         try:
@@ -1624,8 +1802,8 @@ class SubtitleService:
             log.warning(f"Subtitle provider search failed: {e} — treating as no results")
             results = []
 
-        if results:
-            await self.cache_client.set_search_results(params, results)
+        if results and use_cache:
+            await self.cache_client.set_search_results(params, results, scope=cache_scope)
 
         return results
 

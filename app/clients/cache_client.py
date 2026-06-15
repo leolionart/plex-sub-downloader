@@ -3,12 +3,8 @@ Redis cache client cho subtitle search results.
 Giảm API calls bằng cách cache kết quả search.
 """
 
-import logging
 import json
 from typing import Any
-from datetime import timedelta
-
-import httpx
 
 from app.models.runtime_config import RuntimeConfig
 from app.models.subtitle import SubtitleResult, SubtitleSearchParams
@@ -70,7 +66,7 @@ class CacheClient:
         if self._redis_client:
             await self._redis_client.close()
 
-    def _make_cache_key(self, params: SubtitleSearchParams) -> str:
+    def _make_cache_key(self, params: SubtitleSearchParams, scope: str | None = None) -> str:
         """
         Generate cache key từ search params.
 
@@ -78,6 +74,7 @@ class CacheClient:
         """
         # Create unique key từ search parameters
         key_parts = [
+            f"scope={scope}" if scope else "",
             f"lang={params.language}",
             f"imdb={params.imdb_id}" if params.imdb_id else "",
             f"tmdb={params.tmdb_id}" if params.tmdb_id else "",
@@ -97,6 +94,7 @@ class CacheClient:
     async def get_search_results(
         self,
         params: SubtitleSearchParams,
+        scope: str | None = None,
     ) -> list[SubtitleResult] | None:
         """
         Lấy cached search results.
@@ -107,7 +105,7 @@ class CacheClient:
         if not self.enabled:
             return None
 
-        cache_key = self._make_cache_key(params)
+        cache_key = self._make_cache_key(params, scope=scope)
 
         try:
             # Try Redis first
@@ -140,6 +138,7 @@ class CacheClient:
         self,
         params: SubtitleSearchParams,
         results: list[SubtitleResult],
+        scope: str | None = None,
     ) -> bool:
         """
         Cache search results.
@@ -154,7 +153,7 @@ class CacheClient:
         if not self.enabled or not results:
             return False
 
-        cache_key = self._make_cache_key(params)
+        cache_key = self._make_cache_key(params, scope=scope)
 
         try:
             # Serialize results
