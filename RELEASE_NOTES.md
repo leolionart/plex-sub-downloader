@@ -1,5 +1,11 @@
 # Release Notes
 
+## Unreleased - 2026-06-16 07:06 +07
+
+Generated before push from commits:
+
+- `114233c` fix: follow opensubtitles redirects
+
 ## Unreleased - 2026-06-16 06:51 +07
 
 Generated before push from commits:
