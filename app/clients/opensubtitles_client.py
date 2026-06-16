@@ -40,6 +40,7 @@ class OpenSubtitlesClient:
         self._token: str | None = None
         self._client = httpx.AsyncClient(
             timeout=httpx.Timeout(30.0, connect=10.0),
+            follow_redirects=True,
             headers={
                 "Api-Key": self.api_key or "",
                 "User-Agent": "PlexSubtitleService/0.4.1",
