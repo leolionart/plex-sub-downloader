@@ -77,21 +77,7 @@ class OpenSubtitlesClient:
         if not self.enabled:
             return []
 
-        query: dict[str, Any] = {
-            "languages": params.language,
-            "order_by": "download_count",
-            "order_direction": "desc",
-        }
-        if imdb_number := self._imdb_number(params.imdb_id):
-            query["imdb_id"] = imdb_number
-        elif params.title:
-            query["query"] = params.title
-        if params.year:
-            query["year"] = params.year
-        if params.season:
-            query["season_number"] = params.season
-        if params.episode:
-            query["episode_number"] = params.episode
+        query = self._search_query(params)
 
         try:
             response = await self._client.get(f"{self.base_url}/subtitles", params=query)
@@ -101,6 +87,26 @@ class OpenSubtitlesClient:
 
         results = self._parse_results(response.json(), params.language)
         return self._rank_and_filter(results, params)
+
+    def _search_query(self, params: SubtitleSearchParams) -> list[tuple[str, Any]]:
+        """Build query params in OpenSubtitles canonical order to avoid 301 redirects."""
+        query: list[tuple[str, Any]] = []
+        if params.episode:
+            query.append(("episode_number", params.episode))
+        if imdb_number := self._imdb_number(params.imdb_id):
+            query.append(("imdb_id", imdb_number))
+        elif params.title:
+            query.append(("query", params.title))
+        query.extend([
+            ("languages", params.language),
+            ("order_by", "download_count"),
+            ("order_direction", "desc"),
+        ])
+        if params.season:
+            query.append(("season_number", params.season))
+        if params.year:
+            query.append(("year", params.year))
+        return query
 
     def _parse_results(self, data: dict[str, Any], language: str) -> list[SubtitleResult]:
         results: list[SubtitleResult] = []
