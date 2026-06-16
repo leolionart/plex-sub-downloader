@@ -1,5 +1,11 @@
 # Release Notes
 
+## Unreleased - 2026-06-16 08:09 +07
+
+Generated before push from commits:
+
+- `25a095c` feat: allow explicit subtitle search overrides
+
 ## Unreleased - 2026-06-16 07:53 +07
 
 Generated before push from commits:
