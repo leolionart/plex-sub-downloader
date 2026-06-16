@@ -1,5 +1,11 @@
 # Release Notes
 
+## Unreleased - 2026-06-16 07:53 +07
+
+Generated before push from commits:
+
+- `9a63445` feat: validate ambiguous subtitle matches with ai
+
 ## Unreleased - 2026-06-16 07:37 +07
 
 Generated before push from commits:
