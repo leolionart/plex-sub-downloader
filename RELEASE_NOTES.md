@@ -1,5 +1,11 @@
 # Release Notes
 
+## Unreleased - 2026-06-16 07:37 +07
+
+Generated before push from commits:
+
+- `a8f2209` fix: handle subdl rate limits safely
+
 ## Unreleased - 2026-06-16 07:19 +07
 
 Generated before push from commits:
