@@ -17,7 +17,9 @@ from app.clients.subtitle_provider_manager import SubtitleProviderManager
 from app.clients.telegram_client import TelegramClient
 from app.clients.cache_client import CacheClient
 from app.clients.openai_translation_client import OpenAITranslationClient, TranslationClientError
+from app.clients.subtitle_match_validator_client import SubtitleMatchValidatorClient
 from app.clients.sync_client import SubtitleSyncClient, SyncClientError
+from app.clients.subsource_client import SubsourceClient
 from app.models.runtime_config import RuntimeConfig
 from app.services.stats_store import StatsStore
 from app.models.webhook import MediaMetadata
@@ -33,6 +35,7 @@ _FALLBACK_SOURCE_LANGS = ["ko", "ja", "zh", "fr", "es", "de", "pt", "ru", "it", 
 
 class SubtitleServiceError(Exception):
     """Base exception for subtitle service errors."""
+
     pass
 
 
@@ -49,23 +52,29 @@ class SubtitleService:
     6. Upload subtitle lên Plex
     """
 
-    def __init__(self, runtime_config: RuntimeConfig, service_config: ServiceConfig | None = None) -> None:
+    def __init__(
+        self, runtime_config: RuntimeConfig, service_config: ServiceConfig | None = None
+    ) -> None:
         """Initialize service with clients and runtime config."""
         self.runtime_config = runtime_config
 
         from app.config import settings as infra_settings
+
         self.plex_client = PlexClient(runtime_config, mock_mode=infra_settings.mock_mode)
         self.subtitle_provider_manager = SubtitleProviderManager(runtime_config)
         self.telegram_client = TelegramClient(runtime_config)
         self.cache_client = CacheClient(runtime_config)
         self.translation_client = OpenAITranslationClient(runtime_config)
+        self.match_validator_client = SubtitleMatchValidatorClient(runtime_config)
         self.sync_client = SubtitleSyncClient(runtime_config)
 
         self.temp_dir = Path(runtime_config.temp_dir)
         self.temp_dir.mkdir(parents=True, exist_ok=True)
 
         # Runtime configuration/state
-        self.config = service_config or ServiceConfig(subtitle_settings=runtime_config.subtitle_settings)
+        self.config = service_config or ServiceConfig(
+            subtitle_settings=runtime_config.subtitle_settings
+        )
 
         # Persistent stats store (survives restarts)
         self.stats = StatsStore()
@@ -86,6 +95,7 @@ class SubtitleService:
         await self.telegram_client.close()
         await self.cache_client.close()
         await self.translation_client.close()
+        await self.match_validator_client.close()
         await self.sync_client.close()
 
     def update_settings(self, new_settings: SubtitleSettings) -> None:
@@ -105,11 +115,13 @@ class SubtitleService:
 
         # Re-init clients with new credentials
         from app.config import settings as infra_settings
+
         self.plex_client = PlexClient(new_runtime, mock_mode=infra_settings.mock_mode)
         self.subtitle_provider_manager = SubtitleProviderManager(new_runtime)
         self.telegram_client = TelegramClient(new_runtime)
         self.cache_client = CacheClient(new_runtime)
         self.translation_client = OpenAITranslationClient(new_runtime)
+        self.match_validator_client = SubtitleMatchValidatorClient(new_runtime)
         self.sync_client = SubtitleSyncClient(new_runtime)
 
         # Ensure temp dir exists
@@ -196,14 +208,13 @@ class SubtitleService:
                 video_filename=self._get_video_filename(video),
             )
             if not subtitles:
-                log.warning(f"[Step 4/7] ✗ No {self.runtime_config.default_language} subtitle found for: {metadata.title}")
+                log.warning(
+                    f"[Step 4/7] ✗ No {self.runtime_config.default_language} subtitle found for: {metadata.title}"
+                )
 
                 # Try proactive translation (if enabled) or translation fallback
                 ss = self.config.subtitle_settings
-                should_translate = (
-                    ss.translation_enabled
-                    or ss.auto_translate_if_no_vi
-                )
+                should_translate = ss.translation_enabled or ss.auto_translate_if_no_vi
                 if should_translate:
                     mode = "proactive" if ss.auto_translate_if_no_vi else "fallback"
                     log.info(f"[Step 4/7] Attempting {mode} translation (en → vi)")
@@ -229,7 +240,10 @@ class SubtitleService:
 
             # Step 5: Quality threshold check on best match
             subtitle = subtitles[0]
-            log.info(f"[Step 4/7] ✓ Found {len(subtitles)} subtitle(s). Best: {subtitle.name}", score=subtitle.priority_score)
+            log.info(
+                f"[Step 4/7] ✓ Found {len(subtitles)} subtitle(s). Best: {subtitle.name}",
+                score=subtitle.priority_score,
+            )
 
             # Notify: subtitle found
             await self.telegram_client.notify_subtitle_found(
@@ -240,10 +254,10 @@ class SubtitleService:
                 total_results=len(subtitles),
             )
 
-            log.info(f"[Step 5/7] Checking quality threshold")
+            log.info("[Step 5/7] Checking quality threshold")
             if not self._meets_quality_threshold(subtitle):
                 log.info(
-                    f"[Step 5/7] ✗ Quality below threshold",
+                    "[Step 5/7] ✗ Quality below threshold",
                     quality=subtitle.quality_type,
                     threshold=self.config.subtitle_settings.min_quality_threshold,
                 )
@@ -259,7 +273,9 @@ class SubtitleService:
                 if not self._meets_quality_threshold(candidate):
                     continue
                 try:
-                    log.info(f"[Step 6/7] Downloading subtitle ({i+1}/{len(subtitles)}): {candidate.name}")
+                    log.info(
+                        f"[Step 6/7] Downloading subtitle ({i+1}/{len(subtitles)}): {candidate.name}"
+                    )
                     subtitle_path = await self._download_subtitle(
                         candidate,
                         metadata,
@@ -272,7 +288,7 @@ class SubtitleService:
                 except Exception as e:
                     log.warning(f"[Step 6/7] Download failed for '{candidate.name}': {e}")
                     if i < len(subtitles) - 1:
-                        log.info(f"[Step 6/7] Trying next subtitle...")
+                        log.info("[Step 6/7] Trying next subtitle...")
                     continue
 
             if not subtitle_path:
@@ -283,15 +299,18 @@ class SubtitleService:
                 }
 
             # Step 7: Upload to Plex
-            log.info(f"[Step 7/7] Uploading subtitle to Plex")
+            log.info("[Step 7/7] Uploading subtitle to Plex")
             await self._upload_to_plex(video, subtitle_path, log)
-            log.info(f"[Step 7/7] ✓ Uploaded successfully")
+            log.info("[Step 7/7] ✓ Uploaded successfully")
 
             # Step 7b: Sync timing (if enabled and English reference available)
             sync_result = None
             if self.config.subtitle_settings.auto_sync_timing:
                 sync_result = await self._try_sync_timing(
-                    video, metadata, subtitle_path, log,
+                    video,
+                    metadata,
+                    subtitle_path,
+                    log,
                 )
 
             # Update persistent stats
@@ -354,8 +373,6 @@ class SubtitleService:
         Returns:
             (should_download: bool, reason: str)
         """
-        settings = self.config.subtitle_settings
-
         # Get subtitle details
         sub_details = await asyncio.to_thread(
             self.plex_client.get_subtitle_details,
@@ -368,7 +385,10 @@ class SubtitleService:
         # Check 1: Đã có subtitle và setting là skip
         if sub_details["has_subtitle"] and runtime_settings.skip_if_has_subtitle:
             if not runtime_settings.replace_existing:
-                return False, f"Already has {sub_details['subtitle_count']} subtitle(s) and skip_if_has_subtitle=True"
+                return (
+                    False,
+                    f"Already has {sub_details['subtitle_count']} subtitle(s) and skip_if_has_subtitle=True",
+                )
 
         # Check 2: Có forced subtitle và setting là skip forced
         if runtime_settings.skip_forced_subtitles:
@@ -384,14 +404,18 @@ class SubtitleService:
             for sub_info in sub_details["subtitle_info"]:
                 if sub_info.get("is_embedded"):
                     codec = sub_info.get("codec", "unknown")
-                    log.info(f"[Step 3/7] Found embedded {self.runtime_config.default_language} sub (codec={codec}) — skipping")
+                    log.info(
+                        f"[Step 3/7] Found embedded {self.runtime_config.default_language} sub (codec={codec}) — skipping"
+                    )
                     return False, "Has embedded subtitle and skip_if_embedded=True"
 
         # Check 4: Replace mode - chỉ download nếu có subtitle mới tốt hơn
         if sub_details["has_subtitle"] and runtime_settings.replace_existing:
             # TODO: Implement quality comparison với existing subtitle
             # For now, cho phép replace
-            log.info("Replace mode enabled - will replace existing subtitle if better quality found")
+            log.info(
+                "Replace mode enabled - will replace existing subtitle if better quality found"
+            )
 
         return True, "All checks passed"
 
@@ -487,7 +511,7 @@ class SubtitleService:
                 providers=cached_providers,
                 cache_scope=cache_scope,
             )
-            return cached_results
+            return await self._validate_subtitle_matches(search_params, cached_results, log)
 
         log.info("Cache miss — querying subtitle providers")
         # Search via API — errors treated as "not found" so fallback can kick in
@@ -498,6 +522,8 @@ class SubtitleService:
         except Exception as e:
             log.error(f"Subtitle provider search error: {e}")
             results = []
+
+        results = await self._validate_subtitle_matches(search_params, results, log)
 
         # Cache results
         if results:
@@ -554,6 +580,9 @@ class SubtitleService:
             "release_info": result.release_info,
             "season": result.season,
             "episode": result.episode,
+            "match_validation": result.match_validation,
+            "match_confidence": result.match_confidence,
+            "match_reason": result.match_reason,
         }
 
     async def search_subtitles_for_media(
@@ -746,6 +775,7 @@ class SubtitleService:
             temp_subdir = self.temp_dir / rating_key
             if temp_subdir.exists():
                 import shutil
+
                 shutil.rmtree(temp_subdir)
                 logger.debug(f"Cleaned up temp directory: {temp_subdir}")
         except Exception as e:
@@ -890,6 +920,7 @@ class SubtitleService:
             # Cleanup sync temp files
             try:
                 import shutil
+
                 shutil.rmtree(dest_dir, ignore_errors=True)
             except Exception:
                 pass
@@ -927,11 +958,15 @@ class SubtitleService:
             # Kiểm tra target lang trên Plex ngay đầu tiên để biết trạng thái hiện tại.
             # Manual preview vẫn có thể tiếp tục tìm candidate thay thế trên Subsource.
             target_details = await asyncio.to_thread(
-                self.plex_client.get_subtitle_details, video, lang,
+                self.plex_client.get_subtitle_details,
+                video,
+                lang,
             )
             vi_path = await asyncio.to_thread(
                 self.plex_client.download_existing_subtitle,
-                video, lang, dest_dir,
+                video,
+                lang,
+                dest_dir,
             )
             has_vi_text = vi_path is not None
 
@@ -943,16 +978,19 @@ class SubtitleService:
 
             # 1) Tìm source sub trên Plex: lấy tất cả langs ≠ target
             plex_langs = await asyncio.to_thread(
-                self.plex_client._get_existing_subtitle_languages, video,
+                self.plex_client._get_existing_subtitle_languages,
+                video,
             )
-            source_langs_on_plex = [l for l in plex_langs if l != lang]
+            source_langs_on_plex = [plex_lang for plex_lang in plex_langs if plex_lang != lang]
             # Ưu tiên EN nếu có, còn lại sort theo thứ tự alphabet
-            source_langs_on_plex.sort(key=lambda l: (l != "en", l))
+            source_langs_on_plex.sort(key=lambda plex_lang: (plex_lang != "en", plex_lang))
 
             for plex_lang in source_langs_on_plex:
                 path = await asyncio.to_thread(
                     self.plex_client.download_existing_subtitle,
-                    video, plex_lang, dest_dir,
+                    video,
+                    plex_lang,
+                    dest_dir,
                 )
                 if path:
                     source_lang = plex_lang
@@ -965,7 +1003,9 @@ class SubtitleService:
                 else:
                     # Sub exists but not downloadable (image-based/embedded)
                     details = await asyncio.to_thread(
-                        self.plex_client.get_subtitle_details, video, plex_lang,
+                        self.plex_client.get_subtitle_details,
+                        video,
+                        plex_lang,
                     )
                     if details["has_subtitle"] and not source_status.get("detail"):
                         subs = details["subtitle_info"]
@@ -974,9 +1014,13 @@ class SubtitleService:
                         embedded = [s for s in subs if s.get("is_embedded")]
                         lang_name = LANGUAGE_MAP.get(plex_lang, plex_lang).title()
                         if image_based:
-                            source_status["detail"] = f"Plex có {lang_name} sub dạng image ({', '.join(codecs)}) — không dùng được"
+                            source_status["detail"] = (
+                                f"Plex có {lang_name} sub dạng image ({', '.join(codecs)}) — không dùng được"
+                            )
                         elif embedded:
-                            source_status["detail"] = f"Plex có {lang_name} sub dạng embedded — không extract được"
+                            source_status["detail"] = (
+                                f"Plex có {lang_name} sub dạng embedded — không extract được"
+                            )
 
             has_source_available = source_status["available"]
 
@@ -1009,7 +1053,9 @@ class SubtitleService:
             # Dù target đã có trên Plex, vẫn trả về candidate thay thế để user chủ động chọn.
             vi_candidates: list[dict] = []
             source_search_order = ["en"] + [
-                l for l in _FALLBACK_SOURCE_LANGS if l != "en" and l != lang
+                source_lang
+                for source_lang in _FALLBACK_SOURCE_LANGS
+                if source_lang != "en" and source_lang != lang
             ]
             langs_to_search = [lang]
             if not has_source_available:
@@ -1028,7 +1074,8 @@ class SubtitleService:
 
             try:
                 multi_results = await self.subtitle_provider_manager.search_subtitles_multi_lang(
-                    base_params, langs_to_search,
+                    base_params,
+                    langs_to_search,
                 )
             except Exception as e:
                 log.warning(f"[Preview] Subsource multi-lang search failed: {e}")
@@ -1091,9 +1138,13 @@ class SubtitleService:
                 if not source_status["available"]:
                     existing_detail = source_status.get("detail")
                     if existing_detail:
-                        source_status["detail"] = f"{existing_detail}; không có bản phù hợp từ provider đã bật"
+                        source_status["detail"] = (
+                            f"{existing_detail}; không có bản phù hợp từ provider đã bật"
+                        )
                     else:
-                        source_status["detail"] = "Không tìm thấy sub nguồn trên Plex hoặc provider đã bật"
+                        source_status["detail"] = (
+                            "Không tìm thấy sub nguồn trên Plex hoặc provider đã bật"
+                        )
 
             has_target_available = has_vi_text or len(vi_candidates) > 0
 
@@ -1121,6 +1172,7 @@ class SubtitleService:
 
         finally:
             import shutil
+
             shutil.rmtree(dest_dir, ignore_errors=True)
 
     async def execute_sync_for_media(
@@ -1150,7 +1202,9 @@ class SubtitleService:
         if not self.runtime_config.ai_available:
             return {"status": "error", "message": "OpenAI API key required for sync timing"}
 
-        log.info(f"[Sync] Manual sync requested for ratingKey: {rating_key} (source_lang={source_lang})")
+        log.info(
+            f"[Sync] Manual sync requested for ratingKey: {rating_key} (source_lang={source_lang})"
+        )
 
         # Get video from Plex
         video = await asyncio.to_thread(self.plex_client.get_video, rating_key)
@@ -1171,7 +1225,9 @@ class SubtitleService:
             # 1) Try source_lang on Plex
             ref_path = await asyncio.to_thread(
                 self.plex_client.download_existing_subtitle,
-                video, source_lang, dest_dir,
+                video,
+                source_lang,
+                dest_dir,
             )
 
             # 2) Try source_lang on configured subtitle providers
@@ -1204,7 +1260,9 @@ class SubtitleService:
             # 3) Fallback: try other languages (EN first if source_lang wasn't EN, then rest)
             if not ref_path:
                 fallback_order = (["en"] if source_lang != "en" else []) + [
-                    l for l in _FALLBACK_SOURCE_LANGS if l != source_lang and l != "en"
+                    fallback_lang
+                    for fallback_lang in _FALLBACK_SOURCE_LANGS
+                    if fallback_lang != source_lang and fallback_lang != "en"
                 ]
                 for fb_lang in fallback_order:
                     fb_results = await self._find_subtitles(
@@ -1241,14 +1299,20 @@ class SubtitleService:
             lang = self.runtime_config.default_language
             vi_path = await asyncio.to_thread(
                 self.plex_client.download_existing_subtitle,
-                video, lang, dest_dir,
+                video,
+                lang,
+                dest_dir,
             )
             vi_source = "plex"
 
             if not vi_path:
                 log.info("[Sync] No Vietsub on Plex — searching subtitle providers...")
                 vi_downloaded = await self._get_target_subtitle_from_providers(
-                    metadata, log, dest_dir, subtitle_id, video_filename=video_filename,
+                    metadata,
+                    log,
+                    dest_dir,
+                    subtitle_id,
+                    video_filename=video_filename,
                 )
                 if vi_downloaded:
                     vi_subtitle, vi_path = vi_downloaded
@@ -1314,6 +1378,7 @@ class SubtitleService:
             return {"status": "error", "message": f"Plex error: {e}"}
         finally:
             import shutil
+
             shutil.rmtree(dest_dir, ignore_errors=True)
 
     async def _get_target_subtitle_from_providers(
@@ -1408,7 +1473,9 @@ class SubtitleService:
 
             selected_results = results
             if subtitle_id:
-                selected = next((r for r in results if self._subtitle_id_matches(r, subtitle_id)), None)
+                selected = next(
+                    (r for r in results if self._subtitle_id_matches(r, subtitle_id)), None
+                )
                 if not selected:
                     return {
                         "status": "error",
@@ -1454,6 +1521,7 @@ class SubtitleService:
             }
         finally:
             import shutil
+
             shutil.rmtree(dest_dir, ignore_errors=True)
 
     async def execute_translate_for_media(
@@ -1478,7 +1546,9 @@ class SubtitleService:
         if not self.translation_client.enabled:
             return {"status": "error", "message": "Translation disabled — no OpenAI API key"}
 
-        log.info(f"[Translate] Manual translation requested for ratingKey: {rating_key} (requested_from_lang={from_lang})")
+        log.info(
+            f"[Translate] Manual translation requested for ratingKey: {rating_key} (requested_from_lang={from_lang})"
+        )
 
         video = await asyncio.to_thread(self.plex_client.get_video, rating_key)
         metadata = await asyncio.to_thread(self.plex_client.extract_metadata, video)
@@ -1586,6 +1656,7 @@ class SubtitleService:
             return result
         finally:
             import shutil
+
             shutil.rmtree(dest_dir, ignore_errors=True)
 
     async def _resolve_manual_translation_source(
@@ -1619,7 +1690,9 @@ class SubtitleService:
             )
             if downloaded_target:
                 subtitle, subtitle_path = downloaded_target
-                log.info(f"[TranslatePath] Resolved from Subsource target ({target_lang}): {subtitle.name}")
+                log.info(
+                    f"[TranslatePath] Resolved from Subsource target ({target_lang}): {subtitle.name}"
+                )
                 return {
                     "source_subtitle_path": subtitle_path,
                     "effective_from_lang": target_lang,
@@ -1670,7 +1743,9 @@ class SubtitleService:
         dest_dir = self.temp_dir / metadata.rating_key
         dest_dir.mkdir(parents=True, exist_ok=True)
 
-        plex_langs = await asyncio.to_thread(self.plex_client._get_existing_subtitle_languages, video)
+        plex_langs = await asyncio.to_thread(
+            self.plex_client._get_existing_subtitle_languages, video
+        )
         if not plex_langs:
             log.info("[TranslatePath] Plex fallback unavailable: no subtitle language on Plex")
             return None
@@ -1678,7 +1753,9 @@ class SubtitleService:
         fallback_langs: list[str] = []
         if "en" in plex_langs and target_lang != "en":
             fallback_langs.append("en")
-        fallback_langs.extend(sorted(lang for lang in plex_langs if lang not in {target_lang, "en"}))
+        fallback_langs.extend(
+            sorted(lang for lang in plex_langs if lang not in {target_lang, "en"})
+        )
 
         for lang in fallback_langs:
             plex_path = await asyncio.to_thread(
@@ -1794,7 +1871,7 @@ class SubtitleService:
                 providers=cached_providers,
                 cache_scope=cache_scope,
             )
-            return cached_results
+            return await self._validate_subtitle_matches(params, cached_results, log)
 
         try:
             results = await self.subtitle_provider_manager.search_subtitles(params)
@@ -1802,10 +1879,151 @@ class SubtitleService:
             log.warning(f"Subtitle provider search failed: {e} — treating as no results")
             results = []
 
+        results = await self._validate_subtitle_matches(params, results, log)
+
         if results and use_cache:
             await self.cache_client.set_search_results(params, results, scope=cache_scope)
 
         return results
+
+    async def _validate_subtitle_matches(
+        self,
+        params: SubtitleSearchParams,
+        results: list[SubtitleResult],
+        log: RequestContextLogger,
+    ) -> list[SubtitleResult]:
+        """Validate ambiguous candidates before they can be selected or cached."""
+        if not results:
+            return []
+
+        trusted: list[SubtitleResult] = []
+        ambiguous: list[SubtitleResult] = []
+        rejected: list[SubtitleResult] = []
+
+        for candidate in results:
+            status, reason = self._deterministic_match_status(params, candidate)
+            if status == "trusted":
+                trusted.append(
+                    candidate.model_copy(
+                        update={
+                            "match_validation": "trusted",
+                            "match_confidence": 1.0,
+                            "match_reason": reason,
+                        }
+                    )
+                )
+            elif status == "ambiguous":
+                ambiguous.append(candidate)
+            else:
+                rejected.append(
+                    candidate.model_copy(
+                        update={
+                            "match_validation": "rejected",
+                            "match_confidence": 0.0,
+                            "match_reason": reason,
+                        }
+                    )
+                )
+
+        if rejected:
+            log.info(
+                f"Rejected {len(rejected)} subtitle candidate(s) by deterministic metadata",
+                rejected=[r.name for r in rejected[:5]],
+            )
+
+        accepted = trusted
+        settings = self.config.subtitle_settings
+        if ambiguous and settings.ai_validate_subtitle_matches:
+            if not self.match_validator_client.enabled:
+                log.warning(
+                    f"Dropping {len(ambiguous)} ambiguous subtitle candidate(s): "
+                    "AI validation enabled but OpenAI API key is not configured"
+                )
+            else:
+                log.info(f"AI-validating {len(ambiguous)} ambiguous subtitle candidate(s)")
+                try:
+                    decisions = await self.match_validator_client.validate_candidates(
+                        params,
+                        ambiguous,
+                    )
+                    decisions_by_id = {decision.subtitle_id: decision for decision in decisions}
+                    min_confidence = settings.ai_match_min_confidence
+                    for candidate in ambiguous:
+                        decision = decisions_by_id.get(candidate.id)
+                        if decision and decision.is_match and decision.confidence >= min_confidence:
+                            accepted.append(
+                                candidate.model_copy(
+                                    update={
+                                        "match_validation": "ai_verified",
+                                        "match_confidence": decision.confidence,
+                                        "match_reason": decision.reason,
+                                    }
+                                )
+                            )
+                        else:
+                            reason = decision.reason if decision else "AI returned no decision"
+                            confidence = decision.confidence if decision else 0.0
+                            log.info(
+                                f"AI rejected subtitle candidate: {candidate.name}",
+                                confidence=confidence,
+                                reason=reason,
+                            )
+                except Exception as e:
+                    log.warning(
+                        f"AI subtitle match validation failed: {e}. "
+                        f"Dropping {len(ambiguous)} ambiguous candidate(s)."
+                    )
+        elif ambiguous:
+            accepted.extend(ambiguous)
+
+        if len(accepted) != len(results):
+            log.info(f"Subtitle match validation kept {len(accepted)}/{len(results)} candidate(s)")
+
+        return self._sort_validated_subtitles(accepted, params)
+
+    @staticmethod
+    def _deterministic_match_status(
+        params: SubtitleSearchParams,
+        candidate: SubtitleResult,
+    ) -> tuple[str, str]:
+        """Return trusted/ambiguous/rejected based on explicit metadata only."""
+        if params.season is None or params.episode is None:
+            return "trusted", "No episode constraint in requested media"
+
+        if candidate.season is not None and candidate.season != params.season:
+            return "rejected", (
+                f"Candidate season {candidate.season} != requested season {params.season}"
+            )
+        if candidate.episode is not None and candidate.episode != params.episode:
+            return "rejected", (
+                f"Candidate episode {candidate.episode} != requested episode {params.episode}"
+            )
+
+        if candidate.season == params.season and candidate.episode == params.episode:
+            return "trusted", "Explicit season and episode match"
+
+        if candidate.season == params.season and candidate.episode is None:
+            return "ambiguous", "Season pack or missing episode"
+
+        if candidate.season is None and candidate.episode is None:
+            return "ambiguous", "Candidate has no explicit season/episode metadata"
+
+        return "ambiguous", "Candidate has partial episode metadata"
+
+    @staticmethod
+    def _sort_validated_subtitles(
+        results: list[SubtitleResult],
+        params: SubtitleSearchParams,
+    ) -> list[SubtitleResult]:
+        def sort_key(result: SubtitleResult) -> tuple[float, int]:
+            similarity = 0.0
+            if params.video_filename:
+                similarity = SubsourceClient._filename_similarity(
+                    params.video_filename, result.name
+                )
+            return similarity, result.priority_score
+
+        return sorted(results, key=sort_key, reverse=True)
 
     async def _download_first_available(
         self,
@@ -2058,7 +2276,9 @@ class SubtitleService:
         try:
             log.info(f"Translating {from_lang} subtitle to {to_lang}...")
 
-            target_subtitle_path = source_subtitle_path.parent / f"{source_subtitle_path.stem}.{to_lang}.srt"
+            target_subtitle_path = (
+                source_subtitle_path.parent / f"{source_subtitle_path.stem}.{to_lang}.srt"
+            )
 
             concurrency = self.config.subtitle_settings.translation_batch_concurrency
             stats = await self.translation_client.translate_srt_file(

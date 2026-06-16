@@ -78,13 +78,22 @@ Tìm subtitle qua tất cả provider đã bật. Có thể tìm theo `rating_ke
       "quality": "translated",
       "downloads": 1500,
       "rating": 8.5,
-      "score": 560
+      "score": 560,
+      "match_validation": "ai_verified",
+      "match_confidence": 0.92,
+      "match_reason": "Filename and release match S01E01"
     }
   ]
 }
 ```
 
 `provider_id` là giá trị nên truyền vào các API chọn subtitle để tránh trùng ID giữa các nguồn.
+
+`match_validation` cho biết candidate được giữ bằng căn cứ nào:
+
+- `trusted`: metadata rõ ràng khớp phim/tập, ví dụ đúng season/episode.
+- `ai_verified`: candidate mơ hồ đã được AI xác nhận đủ confidence.
+- `unverified`: chưa qua lớp xác thực mới, thường chỉ còn xuất hiện ở dữ liệu cũ/cache cũ.
 
 ### `POST /api/subtitles/download`
 Tìm và tải subtitle file về client, không upload vào Plex.

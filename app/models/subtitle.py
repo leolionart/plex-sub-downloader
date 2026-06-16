@@ -31,8 +31,7 @@ class SubtitleResult(BaseModel):
 
     # Quality type (để priority ranking)
     quality_type: Literal["retail", "translated", "ai", "unknown"] = Field(
-        default="unknown",
-        description="Subtitle quality category"
+        default="unknown", description="Subtitle quality category"
     )
 
     # Metadata matching
@@ -40,6 +39,22 @@ class SubtitleResult(BaseModel):
     tmdb_id: str | None = None
     season: int | None = None
     episode: int | None = None
+
+    # Match validation metadata
+    match_validation: Literal["trusted", "ai_verified", "rejected", "unverified"] = Field(
+        default="unverified",
+        description="How this candidate was validated against the requested media",
+    )
+    match_confidence: float | None = Field(
+        default=None,
+        ge=0,
+        le=1,
+        description="AI confidence that the candidate matches the requested media",
+    )
+    match_reason: str | None = Field(
+        default=None,
+        description="Short reason from deterministic or AI match validation",
+    )
 
     @property
     def priority_score(self) -> int:
@@ -60,6 +75,7 @@ class SubtitleResult(BaseModel):
         # Download count bonus (logarithmic để tránh quá lệch)
         if self.downloads and self.downloads > 0:
             import math
+
             score += int(math.log10(self.downloads) * 20)
 
         return score

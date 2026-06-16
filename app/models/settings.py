@@ -28,8 +28,22 @@ DEFAULT_SYNC_SYSTEM_PROMPT_TEMPLATE = (
     "- Match by semantic meaning, not by position\n"
     "- If no good match exists, skip that entry\n"
     "- Return ONLY a JSON array of matches\n"
-    "- Format: [{\"vi\": <VI-index>, \"en\": <EN-index>}, ...]\n"
+    '- Format: [{"vi": <VI-index>, "en": <EN-index>}, ...]\n'
     "- Use the exact index numbers shown in brackets"
+)
+
+DEFAULT_SUBTITLE_MATCH_SYSTEM_PROMPT_TEMPLATE = (
+    "You validate whether subtitle search results match the exact requested movie or TV episode.\n\n"
+    "Use the provided media metadata, video filename, subtitle filename/release, provider metadata, "
+    "season and episode numbers. Be conservative: if the evidence is weak, mark it as not a match.\n\n"
+    "Rules:\n"
+    "- For TV episodes, the subtitle must match the exact show, season, and episode.\n"
+    "- A full-season pack can match only when it is clearly for the same show and season.\n"
+    "- Reject subtitles for a different season, episode, show, movie, year, or unrelated release.\n"
+    "- Do not assume a match only because provider search returned it.\n"
+    "- Return ONLY valid JSON with this shape:\n"
+    '{"decisions":[{"subtitle_id":"...","is_match":true,"confidence":0.0,'
+    '"reason":"short reason"}]}'
 )
 
 
@@ -38,68 +52,56 @@ class SubtitleSettings(BaseModel):
 
     # Language configuration
     languages: list[str] = Field(
-        default=["vi"],
-        description="Danh sách language codes để tải subtitle (ví dụ: ['vi', 'en'])"
+        default=["vi"], description="Danh sách language codes để tải subtitle (ví dụ: ['vi', 'en'])"
     )
     language_priority: list[str] = Field(
-        default=["vi"],
-        description="Thứ tự ưu tiên language (download theo thứ tự này)"
+        default=["vi"], description="Thứ tự ưu tiên language (download theo thứ tự này)"
     )
 
     # Download conditions
     auto_download_on_add: bool = Field(
-        default=True,
-        description="Tự động download khi thêm media mới"
+        default=True, description="Tự động download khi thêm media mới"
     )
     auto_download_on_play: bool = Field(
-        default=False,
-        description="Tự động download khi user bắt đầu xem (nếu chưa có sub)"
+        default=False, description="Tự động download khi user bắt đầu xem (nếu chưa có sub)"
     )
 
     # Duplicate prevention
     skip_if_has_subtitle: bool = Field(
-        default=True,
-        description="Bỏ qua nếu đã có subtitle cùng language"
+        default=True, description="Bỏ qua nếu đã có subtitle cùng language"
     )
     replace_existing: bool = Field(
         default=False,
-        description="Replace subtitle đã có bằng subtitle mới tìm được (nếu quality tốt hơn)"
+        description="Replace subtitle đã có bằng subtitle mới tìm được (nếu quality tốt hơn)",
     )
     replace_only_if_better_quality: bool = Field(
-        default=True,
-        description="Chỉ replace nếu subtitle mới có quality cao hơn"
+        default=True, description="Chỉ replace nếu subtitle mới có quality cao hơn"
     )
 
     # Quality preferences
     min_quality_threshold: Literal["any", "translated", "retail"] = Field(
-        default="translated",
-        description="Chỉ download subtitle từ quality tối thiểu này trở lên"
+        default="translated", description="Chỉ download subtitle từ quality tối thiểu này trở lên"
     )
 
     # Advanced filters
     skip_forced_subtitles: bool = Field(
-        default=True,
-        description="Không download nếu đã có forced subtitle"
+        default=True, description="Không download nếu đã có forced subtitle"
     )
     skip_if_embedded: bool = Field(
-        default=True,
-        description="Không download nếu video có embedded subtitle"
+        default=True, description="Không download nếu video có embedded subtitle"
     )
 
     # AI Sync Timing
     auto_sync_timing: bool = Field(
-        default=True,
-        description="Tự động sync timing sau khi download subtitle"
+        default=True, description="Tự động sync timing sau khi download subtitle"
     )
 
     # Translation
     translation_enabled: bool = Field(
-        default=False,
-        description="Bật/tắt dịch subtitle (EN → VI) khi không tìm thấy Vietsub"
+        default=False, description="Bật/tắt dịch subtitle (EN → VI) khi không tìm thấy Vietsub"
     )
     auto_translate_if_no_vi: bool = Field(
-        default=False,
-        description="Chủ động dịch Eng→Viet khi có Engsub nhưng không có Vietsub"
+        default=False, description="Chủ động dịch Eng→Viet khi có Engsub nhưng không có Vietsub"
     )
     translation_batch_concurrency: int = Field(
         default=5,
@@ -114,6 +116,20 @@ class SubtitleSettings(BaseModel):
     sync_system_prompt_template: str = Field(
         default=DEFAULT_SYNC_SYSTEM_PROMPT_TEMPLATE,
         description="System prompt template cho AI sync timing",
+    )
+    ai_validate_subtitle_matches: bool = Field(
+        default=True,
+        description="Dùng AI để xác thực subtitle candidate mơ hồ trước khi auto download/upload",
+    )
+    ai_match_min_confidence: float = Field(
+        default=0.7,
+        ge=0,
+        le=1,
+        description="Ngưỡng confidence tối thiểu để nhận candidate được AI xác thực",
+    )
+    subtitle_match_system_prompt_template: str = Field(
+        default=DEFAULT_SUBTITLE_MATCH_SYSTEM_PROMPT_TEMPLATE,
+        description="System prompt template cho AI xác thực subtitle match",
     )
 
     # Webhook processing delay
