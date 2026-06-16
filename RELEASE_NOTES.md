@@ -1,5 +1,11 @@
 # Release Notes
 
+## Unreleased - 2026-06-16 07:19 +07
+
+Generated before push from commits:
+
+- `7630aa3` fix: adjust opensubtitles user agent
+
 ## Unreleased - 2026-06-16 07:10 +07
 
 Generated before push from commits:
