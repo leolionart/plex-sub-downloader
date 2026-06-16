@@ -104,9 +104,16 @@ Tìm và tải subtitle file về client, không upload vào Plex.
   "rating_key": "12345",
   "language": "vi",
   "subtitle_id": "opensubtitles:12345",
-  "use_cache": true
+  "use_cache": true,
+  "search_override": {
+    "title": "FROM",
+    "season": 3,
+    "episode": 1,
+    "language": "vi"
+  }
 }
 ```
+`search_override` optional. Dùng khi search theo `rating_key` quá hẹp nhưng `/api/subtitles/search` bằng metadata rõ ràng đã trả về candidate đúng.
 
 **Response:** file `.srt`.
 
@@ -117,9 +124,17 @@ Tìm/download và upload target subtitle vào Plex.
 ```json
 {
   "rating_key": "12345",
-  "subtitle_id": "subdl:3197651-3213944"
+  "subtitle_id": "subdl:3197651-3213944",
+  "use_cache": true,
+  "search_override": {
+    "title": "FROM",
+    "season": 3,
+    "episode": 1,
+    "language": "vi"
+  }
 }
 ```
+`rating_key` vẫn là Plex item sẽ được upload vào. `search_override` chỉ thay metadata dùng để tìm subtitle trên provider.
 
 **Response:**
 ```json
@@ -214,10 +229,18 @@ Tìm và upload target subtitle thủ công từ provider đã bật.
 ```json
 {
   "rating_key": "12345",
-  "subtitle_id": "subdl:abc123"
+  "subtitle_id": "subdl:abc123",
+  "use_cache": true,
+  "search_override": {
+    "title": "FROM",
+    "season": 3,
+    "episode": 1,
+    "language": "vi"
+  }
 }
 ```
 - `subtitle_id`: `provider_id` hoặc raw ID từ `vi_candidates` (optional, nếu bỏ qua sẽ dùng bản đầu tiên tải được)
+- `search_override`: optional metadata override cho provider search; Plex upload target vẫn là `rating_key`
 
 **Response:**
 ```json
@@ -233,23 +256,33 @@ Tìm và upload target subtitle thủ công từ provider đã bật.
 }
 ```
 
-### `POST /api/sync/translate`
+### `POST /api/translation/execute`
 Dịch source sub sang target lang bằng AI.
 
 **Request:**
 ```json
 {
   "rating_key": "12345",
-  "from_lang": "ko"
+  "from_lang": "en",
+  "use_cache": true,
+  "source_subtitle_id": "opensubtitles:10177974",
+  "source_search_override": {
+    "title": "FROM",
+    "season": 3,
+    "episode": 1,
+    "language": "en"
+  }
 }
 ```
 - `from_lang`: ngôn ngữ nguồn (mặc định `"en"`, hỗ trợ mọi ngôn ngữ)
+- `source_subtitle_id`: optional provider candidate ID từ `/api/subtitles/search`
+- `source_search_override`: optional metadata override để tìm/download source subtitle trước khi dịch
 
 **Response:**
 ```json
 {
   "status": "success",
-  "message": "Translation completed"
+  "message": "Translated subtitle uploaded (612 lines)"
 }
 ```
 

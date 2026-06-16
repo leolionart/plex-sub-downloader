@@ -5,7 +5,7 @@ Translation routes cho Web UI.
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.models.webhook import MediaMetadata
+from app.models.subtitle import SubtitleSearchParams
 
 router = APIRouter(prefix="/api/translation", tags=["translation"])
 
@@ -14,6 +14,9 @@ class TranslationRequest(BaseModel):
     """Request để execute manual translation."""
     rating_key: str
     from_lang: str = "en"
+    use_cache: bool = True
+    source_subtitle_id: str | None = None
+    source_search_override: SubtitleSearchParams | None = None
 
 
 class ImproveRequest(BaseModel):
@@ -42,6 +45,9 @@ async def execute_translation(request: TranslationRequest):
     result = await service.execute_translate_for_media(
         rating_key=request.rating_key,
         from_lang=request.from_lang,
+        use_cache=request.use_cache,
+        source_subtitle_id=request.source_subtitle_id,
+        source_search_override=request.source_search_override,
     )
 
     if result["status"] == "error":

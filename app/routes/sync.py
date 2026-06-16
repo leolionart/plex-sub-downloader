@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 
+from app.models.subtitle import SubtitleSearchParams
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -30,6 +31,8 @@ class UploadTargetRequest(BaseModel):
     """Request để upload target subtitle thủ công từ provider."""
     rating_key: str
     subtitle_id: str | None = None
+    use_cache: bool = True
+    search_override: SubtitleSearchParams | None = None
 
 
 class ResolveUrlRequest(BaseModel):
@@ -100,6 +103,8 @@ async def upload_target_subtitle(request: UploadTargetRequest):
     result = await service.execute_manual_target_upload_for_media(
         rating_key=request.rating_key,
         subtitle_id=request.subtitle_id,
+        use_cache=request.use_cache,
+        search_override=request.search_override,
     )
 
     if result["status"] == "error":

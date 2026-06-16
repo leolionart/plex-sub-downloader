@@ -49,6 +49,7 @@ class SubtitleDownloadRequest(BaseModel):
     language: str | None = None
     subtitle_id: str | None = None
     use_cache: bool = True
+    search_override: SubtitleSearchRequest | None = None
 
 
 class SubtitleUploadRequest(BaseModel):
@@ -56,6 +57,8 @@ class SubtitleUploadRequest(BaseModel):
 
     rating_key: str
     subtitle_id: str | None = None
+    use_cache: bool = True
+    search_override: SubtitleSearchRequest | None = None
 
 
 def get_subtitle_service():
@@ -136,6 +139,11 @@ async def download_subtitle(
         language=request.language,
         subtitle_id=request.subtitle_id,
         use_cache=request.use_cache,
+        search_override=(
+            _search_params_from_override(request.search_override, request.language)
+            if request.search_override
+            else None
+        ),
     )
     if not result:
         raise HTTPException(status_code=404, detail="No downloadable subtitle found")
@@ -163,7 +171,30 @@ async def upload_subtitle(request: SubtitleUploadRequest) -> dict[str, Any]:
     result = await service.execute_manual_target_upload_for_media(
         rating_key=request.rating_key,
         subtitle_id=request.subtitle_id,
+        use_cache=request.use_cache,
+        search_override=(
+            _search_params_from_override(request.search_override)
+            if request.search_override
+            else None
+        ),
     )
     if result["status"] == "error":
         raise HTTPException(status_code=400, detail=result["message"])
     return result
+
+
+def _search_params_from_override(
+    override: SubtitleSearchRequest,
+    language: str | None = None,
+) -> SubtitleSearchParams:
+    """Convert public override payload to provider search params."""
+    return SubtitleSearchParams(
+        language=override.language or language or "vi",
+        title=override.title,
+        year=override.year,
+        imdb_id=override.imdb_id,
+        tmdb_id=override.tmdb_id,
+        season=override.season,
+        episode=override.episode,
+        video_filename=override.video_filename,
+    )

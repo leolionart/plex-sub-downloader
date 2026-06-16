@@ -628,6 +628,7 @@ class SubtitleService:
         language: str | None = None,
         subtitle_id: str | None = None,
         use_cache: bool = True,
+        search_override: SubtitleSearchParams | None = None,
     ) -> dict[str, Any] | None:
         """Search and download a subtitle file for API clients without uploading it."""
         video = await asyncio.to_thread(self.plex_client.get_video, rating_key)
@@ -635,15 +636,11 @@ class SubtitleService:
         video_filename = self._get_video_filename(video)
         lang = language or self.runtime_config.default_language
 
-        params = SubtitleSearchParams(
+        params = self._search_params_for_media(
+            metadata,
             language=lang,
-            title=metadata.search_title,
-            year=metadata.year,
-            imdb_id=metadata.imdb_id,
-            tmdb_id=metadata.tmdb_id,
-            season=metadata.season_number,
-            episode=metadata.episode_number,
             video_filename=video_filename,
+            search_override=search_override,
         )
         results = await self._search_subtitles_by_params(params, log, use_cache=use_cache)
         if subtitle_id:
@@ -679,6 +676,46 @@ class SubtitleService:
         for result in results:
             counts[result.provider] = counts.get(result.provider, 0) + 1
         return counts
+
+    @staticmethod
+    def _search_params_for_media(
+        metadata: MediaMetadata,
+        *,
+        language: str,
+        video_filename: str | None = None,
+        search_override: SubtitleSearchParams | None = None,
+    ) -> SubtitleSearchParams:
+        """
+        Build provider search params for a Plex item.
+
+        `rating_key` still identifies the Plex target for upload/download, while
+        `search_override` can deliberately relax provider search metadata. This
+        is useful for short show titles where IMDb/year based provider search is
+        too narrow but explicit title/season/episode search returns the right
+        candidates.
+        """
+        if search_override:
+            return SubtitleSearchParams(
+                language=search_override.language or language,
+                title=search_override.title or metadata.search_title,
+                year=search_override.year,
+                imdb_id=search_override.imdb_id,
+                tmdb_id=search_override.tmdb_id,
+                season=search_override.season or metadata.season_number,
+                episode=search_override.episode or metadata.episode_number,
+                video_filename=search_override.video_filename or video_filename,
+            )
+
+        return SubtitleSearchParams(
+            language=language,
+            title=metadata.search_title,
+            year=metadata.year,
+            imdb_id=metadata.imdb_id,
+            tmdb_id=metadata.tmdb_id,
+            season=metadata.season_number,
+            episode=metadata.episode_number,
+            video_filename=video_filename,
+        )
 
     async def _download_subtitle(
         self,
@@ -1440,6 +1477,8 @@ class SubtitleService:
         rating_key: str,
         subtitle_id: str | None = None,
         request_id: str | None = None,
+        use_cache: bool = True,
+        search_override: SubtitleSearchParams | None = None,
     ) -> dict[str, Any]:
         """
         Chủ động tìm và upload target subtitle từ Subsource, bỏ qua skip rule của auto mode.
@@ -1454,21 +1493,28 @@ class SubtitleService:
         video = await asyncio.to_thread(self.plex_client.get_video, rating_key)
         metadata = await asyncio.to_thread(self.plex_client.extract_metadata, video)
         video_filename = self._get_video_filename(video)
+        search_params = self._search_params_for_media(
+            metadata,
+            language=lang,
+            video_filename=video_filename,
+            search_override=search_override,
+        )
 
         dest_dir = self.temp_dir / f"{rating_key}_manual_upload"
         dest_dir.mkdir(parents=True, exist_ok=True)
 
         try:
-            results = await self._find_subtitles(
-                metadata,
+            results = await self._search_subtitles_by_params(
+                search_params,
                 log,
-                language=lang,
-                video_filename=video_filename,
+                use_cache=use_cache,
             )
             if not results:
                 return {
                     "status": "error",
-                    "message": f"Không tìm thấy {lang.upper()} subtitle phù hợp trên Subsource",
+                    "message": (
+                        f"Không tìm thấy {search_params.language.upper()} subtitle phù hợp"
+                    ),
                 }
 
             selected_results = results
@@ -1492,7 +1538,7 @@ class SubtitleService:
             if not downloaded:
                 return {
                     "status": "error",
-                    "message": f"Không tải được {lang.upper()} subtitle đã chọn",
+                    "message": f"Không tải được {search_params.language.upper()} subtitle đã chọn",
                 }
 
             subtitle, subtitle_path = downloaded
@@ -1529,6 +1575,9 @@ class SubtitleService:
         rating_key: str,
         request_id: str | None = None,
         from_lang: str = "en",
+        use_cache: bool = True,
+        source_subtitle_id: str | None = None,
+        source_search_override: SubtitleSearchParams | None = None,
     ) -> dict[str, Any]:
         """
         Chủ động dịch subtitle sang Vietnamese cho media item.
@@ -1557,6 +1606,10 @@ class SubtitleService:
             metadata=metadata,
             video=video,
             log=log,
+            requested_from_lang=from_lang,
+            source_subtitle_id=source_subtitle_id,
+            source_search_override=source_search_override,
+            use_cache=use_cache,
         )
         if not resolved_source:
             return {
@@ -1665,6 +1718,10 @@ class SubtitleService:
         metadata: MediaMetadata,
         video: Video,
         log: RequestContextLogger,
+        requested_from_lang: str = "en",
+        source_subtitle_id: str | None = None,
+        source_search_override: SubtitleSearchParams | None = None,
+        use_cache: bool = True,
     ) -> dict[str, Any] | None:
         """
         Resolve source subtitle cho manual translation theo thứ tự cố định:
@@ -1673,20 +1730,71 @@ class SubtitleService:
         3) Plex subtitle fallback (EN trước, rồi ngôn ngữ khác != target)
         """
         target_lang = self.runtime_config.default_language
+        video_filename = self._get_video_filename(video)
+
+        # 0) Explicit provider source requested by API clients.
+        if source_search_override or source_subtitle_id:
+            effective_source_override = (
+                source_search_override.model_copy(update={"language": requested_from_lang})
+                if source_search_override
+                else None
+            )
+            source_params = self._search_params_for_media(
+                metadata,
+                language=requested_from_lang,
+                video_filename=video_filename,
+                search_override=effective_source_override,
+            )
+            source_results = await self._search_subtitles_by_params(
+                source_params,
+                log,
+                use_cache=use_cache,
+            )
+            if source_subtitle_id:
+                selected = next(
+                    (
+                        result
+                        for result in source_results
+                        if self._subtitle_id_matches(result, source_subtitle_id)
+                    ),
+                    None,
+                )
+                source_results = [selected] if selected else []
+
+            if source_results:
+                downloaded_source = await self._download_first_available(
+                    source_results,
+                    metadata,
+                    log,
+                    video_filename=video_filename,
+                )
+                if downloaded_source:
+                    subtitle, subtitle_path = downloaded_source
+                    log.info(
+                        "[TranslatePath] Resolved from explicit provider source: "
+                        f"{subtitle.provider}:{subtitle.id} {subtitle.name}"
+                    )
+                    return {
+                        "source_subtitle_path": subtitle_path,
+                        "effective_from_lang": source_params.language,
+                        "source_strategy": "provider_explicit_translation",
+                        "source_origin": subtitle.provider,
+                    }
+            log.info("[TranslatePath] Explicit provider source unavailable or download failed")
 
         # 1) Subsource target language
         target_results = await self._find_subtitles(
             metadata,
             log,
             language=target_lang,
-            video_filename=self._get_video_filename(video),
+            video_filename=video_filename,
         )
         if target_results:
             downloaded_target = await self._download_first_available(
                 target_results,
                 metadata,
                 log,
-                video_filename=self._get_video_filename(video),
+                video_filename=video_filename,
             )
             if downloaded_target:
                 subtitle, subtitle_path = downloaded_target
@@ -1703,13 +1811,6 @@ class SubtitleService:
 
         # 2) Subsource English
         if target_lang != "en":
-            video_filename = None
-            try:
-                if video.media and video.media[0].parts:
-                    video_filename = Path(video.media[0].parts[0].file).name
-            except Exception:
-                pass
-
             en_params = SubtitleSearchParams(
                 language="en",
                 title=metadata.search_title,
