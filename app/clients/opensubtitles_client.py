@@ -20,6 +20,8 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+OPENSUBTITLES_USER_AGENT = "Plex Subtitle Service v0.4.1"
+
 
 class OpenSubtitlesClientError(SubtitleProviderError):
     """OpenSubtitles provider error."""
@@ -43,7 +45,7 @@ class OpenSubtitlesClient:
             follow_redirects=True,
             headers={
                 "Api-Key": self.api_key or "",
-                "User-Agent": "PlexSubtitleService/0.4.1",
+                "User-Agent": OPENSUBTITLES_USER_AGENT,
                 "Accept": "application/json",
             },
         )
@@ -83,7 +85,9 @@ class OpenSubtitlesClient:
             response = await self._client.get(f"{self.base_url}/subtitles", params=query)
             response.raise_for_status()
         except httpx.HTTPStatusError as e:
-            raise OpenSubtitlesClientError(f"OpenSubtitles search failed: {e}") from e
+            raise OpenSubtitlesClientError(
+                f"OpenSubtitles search failed: {self._format_status_error(e)}"
+            ) from e
 
         results = self._parse_results(response.json(), params.language)
         return self._rank_and_filter(results, params)
@@ -179,6 +183,17 @@ class OpenSubtitlesClient:
             file_response = await self._client.get(str(link), headers={})
             file_response.raise_for_status()
         except httpx.HTTPStatusError as e:
-            raise OpenSubtitlesClientError(f"OpenSubtitles download failed: {e}") from e
+            raise OpenSubtitlesClientError(
+                f"OpenSubtitles download failed: {self._format_status_error(e)}"
+            ) from e
 
         return save_subtitle_response(file_response, dest_dir, f"{self.name}-{subtitle.id}")
+
+    @staticmethod
+    def _format_status_error(error: httpx.HTTPStatusError) -> str:
+        response = error.response
+        message = str(error)
+        body = response.text.strip()
+        if body:
+            message = f"{message}; response_body={body[:500]}"
+        return message
