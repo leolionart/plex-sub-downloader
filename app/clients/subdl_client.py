@@ -3,8 +3,10 @@ SubDL API client.
 Docs: https://subdl.com/api-doc
 """
 
+import asyncio
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
 
@@ -19,6 +21,9 @@ from app.models.subtitle import SubtitleResult, SubtitleSearchParams
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+SUBDL_USER_AGENT = "Plex Subtitle Service v0.4.1"
+SUBDL_MAX_RATE_LIMIT_RETRIES = 1
 
 
 class SubDLClientError(SubtitleProviderError):
@@ -37,7 +42,7 @@ class SubDLClient:
         self.api_key = config.subdl_api_key
         self._client = httpx.AsyncClient(
             timeout=httpx.Timeout(30.0, connect=10.0),
-            headers={"Accept": "application/json", "User-Agent": "PlexSubtitleService/0.4.1"},
+            headers={"Accept": "application/json", "User-Agent": SUBDL_USER_AGENT},
         )
 
     async def close(self) -> None:
@@ -77,10 +82,10 @@ class SubDLClient:
             query["episode_number"] = params.episode
 
         try:
-            response = await self._client.get(f"{self.base_url}/subtitles", params=query)
+            response = await self._get_with_rate_limit_retry(f"{self.base_url}/subtitles", query)
             response.raise_for_status()
         except httpx.HTTPStatusError as e:
-            raise SubDLClientError(f"SubDL search failed: {e}") from e
+            raise SubDLClientError(f"SubDL search failed: {self._format_status_error(e)}") from e
 
         data = response.json()
         if data.get("status") is False:
@@ -142,5 +147,60 @@ class SubDLClient:
             response = await self._client.get(str(subtitle.download_url))
             response.raise_for_status()
         except httpx.HTTPStatusError as e:
-            raise SubDLClientError(f"SubDL download failed: {e}") from e
+            raise SubDLClientError(f"SubDL download failed: {self._format_status_error(e)}") from e
         return save_subtitle_response(response, dest_dir, f"{self.name}-{subtitle.id}")
+
+    async def _get_with_rate_limit_retry(
+        self,
+        url: str,
+        params: dict[str, Any],
+    ) -> httpx.Response:
+        response = await self._client.get(url, params=params)
+        for _ in range(SUBDL_MAX_RATE_LIMIT_RETRIES):
+            if response.status_code != 429:
+                break
+            await asyncio.sleep(self._retry_after_seconds(response))
+            response = await self._client.get(url, params=params)
+        return response
+
+    @staticmethod
+    def _retry_after_seconds(response: httpx.Response) -> float:
+        retry_after = response.headers.get("Retry-After")
+        if retry_after:
+            try:
+                return min(max(float(retry_after), 1.0), 10.0)
+            except ValueError:
+                pass
+        try:
+            body = response.json()
+        except ValueError:
+            body = {}
+        retry_after_body = body.get("retryAfterSeconds") if isinstance(body, dict) else None
+        if isinstance(retry_after_body, (int, float)):
+            return min(max(float(retry_after_body), 1.0), 10.0)
+        return 5.0
+
+    @classmethod
+    def _format_status_error(cls, error: httpx.HTTPStatusError) -> str:
+        response = error.response
+        message = (
+            f"{response.status_code} {response.reason_phrase} for url "
+            f"'{cls._redact_api_key(str(response.url))}'"
+        )
+        body = response.text.strip()
+        if body:
+            message = f"{message}; response_body={body[:500]}"
+        return message
+
+    @staticmethod
+    def _redact_api_key(url: str) -> str:
+        parts = urlsplit(url)
+        query = urlencode(
+            [
+                (key, "***" if key.lower() == "api_key" else value)
+                for key, value in parse_qsl(parts.query, keep_blank_values=True)
+            ],
+            doseq=True,
+            safe="*",
+        )
+        return urlunsplit((parts.scheme, parts.netloc, parts.path, query, parts.fragment))
