@@ -4,6 +4,12 @@
 
 Generated before push from commits:
 
+- `622fc15` Fix duplicate language extension naming when uploading subtitle
+
+## Unreleased - 2026-06-25 19:05 +07
+
+Generated before push from commits:
+
 - `fc97657` Implement existing subtitle quality detection and compare quality before replacing or translating
 
 ## Unreleased - 2026-06-25 17:58 +07
