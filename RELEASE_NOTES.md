@@ -1,5 +1,11 @@
 # Release Notes
 
+## Unreleased - 2026-06-25 17:58 +07
+
+Generated before push from commits:
+
+- `676ed33` Fix duplicate processing for Vietnamese subtitles using robust language normalization
+
 ## Unreleased - 2026-06-16 08:09 +07
 
 Generated before push from commits:
