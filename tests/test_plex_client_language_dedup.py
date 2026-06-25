@@ -97,3 +97,25 @@ def test_remove_external_subtitles(mock_config):
         assert removed == 1
         video.removeSubtitles.assert_called_once_with(subtitleStream=stream_vi)
         client._refresh_metadata.assert_called_once_with(video)
+
+def test_detect_existing_quality():
+    from app.services.subtitle_service import SubtitleService
+    
+    service = Mock(spec=SubtitleService)
+    service._detect_existing_quality = SubtitleService._detect_existing_quality.__get__(service, SubtitleService)
+    
+    subs1 = [{"is_embedded": True, "is_image_based": False, "title": "Vietnamese"}]
+    assert service._detect_existing_quality(subs1) == "retail"
+    
+    subs2 = [{"is_embedded": False, "is_image_based": False, "title": "Somewhere.Safe.S01E01.retail.srt"}]
+    assert service._detect_existing_quality(subs2) == "retail"
+    
+    subs3 = [{"is_embedded": False, "is_image_based": False, "title": "Somewhere.Safe.S01E01.ai.srt"}]
+    assert service._detect_existing_quality(subs3) == "ai"
+    
+    subs4 = [{"is_embedded": False, "is_image_based": False, "title": "Somewhere.Safe.S01E01.dịch.srt"}]
+    assert service._detect_existing_quality(subs4) == "translated"
+    
+    subs5 = [{"is_embedded": False, "is_image_based": False, "title": "opensubtitles-12345.srt"}]
+    assert service._detect_existing_quality(subs5) == "translated"
+

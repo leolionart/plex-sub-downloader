@@ -184,7 +184,12 @@ class SubtitleService:
 
             # Step 3: Check existing subtitles với improved logic
             log.info("[Step 3/7] Checking existing subtitles")
-            should_download, reason = await self._should_download_subtitle(video, metadata, log)
+            sub_details = await asyncio.to_thread(
+                self.plex_client.get_subtitle_details,
+                video,
+                self.runtime_config.default_language,
+            )
+            should_download, reason = await self._should_download_subtitle(video, metadata, sub_details, log)
             if not should_download:
                 log.info(f"[Step 3/7] ⏭ Skipping: {reason}", title=metadata.title)
                 self.stats.increment("total_skipped")
@@ -221,6 +226,7 @@ class SubtitleService:
                     translation_result = await self._try_translation_fallback(
                         metadata,
                         video,
+                        sub_details,
                         log,
                     )
                     if translation_result:
@@ -244,6 +250,34 @@ class SubtitleService:
                 f"[Step 4/7] ✓ Found {len(subtitles)} subtitle(s). Best: {subtitle.name}",
                 score=subtitle.priority_score,
             )
+
+            # Step 5a: Compare quality with existing subtitle if replace mode is enabled
+            if sub_details["has_subtitle"] and self.config.subtitle_settings.replace_existing:
+                existing_quality = self._detect_existing_quality(sub_details["subtitle_info"])
+                new_quality = subtitle.quality_type  # 'retail', 'translated', 'ai', 'unknown'
+                
+                quality_ranking = {
+                    "retail": 3,
+                    "translated": 2,
+                    "ai": 1,
+                    "unknown": 0,
+                }
+                
+                existing_rank = quality_ranking.get(existing_quality, 0)
+                new_rank = quality_ranking.get(new_quality, 0)
+                
+                log.info(
+                    f"[Step 5/7] Comparing quality for replace: existing={existing_quality} (rank {existing_rank}) vs new={new_quality} (rank {new_rank})"
+                )
+                
+                if new_rank <= existing_rank:
+                    log.info(
+                        f"[Step 5/7] ⏭ Skipping replacement: new quality ({new_quality}) is not better than existing ({existing_quality})"
+                    )
+                    return {
+                        "status": "skipped",
+                        "message": f"Existing subtitle has equal or better quality ({existing_quality} >= {new_quality})",
+                    }
 
             # Notify: subtitle found
             await self.telegram_client.notify_subtitle_found(
@@ -365,6 +399,7 @@ class SubtitleService:
         self,
         video: Video,
         metadata: MediaMetadata,
+        sub_details: dict,
         log: RequestContextLogger,
     ) -> tuple[bool, str]:
         """
@@ -373,13 +408,6 @@ class SubtitleService:
         Returns:
             (should_download: bool, reason: str)
         """
-        # Get subtitle details
-        sub_details = await asyncio.to_thread(
-            self.plex_client.get_subtitle_details,
-            video,
-            self.runtime_config.default_language,
-        )
-
         runtime_settings = self.config.subtitle_settings
 
         # Check 1: Đã có subtitle và setting là skip
@@ -411,13 +439,45 @@ class SubtitleService:
 
         # Check 4: Replace mode - chỉ download nếu có subtitle mới tốt hơn
         if sub_details["has_subtitle"] and runtime_settings.replace_existing:
-            # TODO: Implement quality comparison với existing subtitle
-            # For now, cho phép replace
             log.info(
-                "Replace mode enabled - will replace existing subtitle if better quality found"
+                "Replace mode enabled - will check quality comparison after finding candidates"
             )
 
         return True, "All checks passed"
+
+    def _detect_existing_quality(self, subtitle_info: list[dict]) -> str:
+        """Detect the highest quality among existing subtitle streams."""
+        best_quality = "unknown"
+        quality_ranking = {
+            "retail": 3,
+            "translated": 2,
+            "ai": 1,
+            "unknown": 0,
+        }
+        
+        for sub in subtitle_info:
+            title = (sub.get("title") or "").lower()
+            codec = (sub.get("codec") or "").lower()
+            
+            # Default quality based on title keywords or other markers
+            q = "unknown"
+            if sub.get("is_embedded") and not sub.get("is_image_based"):
+                q = "retail"
+            elif any(k in title for k in ("retail", "official", "web-dl", "bluray", "hdtv")):
+                q = "retail"
+            elif any(k in title for k in ("ai", "gpt", "gemini", "claude")):
+                q = "ai"
+            elif any(k in title for k in ("translated", "dịch", "openai", "fallback")):
+                q = "translated"
+            else:
+                # If it's a text subtitle from opensubtitles/subdl/subsource, it might be retail or translated
+                if not sub.get("is_embedded"):
+                    q = "translated"
+            
+            if quality_ranking.get(q, 0) > quality_ranking.get(best_quality, 0):
+                best_quality = q
+                
+        return best_quality
 
     @staticmethod
     def _get_video_filename(video: Video) -> str | None:
@@ -1881,6 +1941,7 @@ class SubtitleService:
         self,
         metadata: MediaMetadata,
         video: Video,
+        sub_details: dict,
         log: RequestContextLogger,
     ) -> dict[str, str] | None:
         """
@@ -1889,6 +1950,7 @@ class SubtitleService:
         Args:
             metadata: MediaMetadata
             video: Plex Video object
+            sub_details: Subtitle details dict
             log: Logger instance
 
         Returns:
@@ -1902,6 +1964,24 @@ class SubtitleService:
         if not self.translation_client.enabled:
             log.warning("Translation requested but no OpenAI API key configured")
             return None
+
+        # Check if we already have a Vietnamese subtitle that is translated or retail quality
+        if sub_details["has_subtitle"] and ss.replace_existing:
+            existing_quality = self._detect_existing_quality(sub_details["subtitle_info"])
+            quality_ranking = {
+                "retail": 3,
+                "translated": 2,
+                "ai": 1,
+                "unknown": 0,
+            }
+            if quality_ranking.get(existing_quality, 0) >= 2:  # translated or better
+                log.info(
+                    f"[Step 4/7] ⏭ Skipping translation fallback: existing subtitle has equal or better quality ({existing_quality})"
+                )
+                return {
+                    "status": "skipped",
+                    "message": f"Existing subtitle has equal or better quality than translated ({existing_quality})",
+                }
 
         log.info("Translation fallback: Searching English subtitle")
 
