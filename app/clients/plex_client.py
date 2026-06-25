@@ -431,9 +431,12 @@ class PlexClient:
             logger.info(f"Uploading subtitle for '{video.title}' (lang={language})")
             logger.debug(f"Subtitle path: {subtitle_path}")
 
-            # Rename file để include language code (Plex convention)
-            temp_path = subtitle_path.parent / f"{subtitle_path.stem}.{language}.srt"
-            subtitle_path.rename(temp_path)
+            # Rename file để include language code (Plex convention) nếu chưa có
+            if not subtitle_path.name.lower().endswith(f".{language.lower()}.srt"):
+                temp_path = subtitle_path.parent / f"{subtitle_path.stem}.{language}.srt"
+                subtitle_path.rename(temp_path)
+            else:
+                temp_path = subtitle_path
 
             video.uploadSubtitles(str(temp_path))
 
