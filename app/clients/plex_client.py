@@ -232,6 +232,29 @@ class PlexClient:
         return metadata
 
     @staticmethod
+    def normalize_language(lang: str | None) -> str | None:
+        """
+        Normalize language code (e.g. 'vie' -> 'vi', 'eng' -> 'en').
+        Supports ISO 639-1 and ISO 639-2.
+        """
+        if not lang:
+            return None
+        lang = lang.lower().strip()
+        iso_map = {
+            "vie": "vi", "eng": "en", "fra": "fr", "fre": "fr",
+            "deu": "de", "ger": "de", "zho": "zh", "chi": "zh",
+            "spa": "es", "rus": "ru", "jpn": "ja", "kor": "ko",
+            "ara": "ar", "bul": "bg", "hrv": "hr", "ces": "cs",
+            "cze": "cs", "dan": "da", "nld": "nl", "dut": "nl",
+            "fin": "fi", "ell": "el", "gre": "el", "heb": "he",
+            "hun": "hu", "ind": "id", "ita": "it", "msa": "ms",
+            "may": "ms", "nor": "no", "fas": "fa", "per": "fa",
+            "pol": "pl", "por": "pt", "ron": "ro", "rum": "ro",
+            "swe": "sv", "tha": "th", "tur": "tr", "ukr": "uk"
+        }
+        return iso_map.get(lang, lang)
+
+    @staticmethod
     def _stream_matches_language(stream, language: str) -> bool:
         """
         Check if a subtitle stream matches the given language code.
@@ -244,7 +267,11 @@ class PlexClient:
         """
         tag = getattr(stream, "languageTag", None)
         code = getattr(stream, "languageCode", None)
-        return tag == language or code == language
+        target_norm = PlexClient.normalize_language(language)
+        return (
+            PlexClient.normalize_language(tag) == target_norm or
+            PlexClient.normalize_language(code) == target_norm
+        )
 
     def _get_existing_subtitle_languages(self, video: Video) -> list[str]:
         """
@@ -267,7 +294,9 @@ class PlexClient:
                             code = getattr(stream, "languageCode", None)
                             lang = tag or code
                             if lang:
-                                languages.add(lang)
+                                norm_lang = PlexClient.normalize_language(lang)
+                                if norm_lang:
+                                    languages.add(norm_lang)
 
             logger.debug(f"Found existing subtitles: {languages}")
             return list(languages)
@@ -359,7 +388,7 @@ class PlexClient:
             True nếu đã có subtitle
         """
         existing_langs = self._get_existing_subtitle_languages(video)
-        has_sub = language in existing_langs
+        has_sub = PlexClient.normalize_language(language) in existing_langs
 
         logger.info(
             f"Subtitle check for '{video.title}' (lang={language}): "
@@ -439,6 +468,7 @@ class PlexClient:
         """
         removed = 0
         try:
+            target_norm = PlexClient.normalize_language(language)
             for stream in video.subtitleStreams():
                 tag = getattr(stream, "languageTag", None)
                 code = getattr(stream, "languageCode", None)
@@ -448,7 +478,12 @@ class PlexClient:
                 stream_format = getattr(stream, "format", "") or ""
                 is_embedded = stream_format.lower() in ("pgs", "vobsub", "dvdsub")
 
-                if stream_lang == language and not is_embedded and hasattr(stream, "key") and stream.key:
+                if (
+                    PlexClient.normalize_language(stream_lang) == target_norm
+                    and not is_embedded
+                    and hasattr(stream, "key")
+                    and stream.key
+                ):
                     try:
                         video.removeSubtitles(subtitleStream=stream)
                         removed += 1
