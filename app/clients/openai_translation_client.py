@@ -4,7 +4,7 @@ Translate English subtitles → Vietnamese khi không tìm thấy subtitle tiế
 """
 
 import asyncio
-import logging
+import json
 import re
 from pathlib import Path
 from typing import Any
@@ -13,7 +13,11 @@ import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.models.runtime_config import RuntimeConfig
-from app.models.settings import DEFAULT_TRANSLATION_SYSTEM_PROMPT_TEMPLATE
+from app.models.settings import (
+    DEFAULT_TRANSLATION_CONTEXT_SYSTEM_PROMPT_TEMPLATE,
+    DEFAULT_TRANSLATION_REVIEW_SYSTEM_PROMPT_TEMPLATE,
+    DEFAULT_TRANSLATION_SYSTEM_PROMPT_TEMPLATE,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -21,6 +25,7 @@ logger = get_logger(__name__)
 
 class TranslationClientError(Exception):
     """Base exception for translation client errors."""
+
     pass
 
 
@@ -61,7 +66,9 @@ class OpenAITranslationClient:
         if not self.enabled:
             logger.info("OpenAI translation disabled - no API key")
         else:
-            logger.info(f"OpenAI translation enabled (model={self.model}, base_url={self.base_url})")
+            logger.info(
+                f"OpenAI translation enabled (model={self.model}, base_url={self.base_url})"
+            )
 
         self._client = httpx.AsyncClient(
             timeout=60.0,
@@ -104,11 +111,13 @@ class OpenAITranslationClient:
                 timing = lines[1]
                 text = "\n".join(lines[2:])
 
-                entries.append({
-                    "index": index,
-                    "timing": timing,
-                    "text": text,
-                })
+                entries.append(
+                    {
+                        "index": index,
+                        "timing": timing,
+                        "text": text,
+                    }
+                )
             except Exception as e:
                 logger.warning(f"Failed to parse SRT block: {e}")
                 continue
@@ -125,6 +134,7 @@ class OpenAITranslationClient:
         texts: list[str],
         from_lang: str = "en",
         to_lang: str = "vi",
+        context: dict[str, Any] | None = None,
     ) -> list[str]:
         """
         Translate batch of texts sử dụng OpenAI API.
@@ -162,11 +172,7 @@ class OpenAITranslationClient:
                 count=len(texts),
             )
 
-        # Build numbered input
-        numbered_lines = []
-        for i, text in enumerate(texts, 1):
-            numbered_lines.append(f"[{i}] {text}")
-        user_prompt = "\n".join(numbered_lines)
+        user_prompt = self._build_translation_user_prompt(texts, context)
 
         try:
             response = await self._client.post(
@@ -196,7 +202,7 @@ class OpenAITranslationClient:
                 # Pad with original text for missing entries
                 while len(translations) < len(texts):
                     translations.append(texts[len(translations)])
-                translations = translations[:len(texts)]
+                translations = translations[: len(texts)]
 
             return translations
 
@@ -207,6 +213,44 @@ class OpenAITranslationClient:
             logger.error(f"Translation error: {e}")
             raise TranslationClientError(f"Translation failed: {e}") from e
 
+    def _build_translation_user_prompt(
+        self,
+        texts: list[str],
+        context: dict[str, Any] | None = None,
+    ) -> str:
+        """Build a numbered translation prompt with optional episode/batch context."""
+        sections: list[str] = []
+        if context:
+            sections.append(
+                "EPISODE / MOVIE CONTEXT:\n"
+                + json.dumps(context.get("profile") or {}, ensure_ascii=False, indent=2)
+            )
+            metadata = context.get("metadata")
+            if metadata:
+                sections.append(
+                    "MEDIA METADATA:\n" + json.dumps(metadata, ensure_ascii=False, indent=2)
+                )
+            previous_context = context.get("previous_context") or []
+            if previous_context:
+                sections.append(
+                    "PREVIOUS CONTEXT (do not translate, use only for context):\n"
+                    + self._format_context_entries(previous_context)
+                )
+            next_context = context.get("next_context") or []
+            if next_context:
+                sections.append(
+                    "NEXT CONTEXT (do not translate, use only for context):\n"
+                    + self._format_context_entries(next_context)
+                )
+
+        numbered_lines = [f"[{i}] {text}" for i, text in enumerate(texts, 1)]
+        sections.append("LINES TO TRANSLATE:\n" + "\n".join(numbered_lines))
+        return "\n\n".join(sections)
+
+    @staticmethod
+    def _format_context_entries(entries: list[dict[str, Any]]) -> str:
+        return "\n".join(f"[{entry['index']}] {entry['text']}" for entry in entries)
+
     def _parse_numbered_response(self, response_text: str, expected_count: int) -> list[str]:
         """
         Parse numbered AI response: [1] text, [2] text, ...
@@ -215,7 +259,7 @@ class OpenAITranslationClient:
         Xử lý được multi-line entries giữa các [N] markers.
         """
         # Split by [N] pattern, capture both index and content between markers
-        parts = re.split(r'\[(\d+)\]\s*', response_text.strip())
+        parts = re.split(r"\[(\d+)\]\s*", response_text.strip())
         # parts = ['preamble', '1', 'text1\n', '2', 'text2\n', ...]
 
         results: dict[int, str] = {}
@@ -245,6 +289,7 @@ class OpenAITranslationClient:
         to_lang: str = "vi",
         batch_size: int = 25,
         max_concurrent: int = 5,
+        media_metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
         Translate entire .srt subtitle file with parallel batch processing.
@@ -270,13 +315,26 @@ class OpenAITranslationClient:
         if not entries:
             raise TranslationClientError("No subtitle entries found")
 
+        profile: dict[str, Any] = {}
+        context_enabled = self._config.subtitle_settings.translation_context_enabled
+        if context_enabled:
+            try:
+                profile = await self.extract_episode_context(
+                    entries,
+                    from_lang=from_lang,
+                    to_lang=to_lang,
+                    media_metadata=media_metadata,
+                )
+                logger.info("✓ Translation context profile extracted")
+            except Exception as e:
+                logger.warning("Translation context extraction failed, continuing: %s", e)
+                profile = {}
+
         # Split entries into batches
-        batches = [
-            entries[i:i + batch_size]
-            for i in range(0, len(entries), batch_size)
-        ]
+        batches = [entries[i : i + batch_size] for i in range(0, len(entries), batch_size)]
         total_batches = len(batches)
         semaphore = asyncio.Semaphore(max_concurrent)
+        context_window = self._config.subtitle_settings.translation_context_window
 
         logger.info(
             f"Translation plan: {len(entries)} entries → {total_batches} batches "
@@ -291,9 +349,22 @@ class OpenAITranslationClient:
                 batch_num = batch_idx + 1
                 logger.info(f"Translating batch {batch_num}/{total_batches} ({len(batch)} entries)")
                 texts = [entry["text"] for entry in batch]
+                context = self._build_batch_context(
+                    entries=entries,
+                    batch_start=batch_idx * batch_size,
+                    batch_size=len(batch),
+                    context_window=context_window,
+                    profile=profile,
+                    media_metadata=media_metadata,
+                )
 
                 try:
-                    translated_texts = await self.translate_text_batch(texts, from_lang, to_lang)
+                    translated_texts = await self.translate_text_batch(
+                        texts,
+                        from_lang,
+                        to_lang,
+                        context=context,
+                    )
                     translated = [
                         {"index": entry["index"], "timing": entry["timing"], "text": t}
                         for entry, t in zip(batch, translated_texts)
@@ -306,16 +377,30 @@ class OpenAITranslationClient:
                     return (batch_idx, list(batch))
 
         # Launch all batches concurrently (semaphore limits parallelism)
-        results = await asyncio.gather(*[
-            _translate_one_batch(idx, batch)
-            for idx, batch in enumerate(batches)
-        ])
+        results = await asyncio.gather(
+            *[_translate_one_batch(idx, batch) for idx, batch in enumerate(batches)]
+        )
 
         # Sort by batch index and flatten — guarantees correct order
         results_sorted = sorted(results, key=lambda r: r[0])
         translated_entries = [
             entry for _, batch_entries in results_sorted for entry in batch_entries
         ]
+
+        review_enabled = self._config.subtitle_settings.translation_consistency_review_enabled
+        if review_enabled:
+            try:
+                translated_entries = await self.review_translation_consistency(
+                    source_entries=entries,
+                    translated_entries=translated_entries,
+                    from_lang=from_lang,
+                    to_lang=to_lang,
+                    profile=profile,
+                    media_metadata=media_metadata,
+                )
+                logger.info("✓ Translation consistency review completed")
+            except Exception as e:
+                logger.warning("Translation consistency review failed, keeping batch output: %s", e)
 
         # Write translated SRT
         srt_content = []
@@ -336,9 +421,166 @@ class OpenAITranslationClient:
             "input_file": str(srt_path),
             "output_file": str(output_path),
             "model": self.model,
+            "context_enabled": context_enabled,
+            "context_profile_extracted": bool(profile),
+            "context_window": context_window,
+            "review_enabled": review_enabled,
         }
 
         return stats
+
+    async def extract_episode_context(
+        self,
+        entries: list[dict[str, Any]],
+        from_lang: str,
+        to_lang: str,
+        media_metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Extract whole-episode translation context before batching."""
+        if not self.enabled:
+            raise TranslationClientError("Translation disabled - no API key")
+
+        prompt_template = self._config.subtitle_settings.translation_context_system_prompt_template
+        if not prompt_template.strip():
+            prompt_template = DEFAULT_TRANSLATION_CONTEXT_SYSTEM_PROMPT_TEMPLATE
+
+        response = await self._client.post(
+            f"{self.base_url}/chat/completions",
+            json={
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": prompt_template},
+                    {
+                        "role": "user",
+                        "content": json.dumps(
+                            {
+                                "from_lang": from_lang,
+                                "to_lang": to_lang,
+                                "metadata": media_metadata or {},
+                                "transcript": [
+                                    {
+                                        "index": entry["index"],
+                                        "timing": entry["timing"],
+                                        "text": entry["text"],
+                                    }
+                                    for entry in entries
+                                ],
+                            },
+                            ensure_ascii=False,
+                        ),
+                    },
+                ],
+                "temperature": 0.1,
+            },
+        )
+        response.raise_for_status()
+        content = response.json()["choices"][0]["message"]["content"]
+        return self._parse_json_object(str(content))
+
+    async def review_translation_consistency(
+        self,
+        source_entries: list[dict[str, Any]],
+        translated_entries: list[dict[str, Any]],
+        from_lang: str,
+        to_lang: str,
+        profile: dict[str, Any],
+        media_metadata: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Run a final full-episode consistency pass over translated subtitles."""
+        if not self.enabled:
+            raise TranslationClientError("Translation disabled - no API key")
+
+        prompt_template = self._config.subtitle_settings.translation_review_system_prompt_template
+        if not prompt_template.strip():
+            prompt_template = DEFAULT_TRANSLATION_REVIEW_SYSTEM_PROMPT_TEMPLATE
+
+        try:
+            system_prompt = prompt_template.format(
+                to_lang=to_lang,
+                count=len(translated_entries),
+            )
+        except Exception as e:
+            logger.warning(
+                "Invalid translation_review_system_prompt_template, using default: %s", e
+            )
+            system_prompt = DEFAULT_TRANSLATION_REVIEW_SYSTEM_PROMPT_TEMPLATE.format(
+                to_lang=to_lang,
+                count=len(translated_entries),
+            )
+
+        response = await self._client.post(
+            f"{self.base_url}/chat/completions",
+            json={
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {
+                        "role": "user",
+                        "content": json.dumps(
+                            {
+                                "from_lang": from_lang,
+                                "to_lang": to_lang,
+                                "metadata": media_metadata or {},
+                                "profile": profile,
+                                "source": [
+                                    {"index": entry["index"], "text": entry["text"]}
+                                    for entry in source_entries
+                                ],
+                                "translation": [
+                                    {"index": entry["index"], "text": entry["text"]}
+                                    for entry in translated_entries
+                                ],
+                            },
+                            ensure_ascii=False,
+                        ),
+                    },
+                ],
+                "temperature": 0.1,
+            },
+        )
+        response.raise_for_status()
+        content = response.json()["choices"][0]["message"]["content"]
+        reviewed_texts = self._parse_numbered_response(str(content), len(translated_entries))
+        if len(reviewed_texts) != len(translated_entries):
+            raise TranslationClientError(
+                f"Review count mismatch: expected {len(translated_entries)}, got {len(reviewed_texts)}"
+            )
+        return [
+            {**entry, "text": reviewed_text}
+            for entry, reviewed_text in zip(translated_entries, reviewed_texts)
+        ]
+
+    @staticmethod
+    def _build_batch_context(
+        entries: list[dict[str, Any]],
+        batch_start: int,
+        batch_size: int,
+        context_window: int,
+        profile: dict[str, Any],
+        media_metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        batch_end = batch_start + batch_size
+        previous_start = max(0, batch_start - context_window)
+        next_end = min(len(entries), batch_end + context_window)
+        return {
+            "metadata": media_metadata or {},
+            "profile": profile,
+            "previous_context": entries[previous_start:batch_start],
+            "next_context": entries[batch_end:next_end],
+        }
+
+    @staticmethod
+    def _parse_json_object(content: str) -> dict[str, Any]:
+        try:
+            payload = json.loads(content)
+        except json.JSONDecodeError:
+            match = re.search(r"\{.*\}", content, flags=re.DOTALL)
+            if not match:
+                raise
+            payload = json.loads(match.group(0))
+        if not isinstance(payload, dict):
+            raise ValueError("Expected JSON object")
+        return payload
 
     async def estimate_cost(
         self,

@@ -189,7 +189,9 @@ class SubtitleService:
                 video,
                 self.runtime_config.default_language,
             )
-            should_download, reason = await self._should_download_subtitle(video, metadata, sub_details, log)
+            should_download, reason = await self._should_download_subtitle(
+                video, metadata, sub_details, log
+            )
             if not should_download:
                 log.info(f"[Step 3/7] ⏭ Skipping: {reason}", title=metadata.title)
                 self.stats.increment("total_skipped")
@@ -255,21 +257,21 @@ class SubtitleService:
             if sub_details["has_subtitle"] and self.config.subtitle_settings.replace_existing:
                 existing_quality = self._detect_existing_quality(sub_details["subtitle_info"])
                 new_quality = subtitle.quality_type  # 'retail', 'translated', 'ai', 'unknown'
-                
+
                 quality_ranking = {
                     "retail": 3,
                     "translated": 2,
                     "ai": 1,
                     "unknown": 0,
                 }
-                
+
                 existing_rank = quality_ranking.get(existing_quality, 0)
                 new_rank = quality_ranking.get(new_quality, 0)
-                
+
                 log.info(
                     f"[Step 5/7] Comparing quality for replace: existing={existing_quality} (rank {existing_rank}) vs new={new_quality} (rank {new_rank})"
                 )
-                
+
                 if new_rank <= existing_rank:
                     log.info(
                         f"[Step 5/7] ⏭ Skipping replacement: new quality ({new_quality}) is not better than existing ({existing_quality})"
@@ -454,11 +456,10 @@ class SubtitleService:
             "ai": 1,
             "unknown": 0,
         }
-        
+
         for sub in subtitle_info:
             title = (sub.get("title") or "").lower()
-            codec = (sub.get("codec") or "").lower()
-            
+
             # Default quality based on title keywords or other markers
             q = "unknown"
             if sub.get("is_embedded") and not sub.get("is_image_based"):
@@ -473,10 +474,10 @@ class SubtitleService:
                 # If it's a text subtitle from opensubtitles/subdl/subsource, it might be retail or translated
                 if not sub.get("is_embedded"):
                     q = "translated"
-            
+
             if quality_ranking.get(q, 0) > quality_ranking.get(best_quality, 0):
                 best_quality = q
-                
+
         return best_quality
 
     @staticmethod
@@ -2468,6 +2469,7 @@ class SubtitleService:
                 from_lang=from_lang,
                 to_lang=to_lang,
                 max_concurrent=concurrency,
+                media_metadata=self._translation_metadata_payload(metadata, video),
             )
 
             log.info(f"✓ Translation completed: {stats['lines_translated']} lines")
@@ -2515,3 +2517,23 @@ class SubtitleService:
                 error_message=f"Translation failed: {e}",
             )
             return None
+
+    @staticmethod
+    def _translation_metadata_payload(
+        metadata: MediaMetadata,
+        video: Video | None = None,
+    ) -> dict[str, Any]:
+        """Metadata sent to AI translation for episode/movie context."""
+        return {
+            "rating_key": metadata.rating_key,
+            "media_type": metadata.media_type,
+            "title": metadata.title,
+            "episode_summary": getattr(video, "summary", None) if video else None,
+            "search_title": metadata.search_title,
+            "show_title": metadata.show_title,
+            "year": metadata.year,
+            "imdb_id": metadata.imdb_id,
+            "tmdb_id": metadata.tmdb_id,
+            "season_number": metadata.season_number,
+            "episode_number": metadata.episode_number,
+        }
