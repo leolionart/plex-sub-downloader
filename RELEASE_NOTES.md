@@ -1,5 +1,11 @@
 # Release Notes
 
+## Unreleased - 2026-07-19 17:48 +07
+
+Generated before push from commits:
+
+- `e69193c` feat: add context-aware subtitle translation
+
 ## Unreleased - 2026-06-25 19:05 +07
 
 Generated before push from commits:
