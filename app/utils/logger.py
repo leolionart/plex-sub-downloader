@@ -13,6 +13,16 @@ from app.utils.log_buffer import MemoryLogHandler
 log_buffer = MemoryLogHandler(maxlen=2000)
 
 
+class HealthCheckFilter(logging.Filter):
+    """Drop health-check noise from console, buffer, and uvicorn access logs."""
+
+    HEALTH_PATHS = {"/health", "/api/health"}
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        return not any(path in message for path in self.HEALTH_PATHS)
+
+
 class CustomFormatter(logging.Formatter):
     """Custom formatter với colors cho terminal output."""
 
@@ -47,17 +57,23 @@ def setup_logging() -> None:
         root_logger.removeHandler(handler)
 
     # Console handler with custom formatter
+    health_filter = HealthCheckFilter()
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(CustomFormatter())
+    console_handler.addFilter(health_filter)
     root_logger.addHandler(console_handler)
 
     # Memory buffer handler for web UI log viewer
+    log_buffer.addFilter(health_filter)
     root_logger.addHandler(log_buffer)
 
     # Suppress noisy third-party loggers
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
+
+    # Uvicorn access logs are emitted outside FastAPI middleware.
+    logging.getLogger("uvicorn.access").addFilter(health_filter)
 
 
 def get_logger(name: str) -> logging.Logger:

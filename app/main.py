@@ -116,12 +116,12 @@ async def add_request_id(request: Request, call_next: Any) -> Any:
     request_id = str(uuid.uuid4())[:8]
     request.state.request_id = request_id
 
-    # Skip logging for log-related endpoints to avoid noise/infinite loops
+    # Skip noisy polling endpoints to avoid log spam/infinite loops.
     path = request.url.path
-    skip_log = path.startswith("/api/logs")
+    skip_log = path in {"/health", "/api/health"} or path.startswith("/api/logs")
 
     if not skip_log:
-        logger.info(
+        logger.debug(
             f"→ {request.method} {path}",
             extra={"request_id": request_id},
         )
@@ -129,10 +129,14 @@ async def add_request_id(request: Request, call_next: Any) -> Any:
     response = await call_next(request)
 
     if not skip_log:
-        logger.info(
-            f"← {request.method} {path} - {response.status_code}",
-            extra={"request_id": request_id},
-        )
+        message = f"← {request.method} {path} - {response.status_code}"
+        extra = {"request_id": request_id}
+        if response.status_code >= 500:
+            logger.error(message, extra=extra)
+        elif response.status_code >= 400:
+            logger.warning(message, extra=extra)
+        else:
+            logger.debug(message, extra=extra)
 
     return response
 
