@@ -212,14 +212,9 @@ async def logs_ui(request: Request) -> HTMLResponse:
 
 @app.get("/translation", response_class=HTMLResponse)
 async def translation_ui(request: Request) -> HTMLResponse:
-    """Translation UI."""
-    if not subtitle_service or not runtime_config:
-        return HTMLResponse("Service not initialized", status_code=503)
-    configured = _is_configured(runtime_config)
-    return templates.TemplateResponse(
-        "translation.html",
-        {"request": request, "configured": configured},
-    )
+    """Backward-compatible entry point; all subtitle actions live in /sync."""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/sync", status_code=307)
 
 
 @app.get("/sync", response_class=HTMLResponse)
