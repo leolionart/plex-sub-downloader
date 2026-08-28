@@ -95,6 +95,28 @@ Tìm subtitle qua tất cả provider đã bật. Có thể tìm theo `rating_ke
 - `ai_verified`: candidate mơ hồ đã được AI xác nhận đủ confidence.
 - `unverified`: chưa qua lớp xác thực mới, thường chỉ còn xuất hiện ở dữ liệu cũ/cache cũ.
 
+### `POST /api/subtitles/manual-search`
+Tìm subtitle thủ công, không gây thay đổi trên Plex. Endpoint này mặc định
+`use_cache=false` để tránh lặp lại candidate sai từ luồng tự động; có thể truyền
+`use_cache=true` nếu muốn dùng cache.
+
+Ngoài metadata thông thường, request có thể chỉ cung cấp `video_filename` (ví dụ
+`Movie.2024.1080p.WEB-DL.mkv`) để thử tìm đúng release trên các provider hỗ trợ
+tìm theo tên file.
+
+```json
+{
+  "video_filename": "From.S03E01.1080p.WEB-DL.mkv",
+  "language": "vi",
+  "use_cache": false
+}
+```
+
+Response có cùng cấu trúc với `/api/subtitles/search` (`candidates`,
+`provider_counts`, và thông tin match validation). Candidate được chọn có thể
+được tải hoặc upload bằng `subtitle_id` dạng `provider:id` qua các endpoint
+`/download` và `/upload`.
+
 ### `POST /api/subtitles/download`
 Tìm và tải subtitle file về client, không upload vào Plex.
 
@@ -391,3 +413,10 @@ Thông tin API và endpoints.
 
 ### `GET /api/sync/thumb/{rating_key}`
 Proxy thumbnail từ Plex (tránh CORS).
+
+### `POST /api/telegram/webhook`
+Nhận Telegram Update cho inline callback button. Đăng ký URL này với Bot API
+(`setWebhook`). Các callback `subtitle:manual_search:<rating_key>` sẽ tìm mới
+không dùng cache và trả danh sách candidate; `subtitle:upload_best:<rating_key>`
+sẽ tải/upload bản tốt nhất. Webhook chỉ chấp nhận callback từ `telegram_chat_id`
+đã cấu hình.

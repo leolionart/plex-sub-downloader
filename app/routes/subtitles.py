@@ -37,9 +37,27 @@ class SubtitleSearchRequest(BaseModel):
 
     @model_validator(mode="after")
     def require_media_reference(self) -> "SubtitleSearchRequest":
-        if not (self.rating_key or self.title or self.imdb_id or self.tmdb_id):
-            raise ValueError("rating_key, title, imdb_id, or tmdb_id is required")
+        # A Plex rating key, external ID, title, or a concrete video filename
+        # is enough to perform a provider search.  Filename-only searches are
+        # particularly useful for manual recovery when Plex metadata points to
+        # the wrong release/episode (SubDL supports this directly).
+        if not (
+            self.rating_key
+            or self.title
+            or self.imdb_id
+            or self.tmdb_id
+            or self.video_filename
+        ):
+            raise ValueError(
+                "rating_key, title, imdb_id, tmdb_id, or video_filename is required"
+            )
         return self
+
+
+class ManualSubtitleSearchRequest(SubtitleSearchRequest):
+    """Manual search payload; cache is opt-in to avoid stale auto matches."""
+
+    use_cache: bool = False
 
 
 class SubtitleDownloadRequest(BaseModel):
@@ -118,6 +136,17 @@ async def search_subtitles(request: SubtitleSearchRequest) -> dict[str, Any]:
         "provider_counts": service._provider_counts(results),
         "candidates": [service._subtitle_result_payload(result) for result in results],
     }
+
+
+@router.post("/manual-search")
+async def manual_search_subtitles(request: ManualSubtitleSearchRequest) -> dict[str, Any]:
+    """Fresh, non-mutating subtitle search intended for manual recovery.
+
+    This endpoint mirrors ``/search`` but defaults to bypassing the cache so a
+    user can retry after an automatic match was wrong. Callers may still set
+    ``use_cache=true`` explicitly when desired.
+    """
+    return await search_subtitles(request)
 
 
 @router.post("/download")

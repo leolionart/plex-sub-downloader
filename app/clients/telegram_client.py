@@ -3,8 +3,7 @@ Telegram notification client.
 Gửi alerts về subtitle downloads, errors, stats.
 """
 
-import logging
-from typing import Any
+from typing import Any, Mapping, Sequence
 
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -59,6 +58,7 @@ class TelegramClient:
         message: str,
         parse_mode: str = "Markdown",
         disable_notification: bool = False,
+        reply_markup: Mapping[str, Any] | Sequence[Sequence[Mapping[str, Any]]] | None = None,
     ) -> bool:
         """
         Gửi text message qua Telegram.
@@ -67,6 +67,9 @@ class TelegramClient:
             message: Message content (supports Markdown)
             parse_mode: "Markdown" or "HTML"
             disable_notification: Silent notification
+            reply_markup: Telegram inline keyboard markup. Either the raw
+                ``{"inline_keyboard": ...}`` object or a 2-D sequence of
+                button dictionaries (``{"text": ..., "callback_data": ...}``).
 
         Returns:
             True nếu gửi thành công
@@ -76,14 +79,18 @@ class TelegramClient:
             return False
 
         try:
+            payload: dict[str, Any] = {
+                "chat_id": self.chat_id,
+                "text": message,
+                "parse_mode": parse_mode,
+                "disable_notification": disable_notification,
+            }
+            if reply_markup:
+                payload["reply_markup"] = self._normalize_reply_markup(reply_markup)
+
             response = await self._client.post(
                 f"{self.base_url}/sendMessage",
-                json={
-                    "chat_id": self.chat_id,
-                    "text": message,
-                    "parse_mode": parse_mode,
-                    "disable_notification": disable_notification,
-                },
+                json=payload,
             )
             response.raise_for_status()
 
@@ -92,6 +99,62 @@ class TelegramClient:
 
         except Exception as e:
             logger.error(f"Failed to send Telegram message: {e}")
+            return False
+
+    @staticmethod
+    def _normalize_reply_markup(
+        reply_markup: Mapping[str, Any] | Sequence[Sequence[Mapping[str, Any]]],
+    ) -> dict[str, Any]:
+        """Normalize shorthand button rows to Telegram's markup object."""
+        if isinstance(reply_markup, Mapping):
+            return dict(reply_markup)
+        return {"inline_keyboard": [list(row) for row in reply_markup]}
+
+    async def answer_callback_query(
+        self,
+        callback_query_id: str,
+        text: str | None = None,
+        show_alert: bool = False,
+    ) -> bool:
+        """Acknowledge a Telegram callback query to stop the client spinner."""
+        if not self.enabled:
+            return False
+        payload: dict[str, Any] = {
+            "callback_query_id": callback_query_id,
+            "show_alert": show_alert,
+        }
+        if text:
+            payload["text"] = text
+        try:
+            response = await self._client.post(f"{self.base_url}/answerCallbackQuery", json=payload)
+            response.raise_for_status()
+            return bool(response.json().get("ok", True))
+        except Exception as e:
+            logger.error(f"Failed to answer Telegram callback query: {e}")
+            return False
+
+    async def edit_message_reply_markup(
+        self,
+        message_id: int,
+        reply_markup: Mapping[str, Any] | Sequence[Sequence[Mapping[str, Any]]] | None = None,
+        chat_id: str | int | None = None,
+    ) -> bool:
+        """Replace/remove inline buttons on an existing message."""
+        if not self.enabled:
+            return False
+        payload: dict[str, Any] = {
+            "chat_id": chat_id or self.chat_id,
+            "message_id": message_id,
+            "reply_markup": self._normalize_reply_markup(reply_markup or {"inline_keyboard": []}),
+        }
+        try:
+            response = await self._client.post(
+                f"{self.base_url}/editMessageReplyMarkup", json=payload
+            )
+            response.raise_for_status()
+            return bool(response.json().get("ok", True))
+        except Exception as e:
+            logger.error(f"Failed to edit Telegram message markup: {e}")
             return False
 
     async def notify_processing_started(
@@ -115,6 +178,8 @@ class TelegramClient:
         language: str,
         quality: str,
         total_results: int,
+        rating_key: str | None = None,
+        subtitle_id: str | None = None,
     ) -> None:
         """Notify khi tìm thấy subtitle."""
         message = (
@@ -125,7 +190,17 @@ class TelegramClient:
             f"⭐ *Quality:* {quality}\n"
             f"📊 *Results:* {total_results} subtitle(s)"
         )
-        await self.send_message(message, disable_notification=True)
+        buttons = None
+        if rating_key:
+            target = subtitle_id or "best"
+            buttons = [[
+                {"text": "⬆️ Upload bản này", "callback_data": f"subtitle:upload:{rating_key}:{target}"},
+                {"text": "🔎 Tìm lại", "callback_data": f"subtitle:manual_search:{rating_key}"},
+            ], [{"text": "🌐 Dịch sang Vietsub", "callback_data": f"subtitle:translate:{rating_key}"}]]
+        if buttons:
+            await self.send_message(message, disable_notification=True, reply_markup=buttons)
+        else:
+            await self.send_message(message, disable_notification=True)
 
     async def notify_subtitle_downloaded(
         self,
@@ -133,6 +208,7 @@ class TelegramClient:
         subtitle_name: str,
         language: str,
         quality: str,
+        rating_key: str | None = None,
     ) -> None:
         """Notify về subtitle download và upload thành công."""
         message = (
@@ -142,12 +218,22 @@ class TelegramClient:
             f"⭐ *Quality:* {quality}\n"
             f"📄 *File:* `{subtitle_name}`"
         )
-        await self.send_message(message, disable_notification=True)
+        buttons = None
+        if rating_key:
+            buttons = [[
+                {"text": "🔄 Sync timing", "callback_data": f"subtitle:sync:{rating_key}"},
+                {"text": "✨ Cải thiện", "callback_data": f"subtitle:improve:{rating_key}"},
+            ], [{"text": "🌐 Dịch lại", "callback_data": f"subtitle:translate:{rating_key}"}]]
+        if buttons:
+            await self.send_message(message, disable_notification=True, reply_markup=buttons)
+        else:
+            await self.send_message(message, disable_notification=True)
 
     async def notify_subtitle_not_found(
         self,
         title: str,
         language: str,
+        rating_key: str | None = None,
     ) -> None:
         """Notify khi không tìm thấy subtitle."""
         message = f"""
@@ -157,12 +243,22 @@ class TelegramClient:
 🌍 *Language:* {language}
 💡 *Suggestion:* Check Subsource API or try manual search
 """
-        await self.send_message(message, disable_notification=True)
+        buttons = None
+        if rating_key:
+            buttons = [[
+                {"text": "🔎 Tìm sub thủ công", "callback_data": f"subtitle:manual_search:{rating_key}"},
+                {"text": "⬆️ Upload bản tốt nhất", "callback_data": f"subtitle:upload_best:{rating_key}"},
+            ]]
+        if buttons:
+            await self.send_message(message, disable_notification=True, reply_markup=buttons)
+        else:
+            await self.send_message(message, disable_notification=True)
 
     async def notify_error(
         self,
         title: str,
         error_message: str,
+        rating_key: str | None = None,
     ) -> None:
         """Notify về errors."""
         message = f"""
@@ -171,7 +267,14 @@ class TelegramClient:
 📺 *Title:* {title}
 🐛 *Error:* `{error_message}`
 """
-        await self.send_message(message)
+        buttons = None
+        if rating_key:
+            buttons = [[
+                {"text": "🔁 Retry workflow", "callback_data": f"subtitle:retry:{rating_key}"},
+                {"text": "🔎 Tìm sub", "callback_data": f"subtitle:manual_search:{rating_key}"},
+                {"text": "🔄 Sync timing", "callback_data": f"subtitle:sync:{rating_key}"},
+            ]]
+        await self.send_message(message, reply_markup=buttons)
 
     async def notify_daily_stats(
         self,
@@ -212,6 +315,7 @@ class TelegramClient:
         title: str,
         to_lang: str,
         lines_translated: int,
+        rating_key: str | None = None,
     ) -> None:
         """Notify khi translate xong."""
         message = f"""
@@ -221,7 +325,13 @@ class TelegramClient:
 🌍 *Language:* {to_lang}
 📝 *Lines:* {lines_translated}
 """
-        await self.send_message(message, disable_notification=True)
+        buttons = None
+        if rating_key:
+            buttons = [[
+                {"text": "✨ Cải thiện Vietsub", "callback_data": f"subtitle:improve:{rating_key}"},
+                {"text": "🔄 Sync timing", "callback_data": f"subtitle:sync:{rating_key}"},
+            ]]
+        await self.send_message(message, disable_notification=True, reply_markup=buttons)
 
     async def notify_sync_started(
         self,
@@ -240,6 +350,7 @@ class TelegramClient:
         title: str,
         anchors: int,
         avg_offset_ms: int,
+        rating_key: str | None = None,
     ) -> None:
         """Notify khi sync timing xong."""
         offset_s = abs(avg_offset_ms) / 1000
@@ -250,4 +361,10 @@ class TelegramClient:
             f"🎯 *Anchors:* {anchors} điểm neo\n"
             f"⏱ *Avg offset:* {offset_s:.1f}s ({direction})"
         )
-        await self.send_message(message, disable_notification=True)
+        buttons = None
+        if rating_key:
+            buttons = [[
+                {"text": "🔄 Sync lại", "callback_data": f"subtitle:sync:{rating_key}"},
+                {"text": "✨ Cải thiện Vietsub", "callback_data": f"subtitle:improve:{rating_key}"},
+            ]]
+        await self.send_message(message, disable_notification=True, reply_markup=buttons)

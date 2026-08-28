@@ -238,6 +238,7 @@ class SubtitleService:
                 await self.telegram_client.notify_subtitle_not_found(
                     title=str(metadata),
                     language=self.runtime_config.default_language,
+                    rating_key=rating_key,
                 )
 
                 log.warning(f"▶ Workflow finished: no subtitle found for {metadata.title}")
@@ -288,6 +289,8 @@ class SubtitleService:
                 language=self.runtime_config.default_language,
                 quality=subtitle.quality_type,
                 total_results=len(subtitles),
+                rating_key=rating_key,
+                subtitle_id=f"{subtitle.provider}:{subtitle.id}",
             )
 
             log.info("[Step 5/7] Checking quality threshold")
@@ -358,6 +361,7 @@ class SubtitleService:
                 subtitle_name=subtitle.name,
                 language=self.runtime_config.default_language,
                 quality=subtitle.quality_type,
+                rating_key=rating_key,
             )
 
             result_msg = f"Uploaded subtitle: {subtitle.name}"
@@ -375,6 +379,7 @@ class SubtitleService:
             await self.telegram_client.notify_error(
                 title=title_label,
                 error_message=str(e),
+                rating_key=rating_key,
             )
             raise SubtitleServiceError(f"Plex error: {e}") from e
         except SubsourceClientError as e:
@@ -382,6 +387,7 @@ class SubtitleService:
             await self.telegram_client.notify_error(
                 title=title_label,
                 error_message=str(e),
+                rating_key=rating_key,
             )
             raise SubtitleServiceError(f"Subsource error: {e}") from e
         except SubtitleServiceError:
@@ -391,6 +397,7 @@ class SubtitleService:
             await self.telegram_client.notify_error(
                 title=title_label,
                 error_message=str(e),
+                rating_key=rating_key,
             )
             raise SubtitleServiceError(f"Workflow failed: {e}") from e
         finally:
@@ -976,6 +983,7 @@ class SubtitleService:
                 title=str(metadata),
                 anchors=sync_stats["anchors_found"],
                 avg_offset_ms=sync_stats["avg_offset_ms"],
+                rating_key=metadata.rating_key,
             )
 
             return sync_stats
@@ -995,6 +1003,7 @@ class SubtitleService:
             await self.telegram_client.notify_error(
                 title=str(metadata),
                 error_message=f"Sync timing failed: {e}",
+                rating_key=metadata.rating_key,
             )
             return None
         except Exception as e:
@@ -1012,6 +1021,7 @@ class SubtitleService:
             await self.telegram_client.notify_error(
                 title=str(metadata),
                 error_message=f"Sync timing failed: {e}",
+                rating_key=metadata.rating_key,
             )
             return None
         finally:
@@ -1612,6 +1622,7 @@ class SubtitleService:
                 subtitle_name=subtitle.name,
                 language=lang,
                 quality=subtitle.quality_type,
+                rating_key=rating_key,
             )
 
             return {
@@ -2482,6 +2493,7 @@ class SubtitleService:
                 title=str(metadata),
                 to_lang=to_lang,
                 lines_translated=stats["lines_translated"],
+                rating_key=metadata.rating_key,
             )
 
             # Update persistent stats
@@ -2515,6 +2527,7 @@ class SubtitleService:
             await self.telegram_client.notify_error(
                 title=str(metadata),
                 error_message=f"Translation failed: {e}",
+                rating_key=metadata.rating_key,
             )
             return None
 

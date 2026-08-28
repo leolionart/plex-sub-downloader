@@ -1,6 +1,7 @@
 from app.models.subtitle import SubtitleSearchParams
 from app.models.webhook import MediaMetadata
 from app.services.subtitle_service import SubtitleService
+from app.routes.subtitles import ManualSubtitleSearchRequest
 
 
 def _episode_metadata() -> MediaMetadata:
@@ -60,3 +61,9 @@ def test_search_params_for_media_override_relaxes_external_ids_and_year() -> Non
         video_filename="From.S03E01.mkv",
     )
 
+
+def test_manual_search_allows_filename_only_and_disables_cache_by_default() -> None:
+    request = ManualSubtitleSearchRequest(video_filename="From.S03E01.1080p.WEB-DL.mkv")
+
+    assert request.video_filename.endswith(".mkv")
+    assert request.use_cache is False

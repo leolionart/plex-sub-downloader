@@ -27,6 +27,7 @@ from app.routes import setup
 from app.routes import logs
 from app.routes import sync
 from app.routes import subtitles
+from app.routes import telegram
 
 # Setup logging
 setup_logging()
@@ -108,6 +109,7 @@ app.include_router(setup.router)
 app.include_router(logs.router)
 app.include_router(sync.router)
 app.include_router(subtitles.router)
+app.include_router(telegram.router)
 
 
 @app.middleware("http")
