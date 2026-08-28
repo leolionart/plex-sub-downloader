@@ -1,5 +1,11 @@
 # Release Notes
 
+## Unreleased - 2026-08-28 20:30 +07
+
+Generated before push from commits:
+
+- `07fcff2` feat: add manual subtitle search and telegram actions
+
 ## Unreleased - 2026-07-19 20:01 +07
 
 Generated before push from commits:
