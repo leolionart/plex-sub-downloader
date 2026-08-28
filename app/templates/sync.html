@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block title %}Subtitle Workspace - Plex Subtitle Service{% endblock %}
-{% block nav_sync %}active{% endblock %}
+{% block nav_workspace %}active{% endblock %}
 {% block page_title %}Subtitle Workspace{% endblock %}
 {% block page_description %}Tìm, dịch và đồng bộ subtitle trong một màn hình{% endblock %}
 
@@ -22,37 +22,22 @@
         color: var(--text-primary);
     }
 
-    .workspace-tabs {
+    .workspace-flow-note {
         display: flex;
+        flex-wrap: wrap;
+        align-items: center;
         gap: 8px;
-        margin: 0 0 16px;
-        padding: 5px;
-        background: var(--bg-surface);
-        border: 1px solid var(--border-subtle);
-        border-radius: var(--radius-lg);
-    }
-    .workspace-tab {
-        flex: 1;
-        border: 0;
-        border-radius: var(--radius-md);
+        margin: 0 0 12px;
         padding: 10px 14px;
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
+        background: var(--bg-input);
         color: var(--text-secondary);
-        background: transparent;
-        font: inherit;
         font-size: 13px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all var(--transition-fast);
     }
-    .workspace-tab:hover { color: var(--text-primary); background: var(--bg-surface-hover); }
-    .workspace-tab.active { color: var(--text-on-gold); background: var(--plex-gold); }
-    .workspace-tab .tab-icon { margin-right: 5px; }
+    .workspace-flow-note strong { color: var(--text-primary); }
+    .workspace-flow-note .flow-arrow { color: var(--plex-gold); font-weight: 700; }
     .workspace-hint { margin: -4px 0 16px; color: var(--text-muted); font-size: 13px; }
-    @media (max-width: 560px) {
-        .workspace-tabs { gap: 4px; }
-        .workspace-tab { padding: 9px 5px; font-size: 12px; }
-        .workspace-tab .tab-icon { display: none; }
-    }
 
     .sync-input-row {
         display: flex;
@@ -648,15 +633,13 @@
 </div>
 
 <!-- Unified Subtitle Workspace -->
-<div class="workspace-tabs" role="tablist" aria-label="Subtitle actions">
-    <button class="workspace-tab active" role="tab" aria-selected="true" data-mode="find" onclick="selectWorkspaceMode('find', this)"><span class="tab-icon">🔎</span>Tìm subtitle</button>
-    <button class="workspace-tab" role="tab" aria-selected="false" data-mode="translate" onclick="selectWorkspaceMode('translate', this)"><span class="tab-icon">🌐</span>Dịch AI</button>
-    <button class="workspace-tab" role="tab" aria-selected="false" data-mode="sync" onclick="selectWorkspaceMode('sync', this)"><span class="tab-icon">⏱</span>Sync timing</button>
+<div class="workspace-flow-note" role="note">
+    <strong>Quy trình:</strong><span>Tìm subtitle (tự động hoặc thủ công)</span><span class="flow-arrow">→</span><span>Chọn bản phù hợp</span><span class="flow-arrow">→</span><span>Dịch AI hoặc Sync timing ngay bên dưới</span>
 </div>
 
 <div class="sync-form" id="subtitle-action-form">
-    <h3 id="workspace-form-title">Tìm &amp; xử lý subtitle</h3>
-    <p class="workspace-hint" id="workspace-form-hint">Nhập Plex link/rating key, sau đó Preview để kiểm tra các bản subtitle. Bạn có thể tìm mới thủ công và chọn bản đúng trước khi upload.</p>
+    <h3>Tìm và xử lý subtitle</h3>
+    <p class="workspace-hint">Nhập Plex link/rating key để bắt đầu. Nếu kết quả chưa đúng, dùng tìm thủ công; mọi thao tác dịch, sync và upload đều thực hiện ngay trong kết quả.</p>
     <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
         Paste Plex share link, web URL, hoặc nhập rating key.
     </p>
@@ -694,15 +677,15 @@
     <ul class="step-list">
         <li>
             <span class="step-num">1</span>
-            <span><b>Preview:</b> Kiểm tra Engsub trên Plex + tìm Vietsub trên Plex & Subsource</span>
+            <span><b>Tìm:</b> Preview trước để kiểm tra subtitle trên Plex và các provider; dùng “Tìm sub thủ công” để bỏ qua cache khi kết quả tự động chưa đúng.</span>
         </li>
         <li>
             <span class="step-num">2</span>
-            <span><b>Sync Timing:</b> AI match các mốc thời gian Vietsub &harr; Engsub, tính hàm chuyển đổi timing</span>
+            <span><b>Dịch (khi thiếu Vietsub):</b> Nếu đã có source nhưng chưa có Vietsub, nút AI Translate sẽ xuất hiện ngay trong kết quả tìm.</span>
         </li>
         <li>
             <span class="step-num">3</span>
-            <span><b>Upload:</b> Subtitle đã sync timing được upload lại lên Plex</span>
+            <span><b>Sync timing:</b> Khi đã có đủ source + Vietsub, chọn Sync Timing để căn chỉnh rồi upload kết quả lên Plex.</span>
         </li>
     </ul>
 </div>
@@ -735,26 +718,6 @@
     let previewData = null;
     let autoSelected = false;
     let previewAbortController = null;
-
-    // All subtitle actions share the same context (Plex link/rating key). Tabs
-    // are a focus aid only; they do not create separate flows or affect
-    // Telegram interactions.
-    function selectWorkspaceMode(mode, button) {
-        document.querySelectorAll('.workspace-tab').forEach(tab => {
-            const active = tab === button;
-            tab.classList.toggle('active', active);
-            tab.setAttribute('aria-selected', active ? 'true' : 'false');
-        });
-        const title = document.getElementById('workspace-form-title');
-        const hint = document.getElementById('workspace-form-hint');
-        const copy = {
-            find: ['Tìm & xử lý subtitle', 'Nhập Plex link/rating key, Preview để xem các bản có sẵn. Dùng “Tìm sub thủ công” khi kết quả tự động chưa đúng.'],
-            translate: ['Dịch subtitle bằng AI', 'Chọn phim có source subtitle rồi Preview. Nút AI Translate sẽ xuất hiện khi chưa có Vietsub.'],
-            sync: ['Đồng bộ timing subtitle', 'Preview để kiểm tra source và Vietsub; sau đó chọn Sync Timing để căn chỉnh bằng AI.']
-        }[mode] || [];
-        if (title && copy[0]) title.textContent = copy[0];
-        if (hint && copy[1]) hint.textContent = copy[1];
-    }
 
     // Load sync status
     async function loadStatus() {

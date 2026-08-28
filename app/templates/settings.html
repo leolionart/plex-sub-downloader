@@ -618,6 +618,47 @@
         <button type="button" class="btn btn-ghost" onclick="loadSettings()">Reset</button>
     </div>
 </form>
+
+<!-- Unified service configuration (migrated from Setup) -->
+<section class="card" id="service-configuration" style="margin-top:24px;">
+    <div class="card-header"><h2>Service Configuration</h2><span id="plex-status" class="status-badge missing">Not configured</span></div>
+    <div class="card-body">
+        <div class="setting-section-label">Plex Connection</div>
+        <div class="btn-group" style="margin-bottom:12px;"><button type="button" id="btn-plex-pin" class="btn btn-secondary">Login with Plex</button><span id="pin-info" class="setting-desc"></span></div>
+        <div class="form-row">
+            <div class="form-group"><label for="plex_url">Plex URL</label><input id="plex_url" class="form-input" placeholder="http://localhost:32400"></div>
+            <div class="form-group"><label for="plex_token">Plex Token</label><input id="plex_token" class="form-input" placeholder="token" type="password"></div>
+        </div>
+        <div class="setting-section-label">Subtitle Providers</div>
+        <div class="form-row">
+            <div class="form-group"><label for="subsource_api_key">Subsource API Key</label><input id="subsource_api_key" class="form-input" type="password"></div>
+            <div class="form-group"><label for="opensubtitles_api_key">OpenSubtitles API Key</label><input id="opensubtitles_api_key" class="form-input" type="password"></div>
+            <div class="form-group"><label for="subdl_api_key">SubDL API Key</label><input id="subdl_api_key" class="form-input" type="password"></div>
+        </div>
+        <div class="form-row">
+            <div class="form-group"><label for="opensubtitles_username">OpenSubtitles Username</label><input id="opensubtitles_username" class="form-input"></div>
+            <div class="form-group"><label for="opensubtitles_password">OpenSubtitles Password</label><input id="opensubtitles_password" class="form-input" type="password"></div>
+            <div class="form-group"><label for="opensubtitles_base_url">OpenSubtitles Base URL</label><input id="opensubtitles_base_url" class="form-input"></div>
+            <div class="form-group"><label for="subdl_base_url">SubDL Base URL</label><input id="subdl_base_url" class="form-input"></div>
+        </div>
+        <div class="setting-section-label">OpenAI Translation</div>
+        <div class="form-row">
+            <div class="form-group"><label for="openai_api_key">OpenAI API Key</label><input id="openai_api_key" class="form-input" type="password"></div>
+            <div class="form-group"><label for="openai_model">OpenAI Model</label><input id="openai_model" class="form-input"></div>
+            <div class="form-group"><label for="openai_base_url">OpenAI Base URL</label><input id="openai_base_url" class="form-input"></div>
+        </div>
+        <div class="setting-section-label">Notifications & Cache</div>
+        <div class="form-row">
+            <div class="form-group"><label for="webhook_secret">Webhook Secret</label><input id="webhook_secret" class="form-input" type="password"></div>
+            <div class="form-group"><label for="telegram_bot_token">Telegram Bot Token</label><input id="telegram_bot_token" class="form-input" type="password"></div>
+            <div class="form-group"><label for="telegram_chat_id">Telegram Chat ID</label><input id="telegram_chat_id" class="form-input"></div>
+            <div class="form-group"><label for="redis_url">Redis URL</label><input id="redis_url" class="form-input"></div>
+            <div class="form-group"><label for="cache_ttl_seconds">Cache TTL (seconds)</label><input id="cache_ttl_seconds" class="form-input" type="number" value="3600"></div>
+            <div class="form-group"><label for="cache_enabled">Enable cache</label><select id="cache_enabled" class="form-select"><option value="true">On</option><option value="false">Off</option></select></div>
+        </div>
+        <div class="btn-group" style="margin-top:14px;"><button type="button" id="btn-save-config" class="btn btn-primary">Save Configuration</button><button type="button" id="btn-reload-config" class="btn btn-ghost">Reload from Disk</button></div>
+    </div>
+</section>
 {% endblock %}
 
 {% block scripts %}
@@ -867,5 +908,31 @@
     });
 
     loadSettings();
+
+    // ── Unified Setup configuration ───────────────────────
+    const cfg$ = (id) => document.getElementById(id);
+    const cfgSecrets = ['plex_token','subsource_api_key','opensubtitles_api_key','opensubtitles_password','subdl_api_key','openai_api_key','webhook_secret','telegram_bot_token'];
+    const cfgDirty = {};
+    cfgSecrets.forEach(id => cfg$(id)?.addEventListener('input', () => { cfgDirty[id] = true; }));
+    async function loadConfig() {
+        const res = await fetch('/api/setup/config'); if (!res.ok) return;
+        const d = await res.json();
+        const fill = (id,v) => { const e=cfg$(id); if(e) e.value = v ?? ''; };
+        ['plex_url','opensubtitles_username','opensubtitles_base_url','subdl_base_url','openai_model','openai_base_url','telegram_chat_id','redis_url','cache_ttl_seconds'].forEach(id=>fill(id,d[id]));
+        cfgSecrets.forEach(id => { const v=d[id]; fill(id, v==='***'?'':v||''); cfgDirty[id]=false; });
+        if (cfg$('cache_enabled')) cfg$('cache_enabled').value=String(d.cache_enabled ?? true);
+        const ok = !!(d.plex_url && d.plex_token && (d.subsource_api_key || d.opensubtitles_api_key || d.subdl_api_key));
+        const st=cfg$('plex-status'); if(st){ st.className='status-badge '+(ok?'ok':'missing'); st.textContent=ok?'Connected':'Not configured'; }
+    }
+    async function saveConfig() {
+        const p={plex_url:cfg$('plex_url').value.trim()||null, opensubtitles_username:cfg$('opensubtitles_username').value.trim()||null, opensubtitles_base_url:cfg$('opensubtitles_base_url').value.trim(), subdl_base_url:cfg$('subdl_base_url').value.trim(), openai_model:cfg$('openai_model').value.trim()||'gpt-4o-mini', openai_base_url:cfg$('openai_base_url').value.trim(), telegram_chat_id:cfg$('telegram_chat_id').value.trim()||null, redis_url:cfg$('redis_url').value.trim()||null, cache_ttl_seconds:Number(cfg$('cache_ttl_seconds').value)||3600, cache_enabled:cfg$('cache_enabled').value==='true'};
+        cfgSecrets.forEach(id=>{if(cfgDirty[id]) p[id]=cfg$(id).value.trim()||null;});
+        const r=await fetch('/api/setup/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});
+        showAlert(r.ok?'Configuration saved successfully':'Failed to save configuration',r.ok?'success':'error'); if(r.ok) await loadConfig();
+    }
+    cfg$('btn-save-config')?.addEventListener('click', saveConfig);
+    cfg$('btn-reload-config')?.addEventListener('click', async()=>{const r=await fetch('/api/setup/reload',{method:'POST'}); showAlert(r.ok?'Config reloaded from disk':'Failed to reload config',r.ok?'success':'error'); if(r.ok) await loadConfig();});
+    cfg$('btn-plex-pin')?.addEventListener('click', async()=>{ const r=await fetch('/api/setup/plex/pin',{method:'POST'}); if(!r.ok)return showAlert('PIN request failed','error'); const d=await r.json(); cfg$('pin-info').textContent=`Code: ${d.code}`; if(d.verification_url) window.open(d.verification_url,'_blank'); });
+    loadConfig();
 </script>
 {% endblock %}

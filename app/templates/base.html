@@ -975,7 +975,7 @@
             <nav class="sidebar-nav">
                 <span class="nav-section-label">Workspace</span>
 
-                <a href="/workspace" class="nav-item {% block nav_workspace %}{% block nav_sync %}{% endblock %}{% endblock %}">
+                <a href="/workspace" class="nav-item {% block nav_workspace %}{% endblock %}">
                     <span class="nav-icon">
                         <svg viewBox="0 0 24 24"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
                     </span>
@@ -991,7 +991,7 @@
 
                 <span class="nav-section-label">System</span>
 
-                <a href="/settings" class="nav-item {% block nav_settings %}{% block nav_setup %}{% endblock %}{% endblock %}">
+                <a href="/settings" class="nav-item {% block nav_settings %}{% endblock %}">
                     <span class="nav-icon">
                         <svg viewBox="0 0 24 24"><path d="M22 9V7h-2V5c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-2h2v-2h-2v-2h2v-2h-2V9h2zm-4 10H4V5h14v14zM6 13h5v4H6v-4zm6-6h4v3h-4V7zM6 7h5v5H6V7zm6 4h4v6h-4v-6z"/></svg>
                     </span>
@@ -1042,7 +1042,9 @@
     <script>
         // Active nav detection based on current URL
         (function() {
-            const path = window.location.pathname;
+            const rawPath = window.location.pathname;
+            // Legacy aliases still highlight their canonical destination.
+            const path = rawPath === '/sync' || rawPath === '/translation' || rawPath === '/' ? '/workspace' : rawPath;
             document.querySelectorAll('.sidebar-nav .nav-item').forEach(item => {
                 item.classList.remove('active');
                 const href = item.getAttribute('href');
@@ -1051,10 +1053,10 @@
                     item.classList.add('active');
                 }
             });
-            // Fallback: if nothing matched and we're on root, activate Settings
+            // Workspace is the default landing page and first navigation item.
             const anyActive = document.querySelector('.sidebar-nav .nav-item.active');
-            if (!anyActive && path === '/') {
-                const first = document.querySelector('.sidebar-nav .nav-item[href="/"]');
+            if (!anyActive && path === '/workspace') {
+                const first = document.querySelector('.sidebar-nav .nav-item[href="/workspace"]');
                 if (first) first.classList.add('active');
             }
         })();

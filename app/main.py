@@ -199,9 +199,13 @@ async def settings_ui(request: Request) -> HTMLResponse:
         selected_languages = ["vi"]
 
     return templates.TemplateResponse(
-        "setup.html",
+        "settings.html",
         {
             "request": request,
+            "stats": stats,
+            "languages_map": LANGUAGE_MAP,
+            "current_language": current_language,
+            "selected_languages": selected_languages,
             "configured": configured,
         },
     )
