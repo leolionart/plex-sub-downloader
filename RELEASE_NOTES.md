@@ -1,5 +1,11 @@
 # Release Notes
 
+## Unreleased - 2026-08-28 21:45 +07
+
+Generated before push from commits:
+
+- `42cb127` feat: unify subtitle actions under workspace
+
 ## Unreleased - 2026-08-28 20:52 +07
 
 Generated before push from commits:
