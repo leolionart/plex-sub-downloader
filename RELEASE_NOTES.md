@@ -1,5 +1,11 @@
 # Release Notes
 
+## Unreleased - 2026-08-28 21:58 +07
+
+Generated before push from commits:
+
+- `9536e38` feat: make workspace home and unify configuration
+
 ## Unreleased - 2026-08-28 21:48 +07
 
 Generated before push from commits:
