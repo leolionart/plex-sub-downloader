@@ -28,6 +28,10 @@
         align-items: flex-end;
     }
 
+    .sync-input-row .form-group.filename-group { flex: 1.2; }
+    .sync-action-group { display: flex; gap: 10px; flex-shrink: 0; }
+    .sync-action-group .btn { white-space: nowrap; }
+
     .sync-input-row .form-group {
         flex: 1;
         margin-bottom: 0;
@@ -568,7 +572,10 @@
     @media (max-width: 768px) {
         .sync-input-row {
             flex-direction: column;
+            align-items: stretch;
         }
+        .sync-action-group { width: 100%; }
+        .sync-action-group .btn { flex: 1; }
         .sync-stats {
             grid-template-columns: repeat(2, 1fr);
         }
@@ -620,13 +627,14 @@
             <label for="rating-key">Rating Key or Plex Link</label>
             <input type="text" id="rating-key" class="form-input" placeholder="12345 or https://l.plex.tv/...">
         </div>
-                <button class="btn btn-secondary" onclick="previewSync()" id="btn-preview">Preview</button>
-                <button class="btn btn-secondary" onclick="manualSearch()" id="btn-manual-search" title="Tìm lại từ provider, bỏ qua cache">🔎 Tìm sub thủ công</button>
-    </div>
-    <div class="manual-search-panel" style="margin-top:14px;padding-top:14px;">
-        <label for="manual-video-filename" style="font-size:12px;color:var(--text-muted);">Tên file video (tuỳ chọn — ưu tiên để tìm đúng release)</label>
-        <input type="text" id="manual-video-filename" class="form-input" style="margin-top:6px;" placeholder="Show.S01E02.1080p.WEB-DL.mkv">
-        <div id="manual-search-hint" class="empty-state" style="margin-top:6px;">Nếu nhập tên file, hệ thống sẽ tìm trực tiếp theo filename và bỏ qua metadata Plex.</div>
+        <div class="form-group filename-group">
+            <label for="manual-video-filename">Tên file video <span style="color:var(--text-muted)">(tuỳ chọn)</span></label>
+            <input type="text" id="manual-video-filename" class="form-input" placeholder="Show.S01E02.1080p.WEB-DL.mkv">
+        </div>
+        <div class="sync-action-group">
+            <button class="btn btn-secondary" onclick="previewSync()" id="btn-preview">Preview</button>
+            <button class="btn btn-secondary" onclick="manualSearch()" id="btn-manual-search" title="Tìm lại từ provider, bỏ qua cache">🔎 Tìm sub thủ công</button>
+        </div>
     </div>
 
     <!-- Progress -->
