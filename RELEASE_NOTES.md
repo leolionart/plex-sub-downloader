@@ -1,5 +1,11 @@
 # Release Notes
 
+## Unreleased - 2026-08-28 20:46 +07
+
+Generated before push from commits:
+
+- `47ad799` feat: add independent manual search controls to sync UI
+
 ## Unreleased - 2026-08-28 20:44 +07
 
 Generated before push from commits:
