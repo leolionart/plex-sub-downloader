@@ -1,5 +1,11 @@
 # Release Notes
 
+## Unreleased - 2026-08-28 20:52 +07
+
+Generated before push from commits:
+
+- `20e2b1e` style: keep manual search controls inline
+
 ## Unreleased - 2026-08-28 20:46 +07
 
 Generated before push from commits:
