@@ -199,16 +199,24 @@ async def settings_ui(request: Request) -> HTMLResponse:
         selected_languages = ["vi"]
 
     return templates.TemplateResponse(
-        "settings.html",
+        "setup.html",
         {
             "request": request,
-            "stats": stats,
-            "languages_map": LANGUAGE_MAP,
-            "current_language": current_language,
-            "selected_languages": selected_languages,
             "configured": configured,
         },
     )
+
+
+@app.get("/settings/preferences", response_class=HTMLResponse)
+async def settings_preferences_ui(request: Request) -> HTMLResponse:
+    """Preferences section embedded by the unified configuration page."""
+    if not subtitle_service or not runtime_config:
+        return HTMLResponse("Service not initialized", status_code=503)
+    configured = _is_configured(runtime_config)
+    stats = subtitle_service.stats.get_all() if configured else {"total_downloads": 0, "total_skipped": 0, "total_translations": 0, "total_syncs": 0, "success_rate": 0}
+    current_language = runtime_config.default_language
+    selected_languages = runtime_config.subtitle_settings.languages or [current_language]
+    return templates.TemplateResponse("settings.html", {"request": request, "stats": stats, "languages_map": LANGUAGE_MAP, "current_language": current_language, "selected_languages": selected_languages, "configured": configured})
 
 
 @app.get("/logs", response_class=HTMLResponse)

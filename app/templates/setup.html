@@ -326,7 +326,7 @@
                 <input id="openai_base_url" class="form-input" value="https://api.openai.com/v1">
             </div>
         </div>
-        <p class="setup-hint" style="margin-top: 8px; margin-bottom: 0;">Ngôn ngữ target và cấu hình Translation/Sync nằm ở trang <a href="/" style="color: var(--plex-gold);">Settings</a>.</p>
+        <p class="setup-hint" style="margin-top: 8px; margin-bottom: 0;">Ngôn ngữ target và cấu hình Translation/Sync nằm trong Subtitle Workspace.</p>
     </div>
 </div>
 
@@ -389,10 +389,17 @@
 </div>
 
 <!-- Actions -->
+<div class="setup-section" style="margin-top:24px;">
+    <div class="setup-section-header"><h2>Subtitle Preferences</h2></div>
+    <div class="setup-section-body" style="padding:0;">
+        <iframe src="/settings/preferences" title="Subtitle preferences" style="width:100%;min-height:1100px;border:0;background:transparent;"></iframe>
+    </div>
+</div>
+
 <div class="setup-footer">
     <button id="btn-save" class="btn btn-primary">Save Configuration</button>
     <button id="btn-reload" class="btn btn-secondary">Reload from Disk</button>
-    <a href="/" class="btn btn-ghost">Back to Settings</a>
+    <a href="/workspace" class="btn btn-ghost">Back to Workspace</a>
 </div>
 {% endblock %}
 
