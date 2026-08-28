@@ -38,6 +38,41 @@
         height: 42px;
     }
 
+    .manual-search-panel {
+        margin-top: 20px;
+        padding-top: 18px;
+        border-top: 1px solid var(--border-subtle);
+    }
+
+    .manual-search-grid {
+        display: grid;
+        grid-template-columns: minmax(180px, 2fr) repeat(3, minmax(90px, 1fr));
+        gap: 10px;
+        align-items: end;
+    }
+
+    .manual-search-grid .form-group { margin-bottom: 0; }
+    .manual-search-grid .btn { height: 42px; }
+
+    .manual-results { margin-top: 14px; }
+    .manual-candidate {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 12px;
+        background: var(--bg-input);
+        border-radius: var(--radius-md);
+        margin-top: 8px;
+        font-size: 13px;
+    }
+
+    .manual-candidate .meta { color: var(--text-muted); font-size: 12px; }
+    @media (max-width: 700px) {
+        .manual-search-grid { grid-template-columns: 1fr 1fr; }
+        .manual-search-grid .form-group:first-child { grid-column: 1 / -1; }
+    }
+
     .result-card {
         background: var(--bg-surface);
         border: 1px solid var(--border-subtle);
@@ -585,7 +620,8 @@
             <label for="rating-key">Rating Key or Plex Link</label>
             <input type="text" id="rating-key" class="form-input" placeholder="12345 or https://l.plex.tv/...">
         </div>
-        <button class="btn btn-secondary" onclick="previewSync()" id="btn-preview">Preview</button>
+                <button class="btn btn-secondary" onclick="previewSync()" id="btn-preview">Preview</button>
+                <button class="btn btn-secondary" onclick="manualSearch()" id="btn-manual-search" title="Tìm lại từ provider, bỏ qua cache">🔎 Tìm sub thủ công</button>
     </div>
 
     <!-- Progress -->
@@ -915,6 +951,28 @@
 
     function onSubSelect(subtitleId) {
         selectedSubtitleId = subtitleId;
+    }
+
+    async function manualSearch() {
+        const ratingKey = currentRatingKey || document.getElementById('rating-key').value.trim();
+        if (!ratingKey) { showAlert('Vui lòng nhập Rating Key hoặc Plex link', 'warning'); return; }
+        const btn = document.getElementById('btn-manual-search');
+        btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+        try {
+            const res = await fetch('/api/subtitles/manual-search', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({rating_key: ratingKey, use_cache: false})
+            });
+            if (!res.ok) { const err = await res.json(); throw new Error(err.detail || 'Manual search failed'); }
+            const result = await res.json();
+            if (previewData) {
+                previewData.vi_candidates = result.candidates || [];
+                previewData.has_vi_on_plex = false;
+                renderPreview(previewData);
+            }
+            showAlert(`${(result.candidates || []).length} candidate subtitle tìm thấy`, 'success');
+        } catch (e) { showAlert('Manual search failed: ' + e.message, 'error'); }
+        finally { btn.disabled = false; btn.textContent = '🔎 Tìm sub thủ công'; }
     }
 
     async function executeUploadTarget() {
