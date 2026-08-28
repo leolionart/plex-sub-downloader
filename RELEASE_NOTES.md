@@ -1,5 +1,11 @@
 # Release Notes
 
+## Unreleased - 2026-08-28 22:10 +07
+
+Generated before push from commits:
+
+- `6f1a6ab` refactor: make workspace single flow and unify settings
+
 ## Unreleased - 2026-08-28 21:58 +07
 
 Generated before push from commits:
