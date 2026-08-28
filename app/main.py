@@ -164,15 +164,26 @@ def _is_configured(rc: RuntimeConfig | None) -> bool:
 
 @app.get("/setup", response_class=HTMLResponse)
 async def setup_ui(request: Request) -> HTMLResponse:
-    if not runtime_config:
-        return HTMLResponse("Service not initialized", status_code=503)
-    configured = _is_configured(runtime_config)
-    return templates.TemplateResponse("setup.html", {"request": request, "configured": configured})
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/settings", status_code=307)
 
 
 @app.get("/", response_class=HTMLResponse)
 async def web_ui(request: Request) -> HTMLResponse:
-    """Web UI - Settings page."""
+    """Home page: unified subtitle workspace."""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/workspace", status_code=307)
+
+
+@app.get("/workspace", response_class=HTMLResponse)
+async def workspace_ui(request: Request) -> HTMLResponse:
+    """Unified subtitle workspace for search, translation and sync."""
+    return await sync_ui(request)
+
+
+@app.get("/settings", response_class=HTMLResponse)
+async def settings_ui(request: Request) -> HTMLResponse:
+    """Unified setup and service settings page."""
     if not subtitle_service or not runtime_config:
         return HTMLResponse("Service not initialized", status_code=503)
 

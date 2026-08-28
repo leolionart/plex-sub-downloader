@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 
-{% block title %}Subtitle Sync - Plex Subtitle Service{% endblock %}
+{% block title %}Subtitle Workspace - Plex Subtitle Service{% endblock %}
 {% block nav_sync %}active{% endblock %}
-{% block page_title %}Subtitle Sync{% endblock %}
-{% block page_description %}Đồng bộ timing subtitle bằng AI{% endblock %}
+{% block page_title %}Subtitle Workspace{% endblock %}
+{% block page_description %}Tìm, dịch và đồng bộ subtitle trong một màn hình{% endblock %}
 
 {% block extra_styles %}
 <style>
@@ -20,6 +20,38 @@
         font-weight: 600;
         margin-bottom: 16px;
         color: var(--text-primary);
+    }
+
+    .workspace-tabs {
+        display: flex;
+        gap: 8px;
+        margin: 0 0 16px;
+        padding: 5px;
+        background: var(--bg-surface);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+    }
+    .workspace-tab {
+        flex: 1;
+        border: 0;
+        border-radius: var(--radius-md);
+        padding: 10px 14px;
+        color: var(--text-secondary);
+        background: transparent;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all var(--transition-fast);
+    }
+    .workspace-tab:hover { color: var(--text-primary); background: var(--bg-surface-hover); }
+    .workspace-tab.active { color: var(--text-on-gold); background: var(--plex-gold); }
+    .workspace-tab .tab-icon { margin-right: 5px; }
+    .workspace-hint { margin: -4px 0 16px; color: var(--text-muted); font-size: 13px; }
+    @media (max-width: 560px) {
+        .workspace-tabs { gap: 4px; }
+        .workspace-tab { padding: 9px 5px; font-size: 12px; }
+        .workspace-tab .tab-icon { display: none; }
     }
 
     .sync-input-row {
@@ -615,9 +647,16 @@
     </div>
 </div>
 
-<!-- Manual Sync Form -->
-<div class="sync-form">
-    <h3>Manual Sync</h3>
+<!-- Unified Subtitle Workspace -->
+<div class="workspace-tabs" role="tablist" aria-label="Subtitle actions">
+    <button class="workspace-tab active" role="tab" aria-selected="true" data-mode="find" onclick="selectWorkspaceMode('find', this)"><span class="tab-icon">🔎</span>Tìm subtitle</button>
+    <button class="workspace-tab" role="tab" aria-selected="false" data-mode="translate" onclick="selectWorkspaceMode('translate', this)"><span class="tab-icon">🌐</span>Dịch AI</button>
+    <button class="workspace-tab" role="tab" aria-selected="false" data-mode="sync" onclick="selectWorkspaceMode('sync', this)"><span class="tab-icon">⏱</span>Sync timing</button>
+</div>
+
+<div class="sync-form" id="subtitle-action-form">
+    <h3 id="workspace-form-title">Tìm &amp; xử lý subtitle</h3>
+    <p class="workspace-hint" id="workspace-form-hint">Nhập Plex link/rating key, sau đó Preview để kiểm tra các bản subtitle. Bạn có thể tìm mới thủ công và chọn bản đúng trước khi upload.</p>
     <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
         Paste Plex share link, web URL, hoặc nhập rating key.
     </p>
@@ -696,6 +735,26 @@
     let previewData = null;
     let autoSelected = false;
     let previewAbortController = null;
+
+    // All subtitle actions share the same context (Plex link/rating key). Tabs
+    // are a focus aid only; they do not create separate flows or affect
+    // Telegram interactions.
+    function selectWorkspaceMode(mode, button) {
+        document.querySelectorAll('.workspace-tab').forEach(tab => {
+            const active = tab === button;
+            tab.classList.toggle('active', active);
+            tab.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+        const title = document.getElementById('workspace-form-title');
+        const hint = document.getElementById('workspace-form-hint');
+        const copy = {
+            find: ['Tìm & xử lý subtitle', 'Nhập Plex link/rating key, Preview để xem các bản có sẵn. Dùng “Tìm sub thủ công” khi kết quả tự động chưa đúng.'],
+            translate: ['Dịch subtitle bằng AI', 'Chọn phim có source subtitle rồi Preview. Nút AI Translate sẽ xuất hiện khi chưa có Vietsub.'],
+            sync: ['Đồng bộ timing subtitle', 'Preview để kiểm tra source và Vietsub; sau đó chọn Sync Timing để căn chỉnh bằng AI.']
+        }[mode] || [];
+        if (title && copy[0]) title.textContent = copy[0];
+        if (hint && copy[1]) hint.textContent = copy[1];
+    }
 
     // Load sync status
     async function loadStatus() {
