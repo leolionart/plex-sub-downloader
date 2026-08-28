@@ -1,5 +1,11 @@
 # Release Notes
 
+## Unreleased - 2026-08-28 20:44 +07
+
+Generated before push from commits:
+
+- `f5f502a` feat: expose manual subtitle search in sync UI
+
 ## Unreleased - 2026-08-28 20:30 +07
 
 Generated before push from commits:
