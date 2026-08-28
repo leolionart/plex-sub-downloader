@@ -1,5 +1,11 @@
 # Release Notes
 
+## Unreleased - 2026-08-28 21:48 +07
+
+Generated before push from commits:
+
+- `f03bbd4` feat: add workspace home and unified configuration route
+
 ## Unreleased - 2026-08-28 21:45 +07
 
 Generated before push from commits:
