@@ -11,6 +11,8 @@
   - Fixed bulk action execution on seasons and shows (`Tìm sub Mùa`, `Dịch tập thiếu`, `Tìm sub cả Show`, `Dịch tập thiếu cả Show`).
   - Fixed TV series thumbnail proxying (`/api/sync/thumb/{rating_key}`) by supporting Show media types in addition to Movies.
   - Fixed quick action hover button icon centering with precision vector SVGs.
+  - Added multi-selection and floating Bulk Action Bar for batch subtitle search and AI translation across multiple movies and TV series.
+  - Added automatic backend expansion of Show and Season rating keys to individual video/episode rating keys for batch processing.
 - **Docker Reliability & Self-Healing**:
   - Configured 15s timeout and connection retry for PlexServer client to prevent indefinite startup hangs.
   - Added background watchdog in `entrypoint.sh` to auto-terminate frozen container processes and trigger Docker restart policy.

@@ -43,6 +43,11 @@
         border-color: var(--border-default);
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
     }
+    .media-card.is-selected {
+        outline: 2px solid var(--plex-gold);
+        border-color: var(--plex-gold) !important;
+        box-shadow: 0 0 0 1px var(--plex-gold), 0 8px 24px rgba(229, 160, 13, 0.35) !important;
+    }
 
     .media-poster {
         aspect-ratio: 2 / 3;
@@ -252,6 +257,11 @@
         </div>
 
         <div class="toolbar-view-actions flex items-center gap-2.5 shrink-0">
+            <button type="button" class="btn btn-sm btn-ghost bg-bg-input border border-border-subtle gap-1.5" id="btnSelectAllPage" onclick="toggleSelectAllPage()" title="Chọn hoặc bỏ chọn tất cả mục trong trang này">
+                <input type="checkbox" id="selectAllCheckbox" class="checkbox checkbox-warning checkbox-xs pointer-events-none">
+                <span class="text-xs">Chọn tất cả</span>
+            </button>
+
             <div class="join" id="layoutToggleGroup">
                 <button type="button" class="btn btn-sm join-item btn-primary" id="btnViewGrid" title="Chế độ Lưới" onclick="setLayoutMode('grid')">
                     <i class="fa-solid fa-grip mr-1"></i>
@@ -405,6 +415,30 @@
         </div>
     </div>
 </div>
+
+<!-- Floating Bulk Action Bar -->
+<div id="bulkActionBar" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-bg-surface/95 backdrop-blur-md border border-border-default shadow-2xl rounded-2xl px-5 py-3 flex items-center gap-4 transition-all duration-300" style="display: none; transform: translate(-50%, 80px); opacity: 0;">
+    <div class="flex items-center gap-2">
+        <input type="checkbox" id="bulkBarSelectAllCheckbox" class="checkbox checkbox-warning checkbox-sm cursor-pointer" onchange="toggleSelectAllPage(this.checked)" title="Chọn/bỏ chọn tất cả">
+        <span class="text-xs font-semibold text-text-primary whitespace-nowrap">
+            Đã chọn <span id="bulkSelectedCountBadge" class="badge badge-warning badge-sm font-bold mx-1">0</span> mục
+        </span>
+    </div>
+    <div class="h-5 w-px bg-border-subtle"></div>
+    <div class="flex items-center gap-2 flex-wrap">
+        <button type="button" class="btn btn-sm btn-secondary gap-1.5 shadow font-semibold" onclick="triggerBatchUploadSelected()">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <span>Tìm sub đã chọn (<span id="bulkUploadCount">0</span>)</span>
+        </button>
+        <button type="button" class="btn btn-sm btn-primary gap-1.5 shadow font-semibold" onclick="triggerBatchTranslateSelected()">
+            <i class="fa-solid fa-language"></i>
+            <span>Dịch AI đã chọn (<span id="bulkTranslateCount">0</span>)</span>
+        </button>
+        <button type="button" class="btn btn-sm btn-ghost text-text-muted hover:text-text-primary px-2" onclick="clearSelection()" title="Bỏ chọn tất cả">
+            <svg viewBox="0 0 24 24" class="w-4 h-4 fill-current"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -466,6 +500,110 @@
     let lastNotFoundRatingKeys = [];
     let activeBatchKeys = [];
 
+
+    let selectedRatingKeys = new Set();
+
+    function toggleItemSelection(ratingKey, isChecked) {
+        const rk = String(ratingKey);
+        if (isChecked) {
+            selectedRatingKeys.add(rk);
+        } else {
+            selectedRatingKeys.delete(rk);
+        }
+        updateCardSelectionVisual(rk, isChecked);
+        updateBulkActionBar();
+    }
+
+    function updateCardSelectionVisual(ratingKey, isSelected) {
+        const rk = String(ratingKey);
+        document.querySelectorAll(`.media-card[data-rk="${rk}"]`).forEach(card => {
+            card.classList.toggle("is-selected", isSelected);
+            const cb = card.querySelector(".item-select-checkbox");
+            if (cb) cb.checked = isSelected;
+        });
+    }
+
+    function toggleSelectAllPage(forceChecked = null) {
+        if (!cachedItems || cachedItems.length === 0) return;
+        const allSelected = (selectedRatingKeys.size >= cachedItems.length && cachedItems.every(i => selectedRatingKeys.has(String(i.rating_key))));
+        const shouldSelect = (forceChecked !== null) ? forceChecked : !allSelected;
+
+        cachedItems.forEach(item => {
+            const rk = String(item.rating_key);
+            if (shouldSelect) {
+                selectedRatingKeys.add(rk);
+            } else {
+                selectedRatingKeys.delete(rk);
+            }
+            updateCardSelectionVisual(rk, shouldSelect);
+        });
+
+        updateBulkActionBar();
+    }
+
+    function clearSelection() {
+        selectedRatingKeys.clear();
+        document.querySelectorAll(".media-card").forEach(card => {
+            card.classList.remove("is-selected");
+        });
+        document.querySelectorAll(".item-select-checkbox").forEach(cb => {
+            cb.checked = false;
+        });
+        updateBulkActionBar();
+    }
+
+    function updateBulkActionBar() {
+        const count = selectedRatingKeys.size;
+        const bar = document.getElementById("bulkActionBar");
+        const countBadge = document.getElementById("bulkSelectedCountBadge");
+        const uploadCount = document.getElementById("bulkUploadCount");
+        const translateCount = document.getElementById("bulkTranslateCount");
+        const barCheckbox = document.getElementById("bulkBarSelectAllCheckbox");
+        const toolbarCheckbox = document.getElementById("selectAllCheckbox");
+
+        if (countBadge) countBadge.textContent = count;
+        if (uploadCount) uploadCount.textContent = count;
+        if (translateCount) translateCount.textContent = count;
+
+        const allSelected = (cachedItems && cachedItems.length > 0 && cachedItems.every(i => selectedRatingKeys.has(String(i.rating_key))));
+        if (barCheckbox) barCheckbox.checked = allSelected;
+        if (toolbarCheckbox) toolbarCheckbox.checked = allSelected;
+
+        if (!bar) return;
+        if (count > 0) {
+            bar.style.display = "flex";
+            requestAnimationFrame(() => {
+                bar.style.transform = "translate(-50%, 0)";
+                bar.style.opacity = "1";
+            });
+        } else {
+            bar.style.transform = "translate(-50%, 80px)";
+            bar.style.opacity = "0";
+            setTimeout(() => {
+                if (selectedRatingKeys.size === 0) {
+                    bar.style.display = "none";
+                }
+            }, 300);
+        }
+    }
+
+    function triggerBatchUploadSelected() {
+        if (selectedRatingKeys.size === 0) {
+            showToast("Vui lòng chọn ít nhất một phim hoặc series!", "info");
+            return;
+        }
+        const keys = Array.from(selectedRatingKeys);
+        startBatchAction(keys, 'upload_target');
+    }
+
+    function triggerBatchTranslateSelected() {
+        if (selectedRatingKeys.size === 0) {
+            showToast("Vui lòng chọn ít nhất một phim hoặc series!", "info");
+            return;
+        }
+        const keys = Array.from(selectedRatingKeys);
+        startBatchAction(keys, 'translate');
+    }
     const AUTO_FALLBACK_KEY = "plex_auto_fallback_translate";
 
     // ── Global SessionCache integration & ClientCache fallback ──
@@ -582,6 +720,7 @@
         applySubtitleFilterUI();
         currentOffset = 0;
         cachedItems = [];
+        clearSelection();
         loadCurrentSectionItems();
     }
 
@@ -701,6 +840,13 @@
         items.forEach(item => {
             const card = document.createElement("div");
             card.className = "media-card";
+            const rk = String(item.rating_key);
+            card.dataset.rk = rk;
+            const isSelected = selectedRatingKeys.has(rk);
+            if (isSelected) {
+                card.classList.add("is-selected");
+            }
+
             const isShow = item.type === "show";
             const thumbUrl = item.thumb ? `/api/sync/thumb/${item.rating_key}` : "";
             const subIndicator = renderSubtitleIndicator(item, false);
@@ -709,6 +855,10 @@
             const summaryText = item.summary ? escapeHtml(item.summary) : '<span class="text-text-muted italic">Chưa có mô tả tóm tắt</span>';
 
             card.onclick = (e) => {
+                if (e.shiftKey || e.ctrlKey || e.metaKey) {
+                    toggleItemSelection(item.rating_key, !selectedRatingKeys.has(rk));
+                    return;
+                }
                 if (isShow) {
                     openShowTree(item.rating_key);
                 } else {
@@ -719,6 +869,9 @@
 
             if (currentLayoutMode === "list") {
                 card.innerHTML = `
+                    <div class="shrink-0 flex items-center pr-2 pl-1" onclick="event.stopPropagation()">
+                        <input type="checkbox" class="checkbox checkbox-warning checkbox-sm bg-bg-input border-border-default cursor-pointer item-select-checkbox" data-rk="${item.rating_key}" ${isSelected ? 'checked' : ''} onchange="toggleItemSelection('${item.rating_key}', this.checked)" title="Chọn mục này">
+                    </div>
                     <div class="media-poster">
                         ${thumbUrl ? `<img src="${thumbUrl}" alt="${safeTitle}" loading="lazy">` : `<span class="media-poster-placeholder flex items-center justify-center">${isShow ? ICONS.tvLarge : ICONS.movieLarge}</span>`}
                     </div>
@@ -740,6 +893,7 @@
                                  ? `<button class="btn btn-sm btn-primary gap-1.5" onclick="event.stopPropagation(); openShowTree('${item.rating_key}')">${ICONS.tv} Quản lý Series</button>`
                                  : `<button class="btn btn-sm btn-primary gap-1.5" onclick="event.stopPropagation(); startBatchAction(['${item.rating_key}'], 'upload_target', this)">${ICONS.search} Tìm sub</button>`
                             }
+                        </div>
                     </div>
                 `;
             } else {
@@ -747,7 +901,10 @@
                     <div class="media-poster">
                         ${thumbUrl ? `<img src="${thumbUrl}" alt="${safeTitle}" loading="lazy">` : `<span class="media-poster-placeholder flex items-center justify-center">${isShow ? ICONS.tvLarge : ICONS.movieLarge}</span>`}
                         ${subIndicator}
-                        <span class="media-badge-type">${isShow ? 'Series' : 'Phim lẻ'}</span>
+                        <div class="absolute top-2 right-2 z-10" onclick="event.stopPropagation()">
+                            <input type="checkbox" class="checkbox checkbox-warning checkbox-sm bg-black/70 border-white/50 shadow cursor-pointer item-select-checkbox" data-rk="${item.rating_key}" ${isSelected ? 'checked' : ''} onchange="toggleItemSelection('${item.rating_key}', this.checked)" title="Chọn mục này">
+                        </div>
+                        <span class="media-badge-type absolute bottom-2 right-2 z-10 pointer-events-none">${isShow ? 'Series' : 'Phim lẻ'}</span>
                         <div class="media-poster-overlay">
                             <div class="poster-quick-btn">
                                 <span class="poster-quick-icon">${isShow ? '<svg viewBox="0 0 24 24" style="width:22px;height:22px;fill:currentColor;display:block;"><path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 1.99-.9 1.99-2L23 5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z"/></svg>' : '<svg viewBox="0 0 24 24" style="width:22px;height:22px;fill:currentColor;display:block;"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>'}</span>
@@ -766,12 +923,14 @@
                                 ? `<button class="btn btn-sm btn-primary flex-1 gap-1.5" onclick="event.stopPropagation(); openShowTree('${item.rating_key}')">${ICONS.tv} Quản lý Series</button>`
                                 : `<button class="btn btn-sm btn-primary flex-1 gap-1.5" onclick="event.stopPropagation(); startBatchAction(['${item.rating_key}'], 'upload_target', this)">${ICONS.search} Tìm sub</button>`
                             }
+                        </div>
                     </div>
                 `;
             }
 
             grid.appendChild(card);
         });
+        updateBulkActionBar();
     }
 
     async function loadSections(bypassCache = false) {
@@ -828,6 +987,7 @@
         });
         currentOffset = 0;
         cachedItems = [];
+        clearSelection();
         loadCurrentSectionItems();
     }
 

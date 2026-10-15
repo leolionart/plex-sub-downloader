@@ -333,6 +333,35 @@ async def _run_batch_translate_task(
     task_tracker.add_log(task_id, "Hoàn tất toàn bộ tác vụ dịch thuật!")
     task_tracker.finish_task(task_id, "completed")
 
+def _expand_rating_keys_to_videos(service: Any, rating_keys: list[str]) -> list[str]:
+    """Expand any show/season rating keys into individual episode rating keys."""
+    expanded: list[str] = []
+    seen: set[str] = set()
+
+    for rk in rating_keys:
+        try:
+            item = service.plex_client.get_item(rk)
+            item_type = getattr(item, "type", None)
+            if item_type in ("show", "season") and hasattr(item, "episodes"):
+                for ep in item.episodes():
+                    ep_rk = str(getattr(ep, "ratingKey", ep))
+                    if ep_rk not in seen:
+                        seen.add(ep_rk)
+                        expanded.append(ep_rk)
+            else:
+                str_rk = str(rk)
+                if str_rk not in seen:
+                    seen.add(str_rk)
+                    expanded.append(str_rk)
+        except Exception as e:
+            logger.warning(f"Could not inspect item {rk} for expansion, keeping original: {e}")
+            str_rk = str(rk)
+            if str_rk not in seen:
+                seen.add(str_rk)
+                expanded.append(str_rk)
+
+    return expanded
+
 
 @router.post("/batch/upload-target")
 async def batch_upload_target(request: BatchActionRequest, background_tasks: BackgroundTasks):
@@ -340,14 +369,19 @@ async def batch_upload_target(request: BatchActionRequest, background_tasks: Bac
     if not request.rating_keys:
         raise HTTPException(status_code=400, detail="rating_keys list cannot be empty")
 
-    task_id = task_tracker.create_task("upload_target", len(request.rating_keys))
+    service = get_subtitle_service()
+    expanded_keys = await asyncio.to_thread(_expand_rating_keys_to_videos, service, request.rating_keys)
+    if not expanded_keys:
+        expanded_keys = request.rating_keys
+
+    task_id = task_tracker.create_task("upload_target", len(expanded_keys))
     background_tasks.add_task(
         _run_batch_upload_task,
         task_id=task_id,
-        rating_keys=request.rating_keys,
+        rating_keys=expanded_keys,
         use_cache=request.use_cache,
     )
-    return {"task_id": task_id, "total": len(request.rating_keys), "status": "started"}
+    return {"task_id": task_id, "total": len(expanded_keys), "status": "started"}
 
 
 @router.post("/batch/translate")
@@ -356,13 +390,18 @@ async def batch_translate(request: BatchActionRequest, background_tasks: Backgro
     if not request.rating_keys:
         raise HTTPException(status_code=400, detail="rating_keys list cannot be empty")
 
-    task_id = task_tracker.create_task("translate", len(request.rating_keys))
+    service = get_subtitle_service()
+    expanded_keys = await asyncio.to_thread(_expand_rating_keys_to_videos, service, request.rating_keys)
+    if not expanded_keys:
+        expanded_keys = request.rating_keys
+
+    task_id = task_tracker.create_task("translate", len(expanded_keys))
     background_tasks.add_task(
         _run_batch_translate_task,
         task_id=task_id,
-        rating_keys=request.rating_keys,
+        rating_keys=expanded_keys,
     )
-    return {"task_id": task_id, "total": len(request.rating_keys), "status": "started"}
+    return {"task_id": task_id, "total": len(expanded_keys), "status": "started"}
 
 
 @router.get("/tasks/{task_id}")

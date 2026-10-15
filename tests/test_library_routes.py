@@ -226,6 +226,47 @@ async def test_library_ui_page(mock_service):
         assert "Plex Library Manager" in response.text
 
 
+@pytest.mark.asyncio
+async def test_library_ui_bulk_selection_controls(mock_service):
+    """Test that /library renders multi-selection and floating bulk action bar."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/library")
+        assert response.status_code == 200
+        html = response.text
+        # Floating bulk action bar
+        assert 'id="bulkActionBar"' in html
+        assert 'id="bulkSelectedCountBadge"' in html
+        assert "Tìm sub đã chọn" in html
+        assert "Dịch AI đã chọn" in html
+        # Toolbar select all
+        assert 'id="btnSelectAllPage"' in html
+        # Season bulk action handler
+        assert "startBatchActionForSeason" in html
+
+
+@pytest.mark.asyncio
+async def test_batch_upload_target_expands_shows(mock_service):
+    """Test that batch upload expands show rating_keys to episodes."""
+    mock_show = MagicMock()
+    mock_show.type = "show"
+    ep1 = MagicMock()
+    ep1.ratingKey = 501
+    ep2 = MagicMock()
+    ep2.ratingKey = 502
+    mock_show.episodes.return_value = [ep1, ep2]
+    mock_service.plex_client.get_item.return_value = mock_show
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/api/library/batch/upload-target",
+            json={"rating_keys": ["3001"], "use_cache": True},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 2
+
 
 @pytest.mark.asyncio
 async def test_library_sections_cache_control(mock_service):
