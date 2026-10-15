@@ -27,6 +27,26 @@ DEFAULT_TRANSLATION_CONTEXT_SYSTEM_PROMPT_TEMPLATE = (
     '{"glossary":[{"source":"...","target":"...","note":"..."}]}'
 )
 
+DEFAULT_CHARACTER_MATRIX_SYSTEM_PROMPT_TEMPLATE = (
+    "You are an expert film analyst and linguist specializing in English-to-Vietnamese subtitle translation.\n\n"
+    "Your goal is to build a Character & Relationship Profile (Dramatis Personae) to ensure accurate, "
+    "natural, and consistent Vietnamese personal pronouns and honorifics (xưng hô) throughout the subtitles.\n\n"
+    "Rules:\n"
+    "1. Identify primary characters, their inferred/stated gender (male, female, or unknown), and role in the story.\n"
+    "2. Determine relationships between key character pairs (e.g. husband/wife -> anh - em; colleagues -> tôi - anh/cô; friends -> cậu - tớ / mày - tao; boss/subordinate -> sếp - tôi).\n"
+    "3. Consider any provided user pronoun overrides as inviolable rules.\n"
+    "4. Return ONLY valid JSON matching this schema:\n"
+    "{\n"
+    '  "characters": [\n'
+    '    {"name": "Character Name", "gender": "male|female|unknown", "role": "short description"}\n'
+    "  ],\n"
+    '  "pronoun_rules": [\n'
+    '    {"pair": ["Name1", "Name2"], "relationship": "description", "call": "Vietnamese pronoun pair e.g. anh - em"}\n'
+    "  ],\n"
+    '  "guidelines": "General translation notes regarding tone and address"\n'
+    "}\n"
+)
+
 DEFAULT_TRANSLATION_REVIEW_SYSTEM_PROMPT_TEMPLATE = (
     "You are a Vietnamese subtitle consistency reviewer.\n\n"
     "Review the full translated subtitle episode using the source transcript and context. "
@@ -150,6 +170,14 @@ class SubtitleSettings(BaseModel):
     translation_context_system_prompt_template: str = Field(
         default=DEFAULT_TRANSLATION_CONTEXT_SYSTEM_PROMPT_TEMPLATE,
         description="System prompt template cho bước trích xuất glossary / thuật ngữ (mặc định tắt)",
+    )
+    enable_character_context: bool = Field(
+        default=True,
+        description="Tự động nhận diện sơ đồ nhân vật, giới tính và mối quan hệ để chuẩn hóa đại từ xưng hô tiếng Việt",
+    )
+    character_matrix_system_prompt_template: str = Field(
+        default=DEFAULT_CHARACTER_MATRIX_SYSTEM_PROMPT_TEMPLATE,
+        description="System prompt template để tạo sơ đồ nhân vật (Character Matrix)",
     )
     translation_review_system_prompt_template: str = Field(
         default=DEFAULT_TRANSLATION_REVIEW_SYSTEM_PROMPT_TEMPLATE,

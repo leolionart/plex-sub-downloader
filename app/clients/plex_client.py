@@ -295,6 +295,84 @@ class PlexClient:
         except Exception as e:
             raise PlexClientError(f"Failed to fetch item {rating_key}: {e}") from e
 
+    def get_media_characters_context(self, rating_key: str) -> dict:
+        """
+        Fetch rich character and plot context for a media item.
+        Inherits show/series roles for episodes if episode roles are empty.
+        """
+        if self._mock_mode:
+            return {
+                "rating_key": str(rating_key),
+                "title": "Mock Media",
+                "show_title": None,
+                "year": 2024,
+                "summary": "Mock summary plot",
+                "genres": ["Action", "Sci-Fi"],
+                "roles": [
+                    {"actor": "Actor One", "character": "Character One"},
+                    {"actor": "Actor Two", "character": "Character Two"},
+                ],
+                "parent_rating_key": str(rating_key),
+            }
+
+        try:
+            item = self.get_item(rating_key)
+            item_type = getattr(item, "type", None)
+
+            show_title = None
+            parent_key = str(rating_key)
+            roles = []
+
+            if item_type == "episode":
+                show_title = getattr(item, "grandparentTitle", None)
+                grandparent_key = getattr(item, "grandparentRatingKey", None)
+                if grandparent_key:
+                    parent_key = str(grandparent_key)
+
+                ep_roles = getattr(item, "roles", []) or []
+                for r in ep_roles:
+                    char_name = getattr(r, "role", None) or getattr(r, "tag", None)
+                    if char_name:
+                        roles.append({"actor": getattr(r, "tag", ""), "character": getattr(r, "role", char_name)})
+
+                if not roles and grandparent_key:
+                    try:
+                        show_item = self.get_item(str(grandparent_key))
+                        for r in (getattr(show_item, "roles", []) or [])[:15]:
+                            char_name = getattr(r, "role", None)
+                            if char_name:
+                                roles.append({"actor": getattr(r, "tag", ""), "character": char_name})
+                    except Exception as e:
+                        logger.debug(f"Could not load grandparent roles for episode {rating_key}: {e}")
+            else:
+                for r in (getattr(item, "roles", []) or [])[:15]:
+                    char_name = getattr(r, "role", None)
+                    if char_name:
+                        roles.append({"actor": getattr(r, "tag", ""), "character": char_name})
+
+            return {
+                "rating_key": str(rating_key),
+                "title": getattr(item, "title", "Unknown"),
+                "show_title": show_title,
+                "year": getattr(item, "year", None),
+                "summary": getattr(item, "summary", "") or "",
+                "genres": [g.tag for g in getattr(item, "genres", [])] if hasattr(item, "genres") and item.genres else [],
+                "roles": roles,
+                "parent_rating_key": parent_key,
+            }
+        except Exception as e:
+            logger.warning(f"Error fetching character context for {rating_key}: {e}")
+            return {
+                "rating_key": str(rating_key),
+                "title": "Unknown",
+                "show_title": None,
+                "year": None,
+                "summary": "",
+                "genres": [],
+                "roles": [],
+                "parent_rating_key": str(rating_key),
+            }
+
     def extract_metadata(self, video: Video) -> MediaMetadata:
         """
         Extract metadata từ Plex Video object.

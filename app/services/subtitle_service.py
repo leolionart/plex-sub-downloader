@@ -26,6 +26,7 @@ from app.models.webhook import MediaMetadata
 from app.models.subtitle import SubtitleSearchParams, SubtitleResult
 from app.models.settings import ServiceConfig, SubtitleSettings
 from app.utils.logger import get_logger, RequestContextLogger
+from app.utils.ttl_cache import TTLCache
 
 logger = get_logger(__name__)
 
@@ -88,6 +89,7 @@ class SubtitleService:
         self._sync_history_path = Path("data") / "sync_history.json"
         self._sync_history_lock = RLock()
         self._sync_history: list[dict] = self._load_sync_history()
+        self._character_matrix_cache = TTLCache(default_ttl=7200.0, maxsize=100)
 
     async def close(self) -> None:
         """Cleanup resources."""
@@ -1666,6 +1668,7 @@ class SubtitleService:
         use_cache: bool = True,
         source_subtitle_id: str | None = None,
         source_search_override: SubtitleSearchParams | None = None,
+        pronoun_override: str | None = None,
     ) -> dict[str, Any]:
         """
         Chủ động dịch subtitle sang Vietnamese cho media item.
@@ -1728,6 +1731,7 @@ class SubtitleService:
             source_strategy=source_strategy,
             source_origin=source_origin,
             used_final_fallback=used_final_fallback,
+            pronoun_override=pronoun_override,
         )
 
         if not result:
@@ -2430,6 +2434,7 @@ class SubtitleService:
         source_strategy: str | None = None,
         source_origin: str | None = None,
         used_final_fallback: bool = False,
+        pronoun_override: str | None = None,
     ) -> dict[str, str] | None:
         """
         Execute translation (called after approval).
@@ -2490,6 +2495,19 @@ class SubtitleService:
             )
 
             concurrency = self.config.subtitle_settings.translation_batch_concurrency
+
+            char_context = None
+            if getattr(self.config.subtitle_settings, "enable_character_context", True):
+                try:
+                    char_context = await self.get_or_create_character_matrix(
+                        rating_key=metadata.rating_key,
+                        source_subtitle_path=source_subtitle_path,
+                        pronoun_override=pronoun_override,
+                        log=log,
+                    )
+                except Exception as e:
+                    log.warning(f"Could not build character context: {e}")
+
             stats = await self.translation_client.translate_srt_file(
                 srt_path=source_subtitle_path,
                 output_path=target_subtitle_path,
@@ -2497,8 +2515,9 @@ class SubtitleService:
                 to_lang=to_lang,
                 max_concurrent=concurrency,
                 media_metadata=self._translation_metadata_payload(metadata, video),
+                character_context=char_context,
+                pronoun_override=pronoun_override,
             )
-
             log.info(f"✓ Translation completed: {stats['lines_translated']} lines")
 
             # Upload translated subtitle
@@ -2547,6 +2566,55 @@ class SubtitleService:
             )
             return None
 
+    async def get_or_create_character_matrix(
+        self,
+        rating_key: str,
+        source_subtitle_path: Path | None = None,
+        pronoun_override: str | None = None,
+        log: RequestContextLogger | None = None,
+    ) -> dict[str, Any]:
+        """
+        Get or generate Character Matrix for consistent Vietnamese pronouns.
+        For TV episodes, automatically caches at the Show level.
+        """
+        if not self.translation_client.enabled:
+            return {}
+
+        media_ctx = await asyncio.to_thread(self.plex_client.get_media_characters_context, rating_key)
+        parent_key = media_ctx.get("parent_rating_key") or rating_key
+
+        cache_key = f"char_matrix_{parent_key}"
+        if pronoun_override and pronoun_override.strip():
+            cache_key += f"_{hash(pronoun_override.strip())}"
+
+        cached = self._character_matrix_cache.get(cache_key)
+        if cached:
+            if log:
+                log.info(f"[CharContext] Using cached Character Matrix for key {cache_key}")
+            return cached
+
+        sample_lines: list[str] = []
+        if source_subtitle_path and source_subtitle_path.exists():
+            try:
+                entries = self.translation_client.parse_srt_file(source_subtitle_path)
+                sample_lines = [e["text"] for e in entries[:80]]
+            except Exception as e:
+                if log:
+                    log.warning(f"Could not parse sample lines from {source_subtitle_path}: {e}")
+
+        if log:
+            log.info(f"[CharContext] Generating Character Matrix for {media_ctx.get('title')}...")
+
+        matrix = await self.translation_client.generate_character_matrix(
+            media_context=media_ctx,
+            sample_subtitles=sample_lines,
+            pronoun_override=pronoun_override,
+        )
+
+        if matrix:
+            self._character_matrix_cache.set(cache_key, matrix)
+
+        return matrix
     @staticmethod
     def _translation_metadata_payload(
         metadata: MediaMetadata,

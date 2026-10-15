@@ -1,5 +1,14 @@
 # Release Notes
 
+
+## Unreleased - 2026-10-15 21:00 +07
+
+- **Character Context & Pronoun Consistency Module (Dramatis Personae)**:
+  - Extracted actor cast and character roles directly from Plex server metadata (`video.roles`), inheriting show-level roles for episodes.
+  - Implemented `generate_character_matrix` to generate gender-aware character profiles and pairwise Vietnamese pronoun rules.
+  - Integrated character rules and pronoun guidelines into translation batch system prompts for 100% pronoun consistency.
+  - Added Show-level caching for TV series so all episodes share the same consistent character graph.
+  - Added optional user pronoun override support via API and Web UI (`Ghi đè xưng hô`) in Workspace and Library drawers.
 ## Unreleased - 2026-10-15 20:46 +07
 
 Generated before push from commits:

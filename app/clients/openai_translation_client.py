@@ -14,6 +14,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.models.runtime_config import RuntimeConfig
 from app.models.settings import (
+    DEFAULT_CHARACTER_MATRIX_SYSTEM_PROMPT_TEMPLATE,
     DEFAULT_TRANSLATION_CONTEXT_SYSTEM_PROMPT_TEMPLATE,
     DEFAULT_TRANSLATION_REVIEW_SYSTEM_PROMPT_TEMPLATE,
     DEFAULT_TRANSLATION_SYSTEM_PROMPT_TEMPLATE,
@@ -171,6 +172,8 @@ class OpenAITranslationClient:
                 to_lang=to_lang,
                 count=len(texts),
             )
+        if context and context.get("character_instructions"):
+            system_prompt += f"\n\n{context['character_instructions']}"
 
         user_prompt = self._build_translation_user_prompt(texts, context)
 
@@ -284,6 +287,8 @@ class OpenAITranslationClient:
         max_concurrent: int = 5,
         media_metadata: dict[str, Any] | None = None,
         context_enabled: bool | None = None,
+        character_context: dict[str, Any] | str | None = None,
+        pronoun_override: str | None = None,
     ) -> dict[str, Any]:
         """
         Translate entire .srt subtitle file with parallel batch processing.
@@ -310,6 +315,13 @@ class OpenAITranslationClient:
         entries = self.parse_srt_file(srt_path)
         if not entries:
             raise TranslationClientError("No subtitle entries found")
+
+        char_instructions = None
+        if character_context or pronoun_override:
+            if isinstance(character_context, str):
+                char_instructions = character_context
+            else:
+                char_instructions = self.format_character_context_for_prompt(character_context, pronoun_override)
 
         profile: dict[str, Any] = {}
         if context_enabled is None:
@@ -347,7 +359,7 @@ class OpenAITranslationClient:
                 logger.info(f"Translating batch {batch_num}/{total_batches} ({len(batch)} entries)")
                 texts = [entry["text"] for entry in batch]
                 context = None
-                if context_enabled:
+                if context_enabled or char_instructions:
                     context = self._build_batch_context(
                         entries=entries,
                         batch_start=batch_idx * batch_size,
@@ -355,6 +367,7 @@ class OpenAITranslationClient:
                         context_window=context_window,
                         profile=profile,
                         media_metadata=media_metadata,
+                        character_instructions=char_instructions,
                     )
                 try:
                     translated_texts = await self.translate_text_batch(
@@ -429,6 +442,123 @@ class OpenAITranslationClient:
     # Alias for translate_srt_file
     translate_subtitles = translate_srt_file
 
+
+    def format_character_context_for_prompt(
+        self,
+        character_matrix: dict[str, Any] | None,
+        pronoun_override: str | None = None,
+    ) -> str:
+        """
+        Format Character Matrix & Pronoun Graph into a concise system prompt instruction block.
+        """
+        lines = ["[QUY TẮC NHÂN VẬT & ĐẠI TỪ XƯNG HÔ TIẾNG VIỆT]"]
+
+        if pronoun_override and pronoun_override.strip():
+            lines.append(f"★ GHI ĐÈ ƯU TIÊN TỪ NGƯỜI DÙNG: {pronoun_override.strip()}")
+
+        if character_matrix and isinstance(character_matrix, dict):
+            chars = character_matrix.get("characters") or []
+            if chars:
+                char_descs = []
+                for c in chars[:12]:
+                    name = c.get("name", "")
+                    gender = c.get("gender", "")
+                    role = c.get("role", "")
+                    char_descs.append(f"- {name} ({gender}): {role}")
+                lines.append("Hồ sơ nhân vật:\n" + "\n".join(char_descs))
+
+            rules = character_matrix.get("pronoun_rules") or []
+            if rules:
+                rule_lines = []
+                for r in rules[:12]:
+                    pair = " và ".join(r.get("pair") or r.get("characters") or [])
+                    rel = r.get("relationship", "")
+                    call = r.get("call") or r.get("style", "")
+                    rule_lines.append(f"- {pair} ({rel}): xưng hô '{call}'")
+                lines.append("Quy tắc xưng hô giữa các cặp:\n" + "\n".join(rule_lines))
+
+            guidelines = character_matrix.get("guidelines")
+            if guidelines:
+                lines.append(f"Lưu ý dịch thuật: {guidelines}")
+
+        lines.append(
+            "BẮT BUỘC: Tuân thủ đúng giới tính và giữ cách xưng hô trên nhất quán 100% qua tất cả các câu thoại."
+        )
+        return "\n\n".join(lines)
+
+    async def generate_character_matrix(
+        self,
+        media_context: dict[str, Any],
+        sample_subtitles: list[str] | None = None,
+        pronoun_override: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Analyze media plot summary, cast/roles, and sample dialogues with LLM
+        to build a structured Character Matrix and Vietnamese pronoun graph.
+        """
+        if not self.enabled:
+            return {}
+
+        title = media_context.get("title", "")
+        show_title = media_context.get("show_title")
+        full_title = f"{show_title} - {title}" if show_title else title
+        year = media_context.get("year", "")
+        summary = media_context.get("summary", "")
+        genres = ", ".join(media_context.get("genres", []))
+        roles = media_context.get("roles", [])
+
+        roles_text = "\n".join(
+            f"- Diễn viên: {r.get('actor', '')} | Vai diễn: {r.get('character', '')}"
+            for r in roles[:15]
+        ) or "Không có danh sách vai diễn cụ thể."
+
+        sample_dialogues = "\n".join(sample_subtitles[:80]) if sample_subtitles else "Không có mẫu thoại."
+
+        prompt_template = getattr(
+            self._config.subtitle_settings,
+            "character_matrix_system_prompt_template",
+            DEFAULT_CHARACTER_MATRIX_SYSTEM_PROMPT_TEMPLATE,
+        )
+
+        user_content = (
+            f"THÔNG TIN PHIM:\n"
+            f"- Tiêu đề: {full_title} ({year})\n"
+            f"- Thể loại: {genres}\n"
+            f"- Tóm tắt cốt truyện: {summary}\n\n"
+            f"DANH SÁCH DIỄN VIÊN & VAI DIỄN (Plex metadata):\n"
+            f"{roles_text}\n\n"
+            f"GHI ĐÈ XƯNG HÔ TỪ NGƯỜI DÙNG (NẾU CÓ):\n"
+            f"{pronoun_override or 'Không có ghi đè.'}\n\n"
+            f"MẪU THOẠI ĐẦU PHIM:\n"
+            f"{sample_dialogues}\n\n"
+            f"Hãy phân tích và trả về đúng định dạng JSON như quy định."
+        )
+
+        try:
+            response = await self._client.post(
+                f"{self.base_url}/chat/completions",
+                json={
+                    "model": self.model,
+                    "messages": [
+                        {"role": "system", "content": prompt_template},
+                        {"role": "user", "content": user_content},
+                    ],
+                    "temperature": 0.2,
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+            raw_content = data["choices"][0]["message"]["content"].strip()
+            parsed = self._parse_json_object(raw_content)
+            logger.info(
+                f"✓ Generated Character Matrix for {full_title}: "
+                f"{len(parsed.get('characters', []))} characters, "
+                f"{len(parsed.get('pronoun_rules', []))} pronoun rules"
+            )
+            return parsed
+        except Exception as e:
+            logger.warning(f"Failed to generate Character Matrix: {e}")
+            return {}
 
     async def extract_episode_context(
         self,
@@ -559,6 +689,7 @@ class OpenAITranslationClient:
         context_window: int,
         profile: dict[str, Any] | None = None,
         media_metadata: dict[str, Any] | None = None,
+        character_instructions: str | None = None,
     ) -> dict[str, Any]:
         batch_end = batch_start + batch_size
         previous_start = max(0, batch_start - context_window)

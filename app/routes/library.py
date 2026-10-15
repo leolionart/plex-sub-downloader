@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/library", tags=["library"])
 class BatchActionRequest(BaseModel):
     rating_keys: list[str]
     use_cache: bool = True
-
+    pronoun_override: str | None = None
 
 class TaskTracker:
     """In-memory task tracker for batch operations."""
@@ -268,6 +268,7 @@ async def _run_batch_upload_task(
 async def _run_batch_translate_task(
     task_id: str,
     rating_keys: list[str],
+    pronoun_override: str | None = None,
 ) -> None:
     """Execute background batch subtitle translation with progress updates."""
     service = get_subtitle_service()
@@ -309,7 +310,10 @@ async def _run_batch_translate_task(
                 log_message=f"[{idx}/{total}] {item_label}: Đang gửi AI dịch thuật...",
             )
 
-            res = await service.execute_translate_for_media(rating_key=rk)
+            res = await service.execute_translate_for_media(
+                rating_key=rk,
+                pronoun_override=pronoun_override,
+            )
             status = res.get("status") if isinstance(res, dict) else "success"
 
             task_tracker.update_progress(
@@ -400,6 +404,7 @@ async def batch_translate(request: BatchActionRequest, background_tasks: Backgro
         _run_batch_translate_task,
         task_id=task_id,
         rating_keys=expanded_keys,
+        pronoun_override=request.pronoun_override,
     )
     return {"task_id": task_id, "total": len(expanded_keys), "status": "started"}
 

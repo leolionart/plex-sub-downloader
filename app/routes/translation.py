@@ -17,7 +17,7 @@ class TranslationRequest(BaseModel):
     use_cache: bool = True
     source_subtitle_id: str | None = None
     source_search_override: SubtitleSearchParams | None = None
-
+    pronoun_override: str | None = None
 
 class ImproveRequest(BaseModel):
     """Request để execute subtitle improve."""
@@ -48,6 +48,7 @@ async def execute_translation(request: TranslationRequest):
         use_cache=request.use_cache,
         source_subtitle_id=request.source_subtitle_id,
         source_search_override=request.source_search_override,
+        pronoun_override=request.pronoun_override,
     )
 
     if result["status"] == "error":

@@ -462,6 +462,14 @@
                 <button class="btn btn-sm btn-circle btn-ghost text-text-muted hover:text-text-primary text-lg" onclick="closeShowModal()" aria-label="Đóng">&times;</button>
             </div>
         </div>
+        <!-- Series Character & Pronoun Override Input -->
+        <div class="px-6 py-2.5 bg-bg-surface border-b border-border-subtle flex items-center gap-3">
+            <span class="text-xs text-text-secondary font-medium shrink-0 flex items-center gap-1.5">
+                <i class="fa-solid fa-user-group text-warning text-xs"></i>
+                <span>Xưng hô AI:</span>
+            </span>
+            <input type="text" id="seriesPronounOverrideInput" class="input input-xs bg-bg-input border-border-subtle text-text-primary text-xs flex-1 focus:border-warning" placeholder="Ghi đè xưng hô (tuỳ chọn, ví dụ: Agatha - Rio: tôi - cô; Billy: cháu - cô)" title="Ghi đè đại từ xưng hô cho toàn bộ series này khi dịch AI">
+        </div>
         <div class="p-6 overflow-y-auto flex-1 flex flex-col gap-4 bg-bg-app/40" id="showModalBody">
             <div class="flex flex-col items-center justify-center py-16 gap-3 text-text-muted">
                 <span class="loading loading-spinner loading-lg text-primary"></span>
@@ -1643,10 +1651,13 @@
         const endpoint = actionType === 'translate' ? '/api/library/batch/translate' : '/api/library/batch/upload-target';
         
         try {
+            const payload = { rating_keys: ratingKeys, use_cache: true };
+            const override = document.getElementById("seriesPronounOverrideInput")?.value?.trim() || null;
+            if (override) payload.pronoun_override = override;
             const res = await fetch(endpoint, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ rating_keys: ratingKeys, use_cache: true })
+                body: JSON.stringify(payload)
             });
 
             const data = await res.json();
