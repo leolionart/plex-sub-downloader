@@ -298,7 +298,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script data-cfasync="false">
     // Client-side SessionCache fallback if not provided by base layout
     const SessionCache = window.SessionCache || {
         get: (key) => {
@@ -1234,15 +1234,26 @@
     }
 
     // Initialization
-    initAutoFallbackToggle();
-    loadStatus();
-    loadNowPlaying();
-    loadHistory();
-    setInterval(loadNowPlaying, 30000);
+    function initSyncApp() {
+        initAutoFallbackToggle();
+        loadStatus();
+        loadNowPlaying();
+        loadHistory();
+        setInterval(loadNowPlaying, 30000);
 
-    // Submit on Enter key
-    document.getElementById('rating-key').addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') previewSync();
-    });
+        // Submit on Enter key
+        const rkInput = document.getElementById('rating-key');
+        if (rkInput) {
+            rkInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') previewSync();
+            });
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initSyncApp);
+    } else {
+        initSyncApp();
+    }
 </script>
 {% endblock %}

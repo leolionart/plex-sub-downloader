@@ -11,10 +11,10 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script data-cfasync="false" src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.23/dist/full.min.css" rel="stylesheet" type="text/css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <script>
+    <script data-cfasync="false">
         tailwind.config = {
             theme: {
                 extend: {
@@ -1018,6 +1018,93 @@
             from { opacity: 0; transform: translateY(8px); }
             to { opacity: 1; transform: translateY(0); }
         }
+
+        /* ── Fallback Utility Classes (Guarantees styling even under Safari Content Blockers / CDN failure) ── */
+        .bg-bg-surface { background-color: var(--bg-surface, #282830) !important; }
+        .bg-bg-input { background-color: var(--bg-input, #32323C) !important; }
+        .bg-bg-elevated { background-color: var(--bg-elevated, #3D3D47) !important; }
+        .bg-bg-app { background-color: var(--bg-app, #1F1F23) !important; }
+        .border-border-subtle { border-color: var(--border-subtle, #3A3A44) !important; }
+        .border-border-default { border-color: var(--border-default, #44444E) !important; }
+        .rounded-xl { border-radius: 12px !important; }
+        .rounded-2xl { border-radius: 16px !important; }
+        .rounded-lg { border-radius: 8px !important; }
+        .rounded-md { border-radius: 6px !important; }
+        .rounded-full { border-radius: 9999px !important; }
+        .shadow-sm { box-shadow: 0 1px 2px rgba(0,0,0,0.2) !important; }
+        .shadow-md, .shadow { box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important; }
+        .shadow-2xl { box-shadow: 0 16px 36px rgba(0,0,0,0.5) !important; }
+        .p-2 { padding: 8px !important; }
+        .p-3 { padding: 12px !important; }
+        .p-4 { padding: 16px !important; }
+        .p-5 { padding: 20px !important; }
+        .p-6 { padding: 24px !important; }
+        .px-3 { padding-left: 12px !important; padding-right: 12px !important; }
+        .px-4 { padding-left: 16px !important; padding-right: 16px !important; }
+        .px-6 { padding-left: 24px !important; padding-right: 24px !important; }
+        .py-1 { padding-top: 4px !important; padding-bottom: 4px !important; }
+        .py-2 { padding-top: 8px !important; padding-bottom: 8px !important; }
+        .py-3 { padding-top: 12px !important; padding-bottom: 12px !important; }
+        .py-4 { padding-top: 16px !important; padding-bottom: 16px !important; }
+        .m-0 { margin: 0 !important; }
+        .mb-1 { margin-bottom: 4px !important; }
+        .mb-2 { margin-bottom: 8px !important; }
+        .mb-3 { margin-bottom: 12px !important; }
+        .mb-4 { margin-bottom: 16px !important; }
+        .mb-6 { margin-bottom: 24px !important; }
+        .mt-2 { margin-top: 8px !important; }
+        .mt-4 { margin-top: 16px !important; }
+        .mt-auto { margin-top: auto !important; }
+        .flex { display: flex !important; }
+        .inline-flex { display: inline-flex !important; }
+        .flex-col { flex-direction: column !important; }
+        .flex-wrap { flex-wrap: wrap !important; }
+        .items-center { align-items: center !important; }
+        .items-stretch { align-items: stretch !important; }
+        .justify-between { justify-content: space-between !important; }
+        .justify-center { justify-content: center !important; }
+        .justify-end { justify-content: flex-end !important; }
+        .gap-1 { gap: 4px !important; }
+        .gap-1\.5 { gap: 6px !important; }
+        .gap-2 { gap: 8px !important; }
+        .gap-2\.5 { gap: 10px !important; }
+        .gap-3 { gap: 12px !important; }
+        .gap-4 { gap: 16px !important; }
+        .flex-1 { flex: 1 1 0% !important; }
+        .shrink-0 { flex-shrink: 0 !important; }
+        .min-w-0 { min-width: 0 !important; }
+        .grid { display: grid !important; }
+        .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+        .grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+        .text-xs { font-size: 12px !important; line-height: 1.4 !important; }
+        .text-sm { font-size: 14px !important; line-height: 1.4 !important; }
+        .text-base { font-size: 16px !important; }
+        .text-lg { font-size: 18px !important; }
+        .text-2xl { font-size: 24px !important; }
+        .font-medium { font-weight: 500 !important; }
+        .font-semibold { font-weight: 600 !important; }
+        .font-bold { font-weight: 700 !important; }
+        .truncate { overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; }
+        .line-clamp-2 { display: -webkit-box !important; -webkit-line-clamp: 2 !important; -webkit-box-orient: vertical !important; overflow: hidden !important; }
+        .text-text-primary { color: var(--text-primary, #EAEAEA) !important; }
+        .text-text-secondary { color: var(--text-secondary, #A0A0A0) !important; }
+        .text-text-muted { color: var(--text-muted, #6A6A6A) !important; }
+        .text-plex-gold, .text-primary, .text-warning { color: var(--plex-gold, #E5A00D) !important; }
+        .text-success { color: var(--success, #4CAF50) !important; }
+        .text-error { color: var(--error, #F44336) !important; }
+        .badge { display: inline-flex !important; align-items: center !important; justify-content: center !important; padding: 2px 8px !important; border-radius: 9999px !important; font-size: 11px !important; font-weight: 600 !important; line-height: 1.2 !important; height: auto !important; min-height: 20px !important; border: 1px solid transparent !important; }
+        .badge-neutral { background: var(--bg-input, #32323C) !important; color: var(--text-secondary, #A0A0A0) !important; border-color: var(--border-subtle, #3A3A44) !important; }
+        .badge-warning { background: rgba(229, 160, 13, 0.15) !important; color: var(--plex-gold, #E5A00D) !important; border-color: rgba(229, 160, 13, 0.3) !important; }
+        .badge-success { background: rgba(76, 175, 80, 0.15) !important; color: #4CAF50 !important; border-color: rgba(76, 175, 80, 0.3) !important; }
+        .badge-error { background: rgba(244, 67, 54, 0.15) !important; color: #F44336 !important; border-color: rgba(244, 67, 54, 0.3) !important; }
+        .badge-info { background: rgba(66, 165, 245, 0.15) !important; color: #42A5F5 !important; border-color: rgba(66, 165, 245, 0.3) !important; }
+        .input, .input-sm { background: var(--bg-input, #32323C) !important; border: 1px solid var(--border-subtle, #3A3A44) !important; color: var(--text-primary, #EAEAEA) !important; border-radius: 6px !important; padding: 6px 12px !important; font-size: 13px !important; outline: none !important; width: 100% !important; }
+        .input:focus { border-color: var(--plex-gold, #E5A00D) !important; }
+        .join { display: inline-flex !important; flex-wrap: wrap !important; gap: 4px !important; }
+        .join-item { border-radius: 6px !important; }
+        .btn-sm, .btn-xs { min-height: 32px !important; height: 32px !important; padding: 4px 10px !important; font-size: 12px !important; }
+        .btn-loading { opacity: 0.75; cursor: not-allowed !important; pointer-events: none; }
+        .stat-card { background: var(--bg-surface, #282830); border: 1px solid var(--border-subtle, #3A3A44); border-radius: 12px; }
     </style>
     {% block extra_styles %}{% endblock %}
 </head>
@@ -1115,7 +1202,7 @@
     <!-- Toast container (floating, fixed position) -->
     <div class="toast toast-end toast-bottom toast-container z-50 flex flex-col gap-2 pointer-events-none" id="toastContainer"></div>
 
-    <script>
+    <script data-cfasync="false">
         // Global SessionCache helper
         window.SessionCache = {
             /**

@@ -16,6 +16,9 @@
   - Fixed Safari iOS/macOS horizontal overflow and style clipping with strict max-width constraints.
   - Added prominent high-contrast selection boxes on poster cards and dedicated Select All button on search bar.
   - Added native checkbox styling fallbacks ensuring 100% visibility even under strict Safari Content Blockers.
+  - Added data-cfasync="false" to prevent Cloudflare Rocket Loader from blocking/deferring scripts on Safari iOS.
+  - Embedded full native CSS utility fallbacks in base layout ensuring complete card, button, and badge styling even if external CDNs are blocked.
+  - Added document.readyState guards ensuring reliable page initialization regardless of script deferral.
 - **Docker Reliability & Self-Healing**:
   - Configured 15s timeout and connection retry for PlexServer client to prevent indefinite startup hangs.
   - Added background watchdog in `entrypoint.sh` to auto-terminate frozen container processes and trigger Docker restart policy.

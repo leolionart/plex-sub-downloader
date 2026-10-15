@@ -297,6 +297,54 @@
             justify-content: space-between !important;
         }
     }
+    @media (max-width: 768px) {
+        .filter-pills-group {
+            display: flex !important;
+            flex-wrap: nowrap !important;
+            overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+            padding-bottom: 4px !important;
+            max-width: 100% !important;
+            scrollbar-width: none !important;
+        }
+        .filter-pills-group::-webkit-scrollbar {
+            display: none !important;
+        }
+        .filter-pill {
+            white-space: nowrap !important;
+            flex-shrink: 0 !important;
+        }
+        #sectionsContainer {
+            display: flex !important;
+            flex-wrap: nowrap !important;
+            overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+            padding-bottom: 4px !important;
+            max-width: 100% !important;
+            scrollbar-width: none !important;
+        }
+        #sectionsContainer::-webkit-scrollbar {
+            display: none !important;
+        }
+        .section-btn {
+            white-space: nowrap !important;
+            flex-shrink: 0 !important;
+        }
+        .search-filter-row {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 10px !important;
+        }
+        .toolbar-header-row {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 10px !important;
+        }
+        .toolbar-view-actions {
+            width: 100% !important;
+            justify-content: space-between !important;
+        }
+    }
 </style>
 {% endblock %}
 
@@ -501,7 +549,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script data-cfasync="false">
     const ICONS = {
         tv: `<i class="fa-solid fa-tv mr-1.5 align-middle"></i>`,
         movie: `<i class="fa-solid fa-film mr-1.5 align-middle"></i>`,
@@ -769,12 +817,18 @@
         }
     }
 
-    document.addEventListener("DOMContentLoaded", () => {
+    function initLibraryApp() {
         setLayoutMode(currentLayoutMode, false);
         applySubtitleFilterUI();
         initAutoFallbackUI();
         loadSections();
-    });
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", initLibraryApp);
+    } else {
+        initLibraryApp();
+    }
 
     function setSubtitleFilter(filter) {
         currentSubtitleFilter = filter;
