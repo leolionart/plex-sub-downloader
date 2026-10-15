@@ -1008,13 +1008,15 @@ class PlexClient:
         offset: int = 0,
         limit: int = 50,
         subtitle_filter: str = "missing_vi",
+        sort: str | None = None,
         use_cache: bool = True,
     ) -> dict:
-        """Fetch items in a library section with optional search, subtitle filter, and pagination."""
+        """Fetch items in a library section with optional search, subtitle filter, sort, and pagination."""
         cache_key = (
             str(section_key),
             query.strip() if query and query.strip() else None,
             subtitle_filter,
+            sort,
             offset,
             limit,
         )
@@ -1076,13 +1078,14 @@ class PlexClient:
 
             title_query = query.strip() if query and query.strip() else None
 
-            all_matching = section.search(
+            paged = section.search(
                 title=title_query,
                 filters=filters or None,
+                sort=sort or None,
+                container_start=offset,
+                maxresults=limit,
             )
-            total = len(all_matching)
-            paged = all_matching[offset : offset + limit]
-
+            total = getattr(paged, "totalSize", len(paged))
             vi_keys, en_keys = self._get_section_subtitle_keys(section, str(section_key))
 
             items = []

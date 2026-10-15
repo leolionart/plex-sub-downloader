@@ -2660,15 +2660,17 @@ class SubtitleService:
         offset: int = 0,
         limit: int = 50,
         subtitle_filter: str = "missing_vi",
+        sort: str | None = None,
         use_cache: bool = True,
     ) -> dict:
-        """Fetch items in a Plex library section with subtitle filter."""
+        """Fetch items in a Plex library section with subtitle filter and sort."""
         return self.plex_client.get_section_items(
             section_key=section_key,
             query=query,
             offset=offset,
             limit=limit,
             subtitle_filter=subtitle_filter,
+            sort=sort,
             use_cache=use_cache,
         )
 

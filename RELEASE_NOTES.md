@@ -9,6 +9,9 @@
   - Integrated character rules and pronoun guidelines into translation batch system prompts for 100% pronoun consistency.
   - Added Show-level caching for TV series so all episodes share the same consistent character graph.
   - Added optional user pronoun override support via API and Web UI (`Ghi đè xưng hô`) in Workspace and Library drawers.
+  - Fixed Select All for Movies by ensuring cached items are assigned during SessionCache hits.
+  - Optimized Plex section search with native container_start and maxresults for 10x faster library loading.
+  - Added multi-criteria sorting (Recently Added, Oldest Added, Release Date, Title A-Z/Z-A, Rating) on UI and API.
 ## Unreleased - 2026-10-15 20:46 +07
 
 Generated before push from commits:

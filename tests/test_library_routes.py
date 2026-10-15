@@ -112,6 +112,20 @@ async def test_get_section_items_with_filter(mock_service):
             offset=0,
             limit=10,
             subtitle_filter="can_translate",
+            sort=None,
+            use_cache=True,
+        )
+
+        # Test sort parameter
+        response2 = await client.get("/api/library/sections/1/items?offset=0&limit=10&sort=addedAt:desc")
+        assert response2.status_code == 200
+        mock_service.get_library_items.assert_called_with(
+            section_key="1",
+            query=None,
+            offset=0,
+            limit=10,
+            subtitle_filter="missing_vi",
+            sort="addedAt:desc",
             use_cache=True,
         )
 
@@ -128,6 +142,7 @@ async def test_get_section_items_refresh_and_no_cache(mock_service):
             offset=0,
             limit=50,
             subtitle_filter="missing_vi",
+            sort=None,
             use_cache=False,
         )
 
@@ -140,6 +155,7 @@ async def test_get_section_items_refresh_and_no_cache(mock_service):
             offset=0,
             limit=50,
             subtitle_filter="missing_vi",
+            sort=None,
             use_cache=False,
         )
 

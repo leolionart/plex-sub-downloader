@@ -365,8 +365,20 @@
             </span>
         </div>
 
-        <div class="toolbar-view-actions flex items-center gap-2.5 shrink-0">
-
+        <div class="toolbar-view-actions flex items-center gap-2.5 shrink-0 flex-wrap">
+            <!-- Sort Dropdown -->
+            <div class="flex items-center gap-1.5 shrink-0">
+                <span class="text-xs text-text-secondary font-medium hidden sm:inline">Sắp xếp:</span>
+                <select id="librarySortSelect" class="form-select text-xs py-1 px-2.5 rounded-lg bg-bg-input border border-border-subtle text-text-primary focus:border-plex-gold cursor-pointer" onchange="handleSortChange(this.value)" title="Sắp xếp phim và series">
+                    <option value="addedAt:desc" selected>Mới thêm gần đây</option>
+                    <option value="addedAt:asc">Thêm cũ nhất</option>
+                    <option value="originallyAvailableAt:desc">Ngày phát hành (Mới nhất)</option>
+                    <option value="originallyAvailableAt:asc">Ngày phát hành (Cũ nhất)</option>
+                    <option value="titleSort:asc">Tên (A → Z)</option>
+                    <option value="titleSort:desc">Tên (Z → A)</option>
+                    <option value="rating:desc">Đánh giá cao nhất</option>
+                </select>
+            </div>
 
             <div class="join" id="layoutToggleGroup">
                 <button type="button" class="btn btn-sm join-item btn-primary" id="btnViewGrid" title="Chế độ Lưới" onclick="setLayoutMode('grid')">
@@ -611,6 +623,16 @@
     let currentLayoutMode = localStorage.getItem("plex_sub_layout_mode") || "grid";
     let cachedItems = [];
     let currentSubtitleFilter = "missing_vi";
+    let currentSort = localStorage.getItem("plex_library_sort") || "addedAt:desc";
+
+    function handleSortChange(sortVal) {
+        currentSort = sortVal;
+        localStorage.setItem("plex_library_sort", sortVal);
+        currentOffset = 0;
+        cachedItems = [];
+        clearSelection();
+        loadCurrentSectionItems(false, true);
+    }
     let currentShowTreeData = null;
     let currentShowRatingKey = null;
     let showTreeFilter = "missing_vi";
@@ -833,6 +855,8 @@
         setLayoutMode(currentLayoutMode, false);
         applySubtitleFilterUI();
         initAutoFallbackUI();
+        const sortSelect = document.getElementById("librarySortSelect");
+        if (sortSelect) sortSelect.value = currentSort;
         loadSections();
     }
 
@@ -1121,7 +1145,7 @@
         if (!activeSectionKey) return;
         const grid = document.getElementById("itemsGrid");
         const query = document.getElementById("librarySearchInput").value.trim();
-        const cacheKey = `sec_${activeSectionKey}_off${currentOffset}_lim${pageSize}_q${encodeURIComponent(query)}_f${currentSubtitleFilter}`;
+        const cacheKey = `sec_${activeSectionKey}_off${currentOffset}_lim${pageSize}_q${encodeURIComponent(query)}_f${currentSubtitleFilter}_s${currentSort}`;
 
         if (!append && !bypassCache) {
             const cachedData = SessionCache.get(cacheKey);
@@ -1132,10 +1156,13 @@
                 totalItems = cachedData.total_size || 0;
                 const items = cachedData.items || [];
                 if (items.length === 0) {
+                    cachedItems = [];
                     grid.innerHTML = `<div class="col-span-full text-center py-16 text-text-muted text-sm">Không có mục nào trong thư viện này.</div>`;
                     document.getElementById("paginationControls").style.display = "none";
+                    updateBulkActionBar();
                     return;
                 }
+                cachedItems = items;
                 renderItems(items, false);
                 const pagination = document.getElementById("paginationControls");
                 if (currentOffset + items.length < totalItems) {
@@ -1143,6 +1170,7 @@
                 } else {
                     pagination.style.display = "none";
                 }
+                updateBulkActionBar();
                 return;
             }
         }
@@ -1164,7 +1192,7 @@
         }
 
         try {
-            const url = `/api/library/sections/${activeSectionKey}/items?offset=${currentOffset}&limit=${pageSize}&query=${encodeURIComponent(query)}&filter=${encodeURIComponent(currentSubtitleFilter)}`;
+            const url = `/api/library/sections/${activeSectionKey}/items?offset=${currentOffset}&limit=${pageSize}&query=${encodeURIComponent(query)}&filter=${encodeURIComponent(currentSubtitleFilter)}&sort=${encodeURIComponent(currentSort)}`;
             const res = await fetch(url);
             const data = await res.json();
 

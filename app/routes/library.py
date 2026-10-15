@@ -128,12 +128,13 @@ async def get_section_items(
     section_key: str,
     query: str | None = None,
     filter: str = Query("missing_vi"),
+    sort: str | None = Query(None),
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     use_cache: bool = Query(True),
     refresh: bool = Query(False),
 ):
-    """List media items in a section with search, subtitle filter, and pagination."""
+    """List media items in a section with search, subtitle filter, sort, and pagination."""
     service = get_subtitle_service()
     effective_use_cache = use_cache and not refresh
     try:
@@ -144,6 +145,7 @@ async def get_section_items(
             offset=offset,
             limit=limit,
             subtitle_filter=filter,
+            sort=sort,
             use_cache=effective_use_cache,
         )
         return data
