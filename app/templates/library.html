@@ -240,6 +240,63 @@
         display: inline-block;
         vertical-align: middle;
     }
+    /* Selection Box on Cards & Rows */
+    .card-select-box {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        z-index: 25;
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0, 0, 0, 0.75);
+        border: 1.5px solid rgba(255, 255, 255, 0.45);
+        border-radius: 6px;
+        cursor: pointer;
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+        transition: all 0.15s ease;
+    }
+    .card-select-box:hover,
+    .media-card.is-selected .card-select-box {
+        background: var(--plex-gold);
+        border-color: var(--plex-gold);
+    }
+    .select-all-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: var(--bg-input);
+        border: 1px solid var(--border-default);
+        color: var(--text-primary);
+        border-radius: var(--radius-md);
+        padding: 6px 12px;
+        font-size: 13px;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: all 0.2s ease;
+    }
+    .select-all-btn:hover {
+        border-color: var(--plex-gold);
+        background: var(--bg-surface-hover);
+    }
+    @media (max-width: 640px) {
+        #bulkActionBar {
+            width: calc(100vw - 24px) !important;
+            left: 12px !important;
+            transform: translate(0, 0) !important;
+            flex-direction: column !important;
+            gap: 8px !important;
+            padding: 12px 14px !important;
+            bottom: 12px !important;
+        }
+        #bulkActionBar .flex {
+            width: 100% !important;
+            justify-content: space-between !important;
+        }
+    }
 </style>
 {% endblock %}
 
@@ -257,10 +314,7 @@
         </div>
 
         <div class="toolbar-view-actions flex items-center gap-2.5 shrink-0">
-            <button type="button" class="btn btn-sm btn-ghost bg-bg-input border border-border-subtle gap-1.5" id="btnSelectAllPage" onclick="toggleSelectAllPage()" title="Chọn hoặc bỏ chọn tất cả mục trong trang này">
-                <input type="checkbox" id="selectAllCheckbox" class="checkbox checkbox-warning checkbox-xs pointer-events-none">
-                <span class="text-xs">Chọn tất cả</span>
-            </button>
+
 
             <div class="join" id="layoutToggleGroup">
                 <button type="button" class="btn btn-sm join-item btn-primary" id="btnViewGrid" title="Chế độ Lưới" onclick="setLayoutMode('grid')">
@@ -282,7 +336,12 @@
 
     <!-- Bottom Row: Search Box + Filter Pills Group + Auto-Fallback Translation Toggle -->
     <div class="search-filter-row flex items-center gap-3 flex-wrap">
-        <div class="relative w-72 sm:w-80 shrink-0">
+        <button type="button" class="btn btn-sm btn-ghost bg-bg-input border border-border-subtle gap-2 shrink-0 select-all-btn" id="btnSelectAllPage" onclick="toggleSelectAllPage()" title="Chọn hoặc bỏ chọn tất cả mục trong trang này">
+            <input type="checkbox" id="selectAllCheckbox" class="card-checkbox pointer-events-none">
+            <span class="text-xs font-semibold">Chọn tất cả (<span id="selectPageCount">0</span>)</span>
+        </button>
+
+        <div class="relative flex-1 min-w-[200px] max-w-sm shrink-0">
             <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-text-muted">
                 <i class="fa-solid fa-magnifying-glass"></i>
             </span>
@@ -560,7 +619,9 @@
         const translateCount = document.getElementById("bulkTranslateCount");
         const barCheckbox = document.getElementById("bulkBarSelectAllCheckbox");
         const toolbarCheckbox = document.getElementById("selectAllCheckbox");
+        const pageCountEl = document.getElementById("selectPageCount");
 
+        if (pageCountEl) pageCountEl.textContent = (cachedItems ? cachedItems.length : 0);
         if (countBadge) countBadge.textContent = count;
         if (uploadCount) uploadCount.textContent = count;
         if (translateCount) translateCount.textContent = count;
@@ -869,8 +930,8 @@
 
             if (currentLayoutMode === "list") {
                 card.innerHTML = `
-                    <div class="shrink-0 flex items-center pr-2 pl-1" onclick="event.stopPropagation()">
-                        <input type="checkbox" class="checkbox checkbox-warning checkbox-sm bg-bg-input border-border-default cursor-pointer item-select-checkbox" data-rk="${item.rating_key}" ${isSelected ? 'checked' : ''} onchange="toggleItemSelection('${item.rating_key}', this.checked)" title="Chọn mục này">
+                    <div class="row-select-box shrink-0 flex items-center justify-center pl-1 pr-2" onclick="event.stopPropagation(); toggleItemSelection('${item.rating_key}', !selectedRatingKeys.has(String('${item.rating_key}')))" title="Chọn mục này">
+                        <input type="checkbox" class="card-checkbox item-select-checkbox" data-rk="${item.rating_key}" ${isSelected ? 'checked' : ''} onclick="event.stopPropagation()" onchange="toggleItemSelection('${item.rating_key}', this.checked)">
                     </div>
                     <div class="media-poster">
                         ${thumbUrl ? `<img src="${thumbUrl}" alt="${safeTitle}" loading="lazy">` : `<span class="media-poster-placeholder flex items-center justify-center">${isShow ? ICONS.tvLarge : ICONS.movieLarge}</span>`}
@@ -901,8 +962,8 @@
                     <div class="media-poster">
                         ${thumbUrl ? `<img src="${thumbUrl}" alt="${safeTitle}" loading="lazy">` : `<span class="media-poster-placeholder flex items-center justify-center">${isShow ? ICONS.tvLarge : ICONS.movieLarge}</span>`}
                         ${subIndicator}
-                        <div class="absolute top-2 right-2 z-10" onclick="event.stopPropagation()">
-                            <input type="checkbox" class="checkbox checkbox-warning checkbox-sm bg-black/70 border-white/50 shadow cursor-pointer item-select-checkbox" data-rk="${item.rating_key}" ${isSelected ? 'checked' : ''} onchange="toggleItemSelection('${item.rating_key}', this.checked)" title="Chọn mục này">
+                        <div class="card-select-box" onclick="event.stopPropagation(); toggleItemSelection('${item.rating_key}', !selectedRatingKeys.has(String('${item.rating_key}')))" title="Chọn mục này">
+                            <input type="checkbox" class="card-checkbox item-select-checkbox" data-rk="${item.rating_key}" ${isSelected ? 'checked' : ''} onclick="event.stopPropagation()" onchange="toggleItemSelection('${item.rating_key}', this.checked)">
                         </div>
                         <span class="media-badge-type absolute bottom-2 right-2 z-10 pointer-events-none">${isShow ? 'Series' : 'Phim lẻ'}</span>
                         <div class="media-poster-overlay">

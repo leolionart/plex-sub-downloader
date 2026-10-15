@@ -130,6 +130,30 @@
     #sync-detail-modal.active {
         display: flex !important;
     }
+
+    @media (max-width: 640px) {
+        #sync-status-banner {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 8px !important;
+        }
+        .stat-card {
+            padding: 10px 12px !important;
+            min-width: 0 !important;
+            overflow: hidden !important;
+        }
+        .stat-value {
+            font-size: 15px !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            max-width: 100% !important;
+        }
+        .workspace-flow-note {
+            font-size: 11px !important;
+            padding: 8px 10px !important;
+            word-break: break-word !important;
+        }
+    }
 </style>
 {% endblock %}
 

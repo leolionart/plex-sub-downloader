@@ -13,6 +13,9 @@
   - Fixed quick action hover button icon centering with precision vector SVGs.
   - Added multi-selection and floating Bulk Action Bar for batch subtitle search and AI translation across multiple movies and TV series.
   - Added automatic backend expansion of Show and Season rating keys to individual video/episode rating keys for batch processing.
+  - Fixed Safari iOS/macOS horizontal overflow and style clipping with strict max-width constraints.
+  - Added prominent high-contrast selection boxes on poster cards and dedicated Select All button on search bar.
+  - Added native checkbox styling fallbacks ensuring 100% visibility even under strict Safari Content Blockers.
 - **Docker Reliability & Self-Healing**:
   - Configured 15s timeout and connection retry for PlexServer client to prevent indefinite startup hangs.
   - Added background watchdog in `entrypoint.sh` to auto-terminate frozen container processes and trigger Docker restart policy.

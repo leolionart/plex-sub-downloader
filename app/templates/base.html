@@ -116,17 +116,40 @@
             box-sizing: border-box;
         }
 
-        html, body {
+        html {
             height: 100%;
+            overflow-x: hidden;
+            max-width: 100vw;
+            -webkit-text-size-adjust: 100%;
         }
 
         body {
+            min-height: 100%;
             font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             background: var(--bg-app);
             color: var(--text-primary);
             line-height: 1.5;
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
+            overflow-x: hidden;
+            max-width: 100vw;
+            min-width: 0;
+        }
+
+        /* Native Checkbox styling with Plex Gold accent */
+        .card-checkbox,
+        .item-select-checkbox,
+        input[type="checkbox"].selection-checkbox {
+            width: 18px !important;
+            height: 18px !important;
+            accent-color: var(--plex-gold, #E5A00D) !important;
+            cursor: pointer !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+            display: inline-block !important;
+            margin: 0 !important;
+            -webkit-appearance: checkbox !important;
+            appearance: auto !important;
         }
 
         /* ── Scrollbar ── */
@@ -149,6 +172,9 @@
         .app-layout {
             display: flex;
             min-height: 100vh;
+            max-width: 100vw;
+            min-width: 0;
+            overflow-x: hidden;
         }
 
         /* ── Sidebar ── */
@@ -303,18 +329,25 @@
             flex: 1;
             margin-left: var(--sidebar-width);
             min-height: 100vh;
+            min-width: 0;
+            max-width: calc(100vw - var(--sidebar-width));
             display: flex;
             flex-direction: column;
+            overflow-x: hidden;
         }
 
         .page-header {
-            padding: 28px 32px 20px;
+            padding: 24px 28px 18px;
             border-bottom: 1px solid var(--border-subtle);
             background: var(--bg-app);
             position: sticky;
             top: 0;
             z-index: 50;
+            max-width: 100%;
+            min-width: 0;
+            overflow-x: hidden;
         }
+
 
         .page-header h1 {
             font-size: 24px;
@@ -829,6 +862,10 @@
 
             .main-content {
                 margin-left: 0;
+                width: 100%;
+                max-width: 100vw;
+                min-width: 0;
+                overflow-x: hidden;
             }
 
             .mobile-toggle {
@@ -836,16 +873,28 @@
             }
 
             .page-header {
-                padding: 20px 16px 16px 72px;
+                padding: 16px 16px 14px 64px;
+                max-width: 100vw;
+                min-width: 0;
+                overflow-x: hidden;
             }
 
             .page-header h1 {
-                font-size: 22px;
-                line-height: 1.25;
+                font-size: 20px;
+                line-height: 1.3;
+                word-break: break-word;
+            }
+
+            .page-header .page-description {
+                font-size: 13px;
+                word-break: break-word;
             }
 
             .page-body {
-                padding: 16px;
+                padding: 12px 14px 40px;
+                max-width: 100vw;
+                min-width: 0;
+                overflow-x: hidden;
             }
 
             .stats-grid {
