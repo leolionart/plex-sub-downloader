@@ -1,5 +1,10 @@
 # Release Notes
 
+## Unreleased - 2026-10-15 20:46 +07
+
+Generated before push from commits:
+
+- `ad5ffa0` fix(library): resolve poster right-border vertical stretch, shrink checkbox, and fix EN badge contrast
 
 ## Unreleased - 2026-10-15 18:25 +07
 
