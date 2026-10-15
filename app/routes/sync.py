@@ -320,11 +320,14 @@ async def proxy_thumb(rating_key: str):
     service = get_subtitle_service()
 
     try:
-        video = await asyncio.to_thread(service.plex_client.get_video, rating_key)
+        item = await asyncio.to_thread(service.plex_client.get_item, rating_key)
     except Exception:
-        raise HTTPException(status_code=404, detail="Video not found")
+        try:
+            item = await asyncio.to_thread(service.plex_client.get_video, rating_key)
+        except Exception:
+            raise HTTPException(status_code=404, detail="Media item not found")
 
-    thumb = getattr(video, "thumb", None)
+    thumb = getattr(item, "thumb", None)
     if not thumb:
         raise HTTPException(status_code=404, detail="No thumbnail")
 

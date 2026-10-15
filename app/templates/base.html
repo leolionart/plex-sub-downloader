@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="vi" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,9 +11,57 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.23/dist/full.min.css" rel="stylesheet" type="text/css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        plex: {
+                            gold: '#E5A00D',
+                            'gold-hover': '#CC8B00',
+                            dark: '#1F1F23',
+                            surface: '#282830',
+                            elevated: '#32323C',
+                        },
+                        primary: '#E5A00D',
+                        gold: '#E5A00D',
+                        'gold-hover': '#CC8B00',
+                        'bg-deepest': '#111113',
+                        'bg-app': '#1F1F23',
+                        'bg-surface': '#282830',
+                        'text-primary': '#EAEAEA',
+                        'text-secondary': '#A0A0A0',
+                        'text-muted': '#6A6A6A',
+                        'border-subtle': '#3A3A44',
+                        'border-default': '#44444E',
+                        'plex-gold': '#E5A00D',
+                        'plex-gold-hover': '#CC8B00',
+                    }
+                }
+            }
+        }
+    </script>
     <style>
-        /* ── Plex Design System ── */
-        :root {
+        /* ── Plex Design System & DaisyUI Dark Theme ── */
+        :root,
+        [data-theme="dark"] {
+            /* DaisyUI Theme Variables */
+            --p: 40 94% 47%;
+            --pc: 0 0% 10%;
+            --b1: 240 6% 13%;
+            --b2: 240 11% 10%;
+            --b3: 240 6% 7%;
+            --bc: 0 0% 92%;
+            --fallback-p: #E5A00D;
+            --fallback-pc: #1A1A1A;
+            --fallback-b1: #1F1F23;
+            --fallback-b2: #282830;
+            --fallback-b3: #111113;
+            --fallback-bc: #EAEAEA;
+
             --plex-gold: #E5A00D;
             --plex-gold-hover: #CC8B00;
             --plex-gold-light: #F5C518;
@@ -407,7 +455,7 @@
             margin-top: 4px;
         }
 
-        /* ── Toggles / Checkboxes ── */
+        /* ── Toggles (DaisyUI toggle integration) ── */
         .toggle-group {
             display: flex;
             align-items: flex-start;
@@ -423,50 +471,6 @@
 
         .toggle-group:hover {
             border-color: var(--border-subtle);
-        }
-
-        .toggle-switch {
-            position: relative;
-            width: 40px;
-            height: 22px;
-            flex-shrink: 0;
-            margin-top: 1px;
-        }
-
-        .toggle-switch input {
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
-
-        .toggle-slider {
-            position: absolute;
-            cursor: pointer;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: var(--bg-elevated);
-            border-radius: 11px;
-            transition: background var(--transition-fast);
-        }
-
-        .toggle-slider::before {
-            content: '';
-            position: absolute;
-            width: 16px;
-            height: 16px;
-            left: 3px;
-            bottom: 3px;
-            background: var(--text-secondary);
-            border-radius: 50%;
-            transition: all var(--transition-fast);
-        }
-
-        .toggle-switch input:checked + .toggle-slider {
-            background: var(--plex-gold);
-        }
-
-        .toggle-switch input:checked + .toggle-slider::before {
-            transform: translateX(18px);
-            background: var(--text-on-gold);
         }
 
         .toggle-label {
@@ -486,64 +490,99 @@
             line-height: 1.4;
         }
 
-        /* ── Buttons ── */
-        .btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            padding: 10px 20px;
-            border: none;
-            border-radius: var(--radius-md);
-            font-size: 14px;
-            font-weight: 600;
-            font-family: inherit;
-            cursor: pointer;
-            transition: all var(--transition-fast);
-            text-decoration: none;
-            line-height: 1;
+        /* DaisyUI toggle theme customization */
+        .toggle-primary:checked,
+        .toggle:checked {
+            --tglbg: #1A1A1A;
+            background-color: var(--plex-gold, #E5A00D);
+            border-color: var(--plex-gold, #E5A00D);
         }
 
-        .btn-primary {
+        /* Backward compatibility for .toggle-switch & .toggle-slider */
+        .toggle-switch {
+            position: relative;
+            width: 40px;
+            height: 22px;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            inset: 0;
+            background: var(--bg-elevated);
+            border-radius: 9999px;
+            transition: background var(--transition-fast);
+        }
+
+        .toggle-slider::before {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            left: 3px;
+            bottom: 3px;
+            background: var(--text-secondary);
+            border-radius: 50%;
+            transition: transform var(--transition-fast), background var(--transition-fast);
+        }
+
+        .toggle-switch input:checked + .toggle-slider {
             background: var(--plex-gold);
-            color: var(--text-on-gold);
+        }
+
+        .toggle-switch input:checked + .toggle-slider::before {
+            transform: translateX(18px);
+            background: var(--text-on-gold);
+        }
+
+        /* ── Buttons (DaisyUI theme & custom mapping) ── */
+        .btn-primary {
+            --btn-color: var(--plex-gold, #E5A00D);
+            background-color: var(--plex-gold, #E5A00D);
+            border-color: var(--plex-gold, #E5A00D);
+            color: var(--text-on-gold, #1A1A1A);
+            font-weight: 600;
         }
 
         .btn-primary:hover {
-            background: var(--plex-gold-hover);
+            background-color: var(--plex-gold-hover, #CC8B00);
+            border-color: var(--plex-gold-hover, #CC8B00);
+            color: var(--text-on-gold, #1A1A1A);
         }
 
         .btn-secondary {
-            background: var(--bg-elevated);
-            color: var(--text-primary);
+            background-color: var(--bg-elevated, #3D3D47);
+            border-color: var(--border-subtle, #3A3A44);
+            color: var(--text-primary, #EAEAEA);
         }
 
         .btn-secondary:hover {
-            background: var(--bg-surface-hover);
+            background-color: var(--bg-surface-hover, #32323C);
+            border-color: var(--border-default, #44444E);
         }
 
         .btn-ghost {
-            background: transparent;
-            color: var(--text-secondary);
-            border: 1px solid var(--border-subtle);
+            background-color: transparent;
+            border-color: var(--border-subtle, #3A3A44);
+            color: var(--text-secondary, #A0A0A0);
         }
 
         .btn-ghost:hover {
-            background: var(--bg-surface-hover);
-            color: var(--text-primary);
-        }
-
-        .btn-success {
-            background: var(--success);
-            color: white;
-        }
-
-        .btn-success:hover {
-            filter: brightness(0.9);
+            background-color: var(--bg-surface-hover, #32323C);
+            color: var(--text-primary, #EAEAEA);
         }
 
         .btn-danger {
-            background: var(--error);
+            background-color: var(--error, #F44336);
+            border-color: var(--error, #F44336);
             color: white;
         }
 
@@ -551,33 +590,14 @@
             filter: brightness(0.9);
         }
 
-        .btn-info {
-            background: var(--info);
-            color: white;
-        }
-
-        .btn-info:hover {
-            filter: brightness(0.9);
-        }
-
-        .btn:disabled {
-            opacity: 0.4;
-            cursor: not-allowed;
-            pointer-events: none;
-        }
-
         .btn-group {
-            display: flex;
-            gap: 10px;
+            display: inline-flex;
+            gap: 8px;
         }
 
-        .btn-icon {
-            padding: 8px;
-            border-radius: var(--radius-md);
-        }
-
-        /* ── Toast Notifications ── */
-        .toast-container {
+        /* ── Toast Notifications & DaisyUI Alerts ── */
+        .toast-container,
+        .toast {
             position: fixed;
             top: 20px;
             right: 20px;
@@ -590,7 +610,7 @@
             width: calc(100vw - 40px);
         }
 
-        .toast {
+        .toast-item {
             padding: 14px 40px 14px 16px;
             border-radius: var(--radius-md);
             font-size: 14px;
@@ -602,7 +622,7 @@
             cursor: pointer;
         }
 
-        .toast.toast-out {
+        .toast-item.toast-out {
             animation: toastSlideOut 0.3s ease forwards;
         }
 
@@ -674,38 +694,39 @@
         }
         .toast-info .toast-progress { background: var(--info); }
 
-        /* ── Tags / Badges ── */
-        .tag {
+        /* ── Tags / Badges (DaisyUI badge integration) ── */
+        .tag, .badge {
             display: inline-flex;
             align-items: center;
             gap: 6px;
             padding: 4px 10px;
-            border-radius: 20px;
+            border-radius: 9999px;
             font-size: 12px;
             font-weight: 600;
         }
 
-        .tag-gold {
+        .tag-gold, .tag-primary, .badge-primary {
             background: var(--plex-gold-dim);
             color: var(--plex-gold);
+            border-color: transparent;
         }
 
-        .tag-success {
+        .tag-success, .badge-success {
             background: var(--success-dim);
             color: var(--success);
         }
 
-        .tag-warning {
+        .tag-warning, .badge-warning {
             background: var(--warning-dim);
             color: var(--warning);
         }
 
-        .tag-info {
+        .tag-info, .badge-info {
             background: var(--info-dim);
             color: var(--info);
         }
 
-        .tag-error {
+        .tag-error, .badge-error {
             background: var(--error-dim);
             color: var(--error);
         }
@@ -720,7 +741,6 @@
         .tag .tag-remove:hover {
             opacity: 1;
         }
-
         /* ── Empty State ── */
         .empty-state {
             text-align: center;
@@ -982,6 +1002,13 @@
                     <span>Subtitle Workspace</span>
                 </a>
 
+                <a href="/library" class="nav-item {% block nav_library %}{% endblock %}">
+                    <span class="nav-icon">
+                        <svg viewBox="0 0 24 24"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12zm-7-2h2v-4h4V8h-4V4h-2v4H9v2h4v4z"/></svg>
+                    </span>
+                    <span>Plex Library</span>
+                </a>
+
                 <a href="/logs" class="nav-item {% block nav_logs %}{% endblock %}">
                     <span class="nav-icon">
                         <svg viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V8h16v10zm-2-1h-6v-2h6v2zm-8-4H6v-2h4v2zm0 4H6v-2h4v2zm2-4h6v-2h-6v2z"/></svg>
@@ -1037,9 +1064,94 @@
     </div>
 
     <!-- Toast container (floating, fixed position) -->
-    <div class="toast-container" id="toastContainer"></div>
+    <div class="toast toast-end toast-bottom toast-container z-50 flex flex-col gap-2 pointer-events-none" id="toastContainer"></div>
 
     <script>
+        // Global SessionCache helper
+        window.SessionCache = {
+            /**
+             * Lấy giá trị từ sessionStorage, kiểm tra TTL.
+             * @param {string} key
+             * @returns {any|null} Trả về dữ liệu đã parse hoặc null nếu hết hạn/không tồn tại
+             */
+            get(key) {
+                try {
+                    const raw = sessionStorage.getItem(key);
+                    if (!raw) return null;
+                    const item = JSON.parse(raw);
+                    if (item && typeof item === 'object' && item.__cache === true) {
+                        if (item.expires && Date.now() > item.expires) {
+                            sessionStorage.removeItem(key);
+                            return null;
+                        }
+                        return item.data;
+                    }
+                    return item;
+                } catch (e) {
+                    console.warn('[SessionCache] get error:', e);
+                    return null;
+                }
+            },
+
+            /**
+             * Lưu giá trị vào sessionStorage kèm TTL.
+             * @param {string} key
+             * @param {any} val
+             * @param {number} [ttlSeconds=300] Thời gian sống tính theo giây (mặc định 5 phút)
+             * @returns {boolean}
+             */
+            set(key, val, ttlSeconds = 300) {
+                try {
+                    const item = {
+                        __cache: true,
+                        data: val,
+                        expires: ttlSeconds > 0 ? Date.now() + (ttlSeconds * 1000) : null,
+                        createdAt: Date.now()
+                    };
+                    sessionStorage.setItem(key, JSON.stringify(item));
+                    return true;
+                } catch (e) {
+                    console.warn('[SessionCache] set error:', e);
+                    return false;
+                }
+            },
+
+            /**
+             * Xoá một key khỏi cache
+             * @param {string} key
+             */
+            remove(key) {
+                try {
+                    sessionStorage.removeItem(key);
+                } catch (e) {
+                    console.warn('[SessionCache] remove error:', e);
+                }
+            },
+
+            /**
+             * Xoá các cache có key bắt đầu bằng prefix (nếu prefix rỗng thì xoá toàn bộ sessionStorage)
+             * @param {string} [prefix]
+             */
+            clear(prefix = '') {
+                try {
+                    if (!prefix) {
+                        sessionStorage.clear();
+                        return;
+                    }
+                    const keysToRemove = [];
+                    for (let i = 0; i < sessionStorage.length; i++) {
+                        const k = sessionStorage.key(i);
+                        if (k && k.startsWith(prefix)) {
+                            keysToRemove.push(k);
+                        }
+                    }
+                    keysToRemove.forEach(k => sessionStorage.removeItem(k));
+                } catch (e) {
+                    console.warn('[SessionCache] clear error:', e);
+                }
+            }
+        };
+
         // Active nav detection based on current URL
         (function() {
             const rawPath = window.location.pathname;
@@ -1065,15 +1177,21 @@
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');
             const overlay = document.getElementById('sidebarOverlay');
-            sidebar.classList.toggle('open');
-            overlay.classList.toggle('visible');
+            if (sidebar) sidebar.classList.toggle('open');
+            if (overlay) overlay.classList.toggle('visible');
         }
 
-        // Toast notification helper (replaces old showAlert)
+        // Toast notification helper (DaisyUI alert integration)
         function showAlert(message, type = 'success', duration = 5000) {
             const container = document.getElementById('toastContainer');
+            if (!container) return;
             const toast = document.createElement('div');
-            toast.className = `toast toast-${type}`;
+
+            const daisyType = type === 'error' ? 'alert-error' :
+                              type === 'warning' ? 'alert-warning' :
+                              type === 'info' ? 'alert-info' : 'alert-success';
+
+            toast.className = `alert ${daisyType} toast-item shadow-lg flex items-center justify-between text-sm py-3 px-4 rounded-lg pointer-events-auto`;
             toast.style.setProperty('--toast-duration', duration + 'ms');
 
             const icons = {
@@ -1084,8 +1202,11 @@
             };
 
             toast.innerHTML = `
-                <span>${icons[type] || ''} ${message}</span>
-                <button class="toast-close" aria-label="Close">&times;</button>
+                <div class="flex items-center gap-2">
+                    <span class="font-bold text-base leading-none">${icons[type] || ''}</span>
+                    <span>${message}</span>
+                </div>
+                <button class="toast-close ml-3 opacity-60 hover:opacity-100 text-lg leading-none cursor-pointer" aria-label="Close">&times;</button>
                 <div class="toast-progress"></div>
             `;
 
@@ -1096,7 +1217,13 @@
                 }
             }
 
-            toast.querySelector('.toast-close').onclick = dismissToast;
+            const closeBtn = toast.querySelector('.toast-close');
+            if (closeBtn) {
+                closeBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    dismissToast();
+                };
+            }
             toast.onclick = dismissToast;
 
             container.appendChild(toast);
@@ -1107,7 +1234,8 @@
                 container.firstChild.remove();
             }
         }
-
+        window.showAlert = showAlert;
+        window.showToast = showAlert;
         // Service status polling
         (function() {
             const el = document.getElementById('service-status');

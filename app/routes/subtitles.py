@@ -79,6 +79,16 @@ class SubtitleUploadRequest(BaseModel):
     search_override: SubtitleSearchRequest | None = None
 
 
+class SubtitleTranslateRequest(BaseModel):
+    """Translate subtitles for media item."""
+
+    rating_key: str
+    from_lang: str = "en"
+    use_cache: bool = True
+    source_subtitle_id: str | None = None
+    source_search_override: SubtitleSearchRequest | None = None
+
+
 def get_subtitle_service():
     """Get subtitle service instance từ main app."""
     from app.main import subtitle_service
@@ -209,6 +219,29 @@ async def upload_subtitle(request: SubtitleUploadRequest) -> dict[str, Any]:
     )
     if result["status"] == "error":
         raise HTTPException(status_code=400, detail=result["message"])
+    return result
+
+
+@router.post("/translate")
+async def translate_subtitle(request: SubtitleTranslateRequest) -> dict[str, Any]:
+    """Execute subtitle translation for media item."""
+    service = get_subtitle_service()
+    if not service.runtime_config.ai_available:
+        raise HTTPException(status_code=400, detail="OpenAI API key required for translation")
+
+    result = await service.execute_translate_for_media(
+        rating_key=request.rating_key,
+        from_lang=request.from_lang,
+        use_cache=request.use_cache,
+        source_subtitle_id=request.source_subtitle_id,
+        source_search_override=(
+            _search_params_from_override(request.source_search_override, request.from_lang)
+            if request.source_search_override
+            else None
+        ),
+    )
+    if result.get("status") == "error":
+        raise HTTPException(status_code=400, detail=result.get("message", "Translation failed"))
     return result
 
 

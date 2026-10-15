@@ -28,6 +28,7 @@ from app.routes import logs
 from app.routes import sync
 from app.routes import subtitles
 from app.routes import telegram
+from app.routes import library
 
 # Setup logging
 setup_logging()
@@ -110,6 +111,7 @@ app.include_router(logs.router)
 app.include_router(sync.router)
 app.include_router(subtitles.router)
 app.include_router(telegram.router)
+app.include_router(library.router)
 
 
 @app.middleware("http")
@@ -180,6 +182,15 @@ async def workspace_ui(request: Request) -> HTMLResponse:
     """Unified subtitle workspace for search, translation and sync."""
     return await sync_ui(request)
 
+
+@app.get("/library", response_class=HTMLResponse)
+async def library_ui(request: Request) -> HTMLResponse:
+    """Plex library manager UI."""
+    configured = _is_configured(runtime_config)
+    return templates.TemplateResponse(
+        "library.html",
+        {"request": request, "configured": configured},
+    )
 
 @app.get("/settings", response_class=HTMLResponse)
 async def settings_ui(request: Request) -> HTMLResponse:

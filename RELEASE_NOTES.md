@@ -1,5 +1,21 @@
 # Release Notes
 
+
+## Unreleased - 2026-10-15 18:25 +07
+
+- **Plex Library Manager UI**:
+  - Added Grid View and List View toggle with persistent layout state in localStorage.
+  - Implemented standard Plex 2:3 vertical poster aspect ratio (no distortion or awkward cropping).
+  - Added subtitle filter bar (Thiếu Vietsub [default], Tất cả, Có thể dịch AI) with instant in-memory client filtering and native Plex subtitle filters.
+  - Added Series Details Drawer with season/episode breakdown, subtitle status badges, and episode-level filtering.
+  - Fixed bulk action execution on seasons and shows (`Tìm sub Mùa`, `Dịch tập thiếu`, `Tìm sub cả Show`, `Dịch tập thiếu cả Show`).
+  - Fixed TV series thumbnail proxying (`/api/sync/thumb/{rating_key}`) by supporting Show media types in addition to Movies.
+  - Fixed quick action hover button icon centering with precision vector SVGs.
+- **Docker Reliability & Self-Healing**:
+  - Configured 15s timeout and connection retry for PlexServer client to prevent indefinite startup hangs.
+  - Added background watchdog in `entrypoint.sh` to auto-terminate frozen container processes and trigger Docker restart policy.
+  - Updated `docker-compose.yml` restart policy to `always` with extended 30s start period and `autoheal` label.
+  - Fixed entrypoint permissions check to tolerate read-only/NFS/Synology mount filesystems.
 ## Unreleased - 2026-08-28 22:10 +07
 
 Generated before push from commits:

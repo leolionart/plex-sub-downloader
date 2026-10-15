@@ -687,8 +687,19 @@
 
         const btn = document.getElementById('btn-preview');
         btn.disabled = true;
-        btn.innerHTML = '<span class="spinner"></span>';
+        btn.innerHTML = '<span class="loading loading-spinner loading-sm text-warning"></span> Đang kiểm tra...';
 
+        // Check client-side sessionStorage cache
+        const cachedPreview = window.SessionCache ? window.SessionCache.get('preview_' + ratingKey) : null;
+        if (cachedPreview) {
+            currentRatingKey = ratingKey;
+            previewData = cachedPreview;
+            renderPreview(previewData);
+            btn.disabled = false;
+            btn.textContent = 'Preview';
+            clearTimeout(previewTimeoutId);
+            return;
+        }
         try {
             if (!/^\d+$/.test(ratingKey)) {
                 const resolveRes = await fetch('/api/sync/resolve-url', {
@@ -710,8 +721,8 @@
 
             document.getElementById('results-area').innerHTML = `
                 <div class="result-card">
-                    <div class="result-body" style="color:var(--text-muted);font-size:13px;display:flex;align-items:center;gap:10px;padding:20px;">
-                        <span class="spinner" style="flex-shrink:0;"></span>
+                    <div class="result-body flex items-center gap-3 p-5 text-text-muted text-sm">
+                        <span class="loading loading-spinner loading-md text-warning shrink-0"></span>
                         <span>Đang kiểm tra subtitle trên Plex và Subsource…</span>
                     </div>
                 </div>`;
@@ -727,8 +738,10 @@
                 const err = await res.json();
                 throw new Error(err.detail || 'Preview failed');
             }
-
             previewData = await res.json();
+            if (window.SessionCache) {
+                window.SessionCache.set('preview_' + ratingKey, previewData, 300);
+            }
             renderPreview(previewData);
 
         } catch (e) {
@@ -941,9 +954,8 @@
         if (btnImprove) btnImprove.disabled = loading;
         if (btnPreview) btnPreview.disabled = loading;
 
-        if (loading && btnTranslate) btnTranslate.innerHTML = '<span class="spinner"></span> Processing...';
-        if (loading && btnImprove) btnImprove.innerHTML = '<span class="spinner"></span> Processing...';
-
+        if (loading && btnTranslate) btnTranslate.innerHTML = '<span class="loading loading-spinner loading-xs mr-1.5 align-middle"></span> Đang dịch AI...';
+        if (loading && btnImprove) btnImprove.innerHTML = '<span class="loading loading-spinner loading-xs mr-1.5 align-middle"></span> Đang tối ưu...';
         if (!loading && btnTranslate) {
             const srcLang = (previewData?.source_lang || 'en').toUpperCase();
             btnTranslate.innerHTML = `AI Translate (${srcLang} &rarr; VI)`;

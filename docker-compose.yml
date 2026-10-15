@@ -6,7 +6,7 @@ services:
     #   context: .
     #   dockerfile: Dockerfile
     container_name: plex-subtitle-service
-    restart: unless-stopped
+    restart: always
     ports:
       - "8000:8000"
     environment:
@@ -19,11 +19,12 @@ services:
       - plex-network
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
-      interval: 30s
-      timeout: 10s
+      interval: 20s
+      timeout: 5s
       retries: 3
-      start_period: 10s
-
+      start_period: 30s
+    labels:
+      - "autoheal=true"
   # Optional: Redis cache (giảm API calls)
   redis:
     image: redis:7-alpine

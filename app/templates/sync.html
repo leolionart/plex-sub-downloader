@@ -7,277 +7,12 @@
 
 {% block extra_styles %}
 <style>
-    .sync-form {
-        background: var(--bg-surface);
-        border: 1px solid var(--border-subtle);
-        border-radius: var(--radius-lg);
-        padding: 24px;
-        margin-bottom: 24px;
-    }
-
-    .sync-form h3 {
-        font-size: 16px;
-        font-weight: 600;
-        margin-bottom: 16px;
-        color: var(--text-primary);
-    }
-
-    .workspace-flow-note {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 8px;
-        margin: 0 0 12px;
-        padding: 10px 14px;
-        border: 1px solid var(--border-subtle);
-        border-radius: var(--radius-md);
-        background: var(--bg-input);
-        color: var(--text-secondary);
-        font-size: 13px;
-    }
-    .workspace-flow-note strong { color: var(--text-primary); }
-    .workspace-flow-note .flow-arrow { color: var(--plex-gold); font-weight: 700; }
-    .workspace-hint { margin: -4px 0 16px; color: var(--text-muted); font-size: 13px; }
-
-    .sync-input-row {
-        display: flex;
-        gap: 12px;
-        align-items: flex-end;
-    }
-
-    .sync-input-row .form-group.filename-group { flex: 1.2; }
-    .sync-action-group { display: flex; gap: 10px; flex-shrink: 0; }
-    .sync-action-group .btn { white-space: nowrap; }
-
-    .sync-input-row .form-group {
-        flex: 1;
-        margin-bottom: 0;
-    }
-
-    .sync-input-row .btn {
-        flex-shrink: 0;
-        height: 42px;
-    }
-
-    .manual-search-panel {
-        margin-top: 20px;
-        padding-top: 18px;
-        border-top: 1px solid var(--border-subtle);
-    }
-
-    .manual-search-grid {
-        display: grid;
-        grid-template-columns: minmax(180px, 2fr) repeat(3, minmax(90px, 1fr));
-        gap: 10px;
-        align-items: end;
-    }
-
-    .manual-search-grid .form-group { margin-bottom: 0; }
-    .manual-search-grid .btn { height: 42px; }
-
-    .manual-results { margin-top: 14px; }
-    .manual-candidate {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        padding: 10px 12px;
-        background: var(--bg-input);
-        border-radius: var(--radius-md);
-        margin-top: 8px;
-        font-size: 13px;
-    }
-
-    .manual-candidate .meta { color: var(--text-muted); font-size: 12px; }
-    @media (max-width: 700px) {
-        .manual-search-grid { grid-template-columns: 1fr 1fr; }
-        .manual-search-grid .form-group:first-child { grid-column: 1 / -1; }
-    }
-
-    .result-card {
-        background: var(--bg-surface);
-        border: 1px solid var(--border-subtle);
-        border-radius: var(--radius-lg);
-        overflow: hidden;
-        margin-bottom: 16px;
-        animation: fadeIn 0.3s ease;
-    }
-
-    .result-header {
-        padding: 16px 20px;
-        border-bottom: 1px solid var(--border-subtle);
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-    }
-
-    .result-header h3 {
-        font-size: 15px;
-        font-weight: 600;
-        color: var(--text-primary);
-    }
-
-    .result-body {
-        padding: 16px 20px;
-    }
-
-    .sync-stats {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-        gap: 12px;
-    }
-
-    .sync-stat {
-        text-align: center;
-        padding: 12px;
-        background: var(--bg-input);
-        border-radius: var(--radius-md);
-    }
-
-    .sync-stat .value {
-        font-size: 24px;
-        font-weight: 700;
-        color: var(--plex-gold);
-        line-height: 1;
-        margin-bottom: 4px;
-    }
-
-    .sync-stat .label {
-        font-size: 11px;
-        color: var(--text-muted);
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-
-    .sub-info {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 10px 14px;
-        background: var(--bg-input);
-        border-radius: var(--radius-md);
-        margin-bottom: 8px;
-        font-size: 13px;
-        color: var(--text-secondary);
-    }
-
-    .sub-info .icon {
-        flex-shrink: 0;
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-    }
-
-    .sub-info .icon.ok { background: var(--success); }
-    .sub-info .icon.missing { background: var(--error); }
-
-    .sub-select {
-        width: 100%;
-        padding: 10px 14px;
-        background: var(--bg-input);
-        border: 1px solid var(--border-subtle);
-        border-radius: var(--radius-md);
-        color: var(--text-primary);
-        font-size: 13px;
-        cursor: pointer;
-        margin-bottom: 12px;
-    }
-
-    .sub-select:focus {
-        border-color: var(--plex-gold);
-        outline: none;
-    }
-
-    .action-buttons {
-        display: flex;
-        gap: 10px;
-        margin-top: 16px;
-    }
-
-    .action-buttons .btn {
-        flex: 1;
-        padding: 12px 16px;
-    }
-
-    .progress-bar-container {
-        margin: 16px 0;
-        display: none;
-    }
-
-    .progress-bar-bg {
-        height: 6px;
-        background: var(--bg-elevated);
-        border-radius: 3px;
-        overflow: hidden;
-    }
-
-    .progress-bar-fill {
-        height: 100%;
-        background: var(--plex-gold);
-        border-radius: 3px;
-        width: 0%;
-        transition: width 0.5s ease;
-    }
-
-    .progress-label {
-        font-size: 13px;
-        color: var(--text-muted);
-        margin-top: 6px;
-    }
-
-    .how-it-works {
-        background: var(--bg-surface);
-        border: 1px solid var(--border-subtle);
-        border-radius: var(--radius-lg);
-        padding: 24px;
-    }
-
-    .how-it-works h3 {
-        font-size: 16px;
-        font-weight: 600;
-        margin-bottom: 16px;
-        color: var(--text-primary);
-    }
-
-    .step-list {
-        list-style: none;
-        padding: 0;
-    }
-
-    .step-list li {
-        display: flex;
-        gap: 12px;
-        padding: 10px 0;
-        border-bottom: 1px solid var(--border-subtle);
-        font-size: 14px;
-        color: var(--text-secondary);
-    }
-
-    .step-list li:last-child {
-        border-bottom: none;
-    }
-
-    .step-num {
-        width: 28px;
-        height: 28px;
-        background: var(--plex-gold-dim);
-        color: var(--plex-gold);
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 13px;
-        font-weight: 700;
-        flex-shrink: 0;
-    }
-
-    /* Media cards for Now Playing / On Deck */
+    /* ── Specialized Media Cards for Now Playing ── */
     .media-card-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
         gap: 12px;
     }
-
     .media-card {
         background: var(--bg-input);
         border: 1px solid var(--border-subtle);
@@ -289,22 +24,18 @@
         flex-direction: column;
         gap: 6px;
     }
-
     .media-card:hover {
         border-color: var(--plex-gold);
         background: var(--bg-surface-hover, var(--bg-surface));
     }
-
     .media-card:active {
-        transform: scale(0.97);
+        transform: scale(0.98);
     }
-
     .media-card.selected {
         border-color: var(--plex-gold);
         box-shadow: 0 0 0 1px var(--plex-gold);
         background: var(--plex-gold-dim);
     }
-
     .media-card .media-thumb {
         width: 100%;
         aspect-ratio: 2/3;
@@ -312,13 +43,11 @@
         border-radius: var(--radius-sm);
         overflow: hidden;
     }
-
     .media-card .media-thumb img {
         width: 100%;
         height: 100%;
         object-fit: cover;
     }
-
     .media-card .media-title {
         font-size: 13px;
         font-weight: 600;
@@ -329,240 +58,54 @@
         -webkit-box-orient: vertical;
         overflow: hidden;
     }
-
     .media-card .media-meta {
         font-size: 11px;
         color: var(--text-muted);
     }
-
     .media-card .media-player {
         font-size: 11px;
         color: var(--plex-gold);
     }
-
     .media-card .progress-mini {
         height: 3px;
         background: var(--bg-elevated);
         border-radius: 2px;
         overflow: hidden;
     }
-
     .media-card .progress-mini-fill {
         height: 100%;
         background: var(--plex-gold);
         border-radius: 2px;
     }
 
-    .section-header {
-        font-size: 15px;
-        font-weight: 600;
-        color: var(--text-primary);
-        margin-bottom: 12px;
-    }
-
-    .empty-state {
-        font-size: 13px;
-        color: var(--text-muted);
-        padding: 8px 0;
-    }
-
-    /* ── History Section ── */
-    .section-divider {
-        margin: 40px 0 24px;
-        display: flex;
-        align-items: center;
-        gap: 16px;
-    }
-
-    .section-divider h2 {
-        font-size: 18px;
-        font-weight: 600;
-        color: var(--text-primary);
-        white-space: nowrap;
-    }
-
-    .section-divider::after {
-        content: '';
-        flex: 1;
-        height: 1px;
-        background: var(--border-subtle);
-    }
-
+    /* ── History Table ── */
     .history-table {
         width: 100%;
         border-collapse: collapse;
     }
-
     .history-table th {
         text-align: left;
-        padding: 10px 12px;
-        font-size: 12px;
+        padding: 12px 16px;
+        font-size: 11px;
         font-weight: 600;
         color: var(--text-muted);
         text-transform: uppercase;
         letter-spacing: 0.5px;
         border-bottom: 1px solid var(--border-subtle);
     }
-
     .history-table td {
-        padding: 12px;
-        font-size: 14px;
+        padding: 12px 16px;
+        font-size: 13px;
         color: var(--text-secondary);
         border-bottom: 1px solid var(--border-subtle);
         vertical-align: middle;
     }
-
     .history-table tr:last-child td {
         border-bottom: none;
     }
-
     .history-table tr:hover td {
-        background: var(--bg-surface);
+        background: var(--bg-surface-hover, rgba(255,255,255,0.02));
     }
-
-    .history-title {
-        color: var(--text-primary);
-        font-weight: 500;
-    }
-
-    .history-meta {
-        font-size: 12px;
-        color: var(--text-muted);
-        margin-top: 2px;
-    }
-
-    .status-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        padding: 3px 10px;
-        border-radius: 20px;
-        font-size: 12px;
-        font-weight: 600;
-    }
-
-    .status-success {
-        background: var(--success-dim);
-        color: var(--success);
-    }
-
-    .status-failed {
-        background: var(--error-dim);
-        color: var(--error);
-    }
-
-    .history-empty {
-        text-align: center;
-        padding: 32px;
-        color: var(--text-muted);
-        font-size: 14px;
-    }
-
-    .history-stats {
-        display: flex;
-        gap: 24px;
-        margin-bottom: 16px;
-        flex-wrap: wrap;
-    }
-
-    .history-stat {
-        display: flex;
-        align-items: baseline;
-        gap: 6px;
-        font-size: 13px;
-        color: var(--text-muted);
-    }
-
-    .history-stat strong {
-        font-size: 20px;
-        font-weight: 700;
-        color: var(--text-primary);
-    }
-
-    .btn-view {
-        padding: 4px 12px;
-        font-size: 12px;
-        border-radius: 6px;
-        border: 1px solid var(--border-subtle);
-        background: transparent;
-        color: var(--text-secondary);
-        cursor: pointer;
-        transition: all 0.15s;
-    }
-
-    .btn-view:hover {
-        background: var(--bg-surface);
-        color: var(--text-primary);
-    }
-
-    /* ── Detail Modal ── */
-    .modal-overlay {
-        display: none;
-        position: fixed;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.7);
-        z-index: 1000;
-        backdrop-filter: blur(4px);
-    }
-
-    .modal-overlay.active {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    .modal {
-        background: var(--bg-base);
-        border: 1px solid var(--border-subtle);
-        border-radius: var(--radius-lg);
-        width: min(90vw, 480px);
-        max-height: 85vh;
-        display: flex;
-        flex-direction: column;
-    }
-
-    .modal-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 16px 20px;
-        border-bottom: 1px solid var(--border-subtle);
-        flex-shrink: 0;
-    }
-
-    .modal-header h3 {
-        font-size: 15px;
-        font-weight: 600;
-        color: var(--text-primary);
-        margin: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        flex: 1;
-        margin-right: 12px;
-    }
-
-    .modal-close {
-        background: none;
-        border: none;
-        color: var(--text-muted);
-        cursor: pointer;
-        padding: 4px;
-        font-size: 20px;
-        line-height: 1;
-        flex-shrink: 0;
-    }
-
-    .modal-close:hover {
-        color: var(--text-primary);
-    }
-
-    .modal-body {
-        overflow-y: auto;
-        flex: 1;
-        padding: 20px;
-    }
-
     .detail-row {
         display: flex;
         justify-content: space-between;
@@ -570,101 +113,110 @@
         padding: 10px 0;
         border-bottom: 1px solid var(--border-subtle);
     }
-
     .detail-row:last-child {
         border-bottom: none;
     }
-
     .detail-label {
         font-size: 13px;
         color: var(--text-muted);
     }
-
     .detail-value {
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 500;
         color: var(--text-primary);
     }
 
-    @media (max-width: 768px) {
-        .sync-input-row {
-            flex-direction: column;
-            align-items: stretch;
-        }
-        .sync-action-group { width: 100%; }
-        .sync-action-group .btn { flex: 1; }
-        .sync-stats {
-            grid-template-columns: repeat(2, 1fr);
-        }
-        .action-buttons {
-            flex-direction: column;
-        }
-        .media-card-grid {
-            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-            gap: 10px;
-        }
-        .how-it-works {
-            display: none;
-        }
+    /* ── Modal Active Toggle ── */
+    #sync-detail-modal.active {
+        display: flex !important;
     }
 </style>
 {% endblock %}
 
 {% block content %}
 <!-- Status Banner -->
-<div id="sync-status-banner" class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
-    <div class="stat-card">
-        <div class="stat-value" id="stat-enabled">--</div>
-        <div class="stat-label">Auto Sync</div>
+<div id="sync-status-banner" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card bg-bg-surface border border-border-subtle rounded-xl p-4 flex flex-col justify-center">
+        <div class="stat-value text-2xl font-bold" id="stat-enabled">--</div>
+        <div class="stat-label text-xs uppercase text-text-muted font-medium tracking-wide mt-1">Auto Sync</div>
     </div>
-    <div class="stat-card">
-        <div class="stat-value" id="stat-model">--</div>
-        <div class="stat-label">AI Model</div>
+    <div class="stat-card bg-bg-surface border border-border-subtle rounded-xl p-4 flex flex-col justify-center">
+        <div class="stat-value text-base font-bold text-text-primary" id="stat-model">--</div>
+        <div class="stat-label text-xs uppercase text-text-muted font-medium tracking-wide mt-1">AI Model</div>
     </div>
 </div>
 
 <!-- Now Playing -->
-<div id="now-playing-section" style="display: none;">
-    <div class="sync-form">
-        <div class="section-header">Now Playing</div>
-        <p style="font-size: 13px; color: var(--text-muted); margin: -4px 0 12px;">Chọn phim đang xem để kiểm tra và xử lý subtitle</p>
+<div id="now-playing-section" style="display: none;" class="mb-6">
+    <div class="bg-bg-surface border border-border-subtle rounded-xl p-5 shadow-sm">
+        <div class="flex items-center justify-between mb-1">
+            <h3 class="text-base font-semibold text-text-primary">Now Playing</h3>
+            <span class="badge badge-warning badge-sm font-semibold">Live</span>
+        </div>
+        <p class="text-xs text-text-muted mb-4">Chọn phim đang xem để kiểm tra và xử lý subtitle</p>
         <div id="now-playing-cards" class="media-card-grid"></div>
     </div>
 </div>
 
-<!-- Unified Subtitle Workspace -->
-<div class="workspace-flow-note" role="note">
-    <strong>Quy trình:</strong><span>Tìm subtitle (tự động hoặc thủ công)</span><span class="flow-arrow">→</span><span>Chọn bản phù hợp</span><span class="flow-arrow">→</span><span>Dịch AI hoặc Sync timing ngay bên dưới</span>
+<!-- Unified Subtitle Workspace Flow Note -->
+<div class="workspace-flow-note flex flex-wrap items-center gap-2 p-3 bg-bg-input border border-border-subtle rounded-lg text-xs text-text-secondary mb-4" role="note">
+    <strong class="text-text-primary font-semibold">Quy trình:</strong>
+    <span>Tìm subtitle (tự động hoặc thủ công)</span>
+    <span class="text-plex-gold font-bold">→</span>
+    <span>Chọn bản phù hợp</span>
+    <span class="text-plex-gold font-bold">→</span>
+    <span>Dịch AI hoặc Sync timing ngay bên dưới</span>
 </div>
 
-<div class="sync-form" id="subtitle-action-form">
-    <h3>Tìm và xử lý subtitle</h3>
-    <p class="workspace-hint">Nhập Plex link/rating key để bắt đầu. Nếu kết quả chưa đúng, dùng tìm thủ công; mọi thao tác dịch, sync và upload đều thực hiện ngay trong kết quả.</p>
-    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
-        Paste Plex share link, web URL, hoặc nhập rating key.
+<!-- Main Subtitle Action Form -->
+<div class="bg-bg-surface border border-border-subtle rounded-xl p-5 mb-6 shadow-sm" id="subtitle-action-form">
+    <h3 class="text-base font-semibold text-text-primary mb-1">Tìm và xử lý subtitle</h3>
+    <p class="text-xs text-text-muted mb-4">
+        Paste Plex share link, web URL, hoặc nhập rating key. Nếu kết quả chưa đúng, dùng tìm thủ công; mọi thao tác dịch, sync và upload đều thực hiện ngay trong kết quả.
     </p>
 
-    <div class="sync-input-row">
-        <div class="form-group">
-            <label for="rating-key">Rating Key or Plex Link</label>
-            <input type="text" id="rating-key" class="form-input" placeholder="12345 or https://l.plex.tv/...">
+    <div class="flex flex-col md:flex-row gap-3 items-stretch md:items-end">
+        <div class="form-control flex-1">
+            <label class="label py-1" for="rating-key">
+                <span class="label-text text-xs font-medium text-text-secondary">Rating Key hoặc Plex Link</span>
+            </label>
+            <input type="text" id="rating-key" class="input input-bordered input-sm md:input-md w-full bg-bg-input border-border-subtle focus:border-plex-gold text-sm" placeholder="12345 hoặc https://l.plex.tv/...">
         </div>
-        <div class="form-group filename-group">
-            <label for="manual-video-filename">Tên file video <span style="color:var(--text-muted)">(tuỳ chọn)</span></label>
-            <input type="text" id="manual-video-filename" class="form-input" placeholder="Show.S01E02.1080p.WEB-DL.mkv">
+        <div class="form-control flex-1">
+            <label class="label py-1" for="manual-video-filename">
+                <span class="label-text text-xs font-medium text-text-secondary">Tên file video <span class="text-text-muted">(tuỳ chọn)</span></span>
+            </label>
+            <input type="text" id="manual-video-filename" class="input input-bordered input-sm md:input-md w-full bg-bg-input border-border-subtle focus:border-plex-gold text-sm" placeholder="Show.S01E02.1080p.WEB-DL.mkv">
         </div>
-        <div class="sync-action-group">
-            <button class="btn btn-secondary" onclick="previewSync()" id="btn-preview">Preview</button>
-            <button class="btn btn-secondary" onclick="manualSearch()" id="btn-manual-search" title="Tìm lại từ provider, bỏ qua cache">🔎 Tìm sub thủ công</button>
+        <div class="flex gap-2 shrink-0 pt-1 md:pt-0">
+            <button class="btn btn-primary btn-sm md:btn-md gap-2" onclick="previewSync()" id="btn-preview">Preview</button>
+            <button class="btn btn-secondary btn-sm md:btn-md gap-2" onclick="manualSearch()" id="btn-manual-search" title="Tìm lại từ provider, bỏ qua cache">
+                🔎 Tìm sub thủ công
+            </button>
         </div>
     </div>
 
-    <!-- Progress -->
-    <div class="progress-bar-container" id="progress-container">
-        <div class="progress-bar-bg">
-            <div class="progress-bar-fill" id="progress-fill"></div>
+    <!-- Auto-fallback Toggle -->
+    <div class="mt-4 pt-3 border-t border-border-subtle flex flex-wrap items-center justify-between gap-3">
+        <label class="cursor-pointer label p-0 flex items-center gap-2.5">
+            <input type="checkbox" id="auto-fallback-toggle" class="toggle toggle-warning toggle-sm">
+            <span class="label-text text-xs font-medium text-text-primary">Tự động fallback dịch AI khi không tìm thấy Vietsub</span>
+        </label>
+        <div class="text-xs text-text-muted flex items-center gap-1.5">
+            <span class="badge badge-xs badge-ghost">AI Fallback</span>
+            <span>Tự kích hoạt dịch nếu thiếu Vietsub</span>
         </div>
-        <p class="progress-label" id="progress-label">Processing...</p>
+    </div>
+
+    <!-- Progress Bar -->
+    <div class="progress-bar-container mt-4" id="progress-container" style="display: none;">
+        <div class="w-full bg-bg-elevated h-2 rounded-full overflow-hidden">
+            <div class="bg-plex-gold h-full transition-all duration-300 rounded-full" id="progress-fill" style="width: 0%;"></div>
+        </div>
+        <p class="text-xs text-text-muted mt-2 flex items-center gap-2" id="progress-label">
+            <span class="loading loading-spinner loading-xs text-warning"></span>
+            <span>Processing...</span>
+        </p>
     </div>
 </div>
 
@@ -672,89 +224,169 @@
 <div id="results-area"></div>
 
 <!-- How it works -->
-<div class="how-it-works">
-    <h3>Cách hoạt động</h3>
-    <ul class="step-list">
-        <li>
-            <span class="step-num">1</span>
-            <span><b>Tìm:</b> Preview trước để kiểm tra subtitle trên Plex và các provider; dùng “Tìm sub thủ công” để bỏ qua cache khi kết quả tự động chưa đúng.</span>
-        </li>
-        <li>
-            <span class="step-num">2</span>
-            <span><b>Dịch (khi thiếu Vietsub):</b> Nếu đã có source nhưng chưa có Vietsub, nút AI Translate sẽ xuất hiện ngay trong kết quả tìm.</span>
-        </li>
-        <li>
-            <span class="step-num">3</span>
-            <span><b>Sync timing:</b> Khi đã có đủ source + Vietsub, chọn Sync Timing để căn chỉnh rồi upload kết quả lên Plex.</span>
-        </li>
-    </ul>
+<div class="bg-bg-surface border border-border-subtle rounded-xl p-5 mb-6 shadow-sm">
+    <h3 class="text-base font-semibold text-text-primary mb-3">Cách hoạt động</h3>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="flex gap-3 items-start p-3 bg-bg-input rounded-lg">
+            <span class="w-6 h-6 rounded-full bg-plex-gold/20 text-plex-gold font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">1</span>
+            <div class="text-xs text-text-secondary leading-relaxed">
+                <b class="text-text-primary block mb-0.5">Tìm kiếm</b>
+                Preview trước để kiểm tra subtitle trên Plex và các provider; dùng “Tìm sub thủ công” để bỏ qua cache khi kết quả tự động chưa đúng.
+            </div>
+        </div>
+        <div class="flex gap-3 items-start p-3 bg-bg-input rounded-lg">
+            <span class="w-6 h-6 rounded-full bg-plex-gold/20 text-plex-gold font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">2</span>
+            <div class="text-xs text-text-secondary leading-relaxed">
+                <b class="text-text-primary block mb-0.5">Dịch (khi thiếu Vietsub)</b>
+                Nếu đã có source nhưng chưa có Vietsub, nút AI Translate sẽ xuất hiện. Nếu bật Fallback AI, hệ thống sẽ tự động dịch.
+            </div>
+        </div>
+        <div class="flex gap-3 items-start p-3 bg-bg-input rounded-lg">
+            <span class="w-6 h-6 rounded-full bg-plex-gold/20 text-plex-gold font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">3</span>
+            <div class="text-xs text-text-secondary leading-relaxed">
+                <b class="text-text-primary block mb-0.5">Sync timing</b>
+                Khi đã có đủ source + Vietsub, chọn Sync Timing để căn chỉnh khớp từng mili-giây rồi upload kết quả lên Plex.
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- Sync History -->
-<div class="section-divider">
-    <h2>Sync History</h2>
+<div class="flex items-center gap-4 my-8">
+    <h2 class="text-lg font-semibold text-text-primary whitespace-nowrap">Sync History</h2>
+    <div class="h-px bg-border-subtle flex-1"></div>
 </div>
-<div id="history-stats" class="history-stats" style="display:none;"></div>
-<div id="history-section">
-    <div class="history-empty">Loading history...</div>
+<div id="history-stats" class="flex flex-wrap gap-3 mb-4" style="display:none;"></div>
+<div id="history-section" class="bg-bg-surface border border-border-subtle rounded-xl overflow-hidden shadow-sm">
+    <div class="text-center py-8 text-sm text-text-muted">Loading history...</div>
 </div>
 
 <!-- Detail Modal -->
-<div id="sync-detail-modal" class="modal-overlay" onclick="if(event.target===this)closeSyncDetail()">
-    <div class="modal">
-        <div class="modal-header">
-            <h3 id="detail-title">Sync Detail</h3>
-            <button class="modal-close" onclick="closeSyncDetail()">&times;</button>
+<div id="sync-detail-modal" class="modal-overlay fixed inset-0 bg-black/70 z-50 backdrop-blur-sm hidden items-center justify-center" onclick="if(event.target===this)closeSyncDetail()">
+    <div class="modal-box bg-bg-surface border border-border-subtle rounded-xl max-w-lg w-full p-0 overflow-hidden shadow-2xl mx-4">
+        <div class="flex items-center justify-between p-4 border-b border-border-subtle">
+            <h3 class="font-semibold text-base text-text-primary truncate" id="detail-title">Sync Detail</h3>
+            <button class="btn btn-sm btn-circle btn-ghost text-text-muted hover:text-text-primary" onclick="closeSyncDetail()">&times;</button>
         </div>
-        <div class="modal-body" id="detail-body"></div>
+        <div class="p-5 overflow-y-auto max-h-[75vh]" id="detail-body"></div>
     </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+    // Client-side SessionCache fallback if not provided by base layout
+    const SessionCache = window.SessionCache || {
+        get: (key) => {
+            try {
+                const raw = sessionStorage.getItem(key);
+                if (!raw) return null;
+                const item = JSON.parse(raw);
+                if (item.exp && Date.now() > item.exp) {
+                    sessionStorage.removeItem(key);
+                    return null;
+                }
+                return item.val !== undefined ? item.val : item;
+            } catch (e) { return null; }
+        },
+        set: (key, val, ttlSeconds = 300) => {
+            try {
+                sessionStorage.setItem(key, JSON.stringify({ val, exp: Date.now() + ttlSeconds * 1000 }));
+            } catch (e) {}
+        },
+        remove: (key) => {
+            try { sessionStorage.removeItem(key); } catch (e) {}
+        },
+        clear: (prefix = '') => {
+            try {
+                Object.keys(sessionStorage).forEach(k => {
+                    if (k.startsWith(prefix)) sessionStorage.removeItem(k);
+                });
+            } catch (e) {}
+        }
+    };
+
     let currentRatingKey = '';
     let selectedSubtitleId = null;
     let previewData = null;
     let autoSelected = false;
     let previewAbortController = null;
+    let fallbackTimer = null;
+    let isTranslating = false;
 
-    // Load sync status
+    // Initialize Auto-fallback toggle state from sessionStorage
+    function initAutoFallbackToggle() {
+        const toggleEl = document.getElementById('auto-fallback-toggle');
+        if (!toggleEl) return;
+        const saved = sessionStorage.getItem('plex_auto_fallback_translate');
+        const isEnabled = saved !== null ? saved === 'true' : true;
+        toggleEl.checked = isEnabled;
+        if (saved === null) {
+            sessionStorage.setItem('plex_auto_fallback_translate', 'true');
+        }
+        toggleEl.addEventListener('change', (e) => {
+            sessionStorage.setItem('plex_auto_fallback_translate', e.target.checked ? 'true' : 'false');
+        });
+    }
+
+    // Cancel Auto-fallback translation timer
+    function cancelAutoFallback() {
+        if (fallbackTimer) {
+            clearTimeout(fallbackTimer);
+            fallbackTimer = null;
+        }
+        const alertEl = document.getElementById('auto-fallback-alert');
+        if (alertEl) alertEl.remove();
+        showAlert('Đã hủy tự động dịch AI', 'info');
+    }
+
+    // Load sync status banner
     async function loadStatus() {
         try {
             const res = await fetch('/api/sync/status');
             const data = await res.json();
 
-            document.getElementById('stat-enabled').textContent = data.sync_enabled ? 'ON' : 'OFF';
-            document.getElementById('stat-enabled').style.color = data.sync_enabled ? 'var(--success)' : 'var(--error)';
+            const enabledEl = document.getElementById('stat-enabled');
+            enabledEl.textContent = data.sync_enabled ? 'ON' : 'OFF';
+            enabledEl.className = 'stat-value text-2xl font-bold ' + (data.sync_enabled ? 'text-success' : 'text-error');
 
-            document.getElementById('stat-model').textContent = data.model || '--';
-            document.getElementById('stat-model').style.cssText = 'font-size: 16px; color: var(--text-primary);';
+            const modelEl = document.getElementById('stat-model');
+            modelEl.textContent = data.model || '--';
 
             if (!data.ai_available) {
-                showAlert('OpenAI API key chưa được cấu hình. Vào Setup để cài đặt.', 'warning');
+                showAlert('OpenAI API key chưa được cấu hình. Vào Settings để cài đặt.', 'warning');
             }
         } catch (e) {
             console.error('Failed to load sync status:', e);
         }
     }
 
-    // Preview: check subtitles availability
-    async function previewSync() {
+    // Preview: check subtitles availability with sessionStorage cache support
+    async function previewSync(forceRefresh = false) {
         let ratingKey = document.getElementById('rating-key').value.trim();
         if (!ratingKey) {
             showAlert('Vui lòng nhập Rating Key hoặc Plex link', 'warning');
             return;
         }
 
-        // Hủy request preview đang chạy (nếu có) trước khi bắt đầu mới
+        // Check cache early if purely numeric ratingKey and not forced
+        if (!forceRefresh && /^\d+$/.test(ratingKey)) {
+            const cached = SessionCache.get('preview_' + ratingKey);
+            if (cached) {
+                currentRatingKey = ratingKey;
+                previewData = cached;
+                renderPreview(cached, true);
+                return;
+            }
+        }
+
+        // Cancel previous preview request if running
         if (previewAbortController) {
             previewAbortController.abort();
         }
         previewAbortController = new AbortController();
         const signal = previewAbortController.signal;
 
-        // Timeout 60s — Subsource search có thể chậm (retry + exponential backoff)
         let previewTimedOut = false;
         const previewTimeoutId = setTimeout(() => {
             previewTimedOut = true;
@@ -763,7 +395,7 @@
 
         const btn = document.getElementById('btn-preview');
         btn.disabled = true;
-        btn.innerHTML = '<span class="spinner"></span>';
+        btn.innerHTML = '<span class="loading loading-spinner loading-sm"></span> Đang tìm...';
 
         try {
             // If input is not purely numeric, resolve it first
@@ -781,16 +413,39 @@
                 const resolved = await resolveRes.json();
                 ratingKey = resolved.rating_key;
                 document.getElementById('rating-key').value = ratingKey;
+
+                // Check cache after resolving
+                if (!forceRefresh) {
+                    const cached = SessionCache.get('preview_' + ratingKey);
+                    if (cached) {
+                        currentRatingKey = ratingKey;
+                        previewData = cached;
+                        renderPreview(cached, true);
+                        return;
+                    }
+                }
             }
 
             currentRatingKey = ratingKey;
 
-            // Hiển thị skeleton loading để user biết đang xử lý
+            // Show skeleton loading in results area
             document.getElementById('results-area').innerHTML = `
-                <div class="result-card">
-                    <div class="result-body" style="color:var(--text-muted);font-size:13px;display:flex;align-items:center;gap:10px;padding:20px;">
-                        <span class="spinner" style="flex-shrink:0;"></span>
-                        <span>Đang kiểm tra subtitle trên Plex và Subsource…</span>
+                <div class="card bg-bg-surface border border-border-subtle p-5 mb-4 shadow-sm animate-pulse">
+                    <div class="flex items-center gap-3 mb-4">
+                        <span class="loading loading-spinner loading-md text-warning"></span>
+                        <div>
+                            <div class="text-sm font-semibold text-text-primary">Đang quét subtitle từ Plex, Subsource & SubDL...</div>
+                            <div class="text-xs text-text-muted">Kiểm tra phụ đề nội bộ và tìm kiếm trên các providers</div>
+                        </div>
+                    </div>
+                    <div class="space-y-3">
+                        <div class="skeleton h-10 w-full bg-bg-input/60 rounded-md"></div>
+                        <div class="skeleton h-10 w-full bg-bg-input/60 rounded-md"></div>
+                        <div class="skeleton h-10 w-4/5 bg-bg-input/60 rounded-md"></div>
+                    </div>
+                    <div class="flex gap-2 pt-4 border-t border-border-subtle mt-4">
+                        <div class="skeleton h-9 w-28 bg-bg-elevated rounded"></div>
+                        <div class="skeleton h-9 w-32 bg-bg-elevated rounded"></div>
                     </div>
                 </div>`;
 
@@ -807,7 +462,8 @@
             }
 
             previewData = await res.json();
-            renderPreview(previewData);
+            SessionCache.set('preview_' + ratingKey, previewData, 300);
+            renderPreview(previewData, false);
 
         } catch (e) {
             if (e.name === 'AbortError') {
@@ -815,7 +471,6 @@
                     document.getElementById('results-area').innerHTML = '';
                     showAlert('Preview timeout — Subsource không phản hồi sau 60s. Thử lại sau.', 'warning');
                 } else {
-                    // Hủy chủ động khi chọn video khác — xóa skeleton, không báo lỗi
                     document.getElementById('results-area').innerHTML = '';
                 }
                 return;
@@ -829,69 +484,69 @@
         }
     }
 
-    function renderPreview(data) {
+    // Render Preview result
+    function renderPreview(data, isCached = false) {
         const area = document.getElementById('results-area');
         const src = data.source_status || {};
         const vi = data.vi_status || {};
         const hasViCandidates = Array.isArray(data.vi_candidates) && data.vi_candidates.length > 0;
         const hasAnyVi = data.has_vi_on_plex || hasViCandidates;
-        const srcLangLabel = data.source_lang
-            ? data.source_lang.toUpperCase()
-            : 'Source';
+        const srcLangLabel = data.source_lang ? data.source_lang.toUpperCase() : 'Source';
 
         selectedSubtitleId = null;
 
         // Build subtitle info section
         let subInfoHtml = '';
 
-        // Source subtitle (any language except target, used for sync/translate)
+        // Source subtitle
         if (src.available) {
             const srcFrom = src.source === 'plex' ? 'Plex' : 'Subsource';
             subInfoHtml += `
-                <div class="sub-info">
-                    <span class="icon ok"></span>
+                <div class="flex items-center gap-2 p-2.5 px-3.5 bg-bg-input rounded-md text-xs text-text-secondary mb-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-success shrink-0"></span>
                     <span>${srcLangLabel} subtitle: ${src.detail || srcFrom}</span>
                 </div>
             `;
         } else {
             subInfoHtml += `
-                <div class="sub-info">
-                    <span class="icon missing"></span>
+                <div class="flex items-center gap-2 p-2.5 px-3.5 bg-bg-input rounded-md text-xs text-text-secondary mb-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-error shrink-0"></span>
                     <span>Source subtitle: ${src.detail || 'Not found (Plex & Subsource)'}</span>
                 </div>
             `;
         }
 
-        // Target subtitle (user's configured language)
+        // Vietnamese subtitle status
         if (data.has_vi_on_plex) {
             const viNote = data.can_sync
                 ? 'Plex (sẽ dùng làm tham chiếu sync)'
                 : 'Plex ✓ — nhưng cần source sub để thực hiện sync';
             subInfoHtml += `
-                <div class="sub-info">
-                    <span class="icon ok"></span>
+                <div class="flex items-center gap-2 p-2.5 px-3.5 bg-bg-input rounded-md text-xs text-text-secondary mb-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-success shrink-0"></span>
                     <span>Vietnamese subtitle: ${viNote}</span>
                 </div>
             `;
         } else if (vi.detail) {
             subInfoHtml += `
-                <div class="sub-info">
-                    <span class="icon missing"></span>
+                <div class="flex items-center gap-2 p-2.5 px-3.5 bg-bg-input rounded-md text-xs text-text-secondary mb-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-error shrink-0"></span>
                     <span>Vietnamese subtitle: ${vi.detail}</span>
                 </div>
             `;
         }
 
+        // Vietsub candidates dropdown
         if (hasViCandidates) {
             const viCandidateLabel = data.has_vi_on_plex
                 ? `${data.vi_candidates.length} bản Vietsub khác tìm thấy`
                 : `${data.vi_candidates.length} bản Vietsub tìm thấy`;
             subInfoHtml += `
-                <div class="sub-info">
-                    <span class="icon ok"></span>
+                <div class="flex items-center gap-2 p-2.5 px-3.5 bg-bg-input rounded-md text-xs text-text-secondary mb-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-success shrink-0"></span>
                     <span>${viCandidateLabel}</span>
                 </div>
-                <select class="sub-select" id="vi-sub-select" onchange="onSubSelect(this.value)">
+                <select class="select select-bordered select-sm md:select-md w-full bg-bg-input border-border-subtle text-xs md:text-sm text-text-primary mb-3" id="vi-sub-select" onchange="onSubSelect(this.value)">
                     ${data.vi_candidates.map((c, i) => `
                         <option value="${c.provider}:${c.id}" ${i === 0 ? 'selected' : ''}>
                             [${c.provider}] ${c.name} (${c.quality}, ${c.downloads ?? 0} downloads${c.rating ? ', rating: ' + c.rating.toFixed(1) : ''})
@@ -902,20 +557,20 @@
             selectedSubtitleId = `${data.vi_candidates[0].provider}:${data.vi_candidates[0].id}`;
         } else if (!data.has_vi_on_plex && !vi.detail) {
             subInfoHtml += `
-                <div class="sub-info">
-                    <span class="icon missing"></span>
+                <div class="flex items-center gap-2 p-2.5 px-3.5 bg-bg-input rounded-md text-xs text-text-secondary mb-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-error shrink-0"></span>
                     <span>Vietnamese subtitle: Not found (Plex & Subsource)</span>
                 </div>
             `;
         }
 
         // Action buttons
-        let actionsHtml = '<div class="action-buttons">';
+        let actionsHtml = '<div class="flex flex-wrap gap-2 mt-4 pt-3 border-t border-border-subtle">';
 
         if (hasViCandidates) {
             const uploadLabel = data.has_vi_on_plex ? 'Thử / Thay Vietsub' : 'Upload Vietsub';
             actionsHtml += `
-                <button class="btn btn-primary" onclick="executeUploadTarget()" id="btn-upload-target">
+                <button class="btn btn-primary btn-sm md:btn-md flex-1" onclick="executeUploadTarget()" id="btn-upload-target">
                     ${uploadLabel}
                 </button>
             `;
@@ -925,13 +580,13 @@
             const syncLabel = data.has_vi_on_plex ? 'Re-sync Timing (optional)' : 'Sync Timing';
             const syncStyle = data.has_vi_on_plex ? 'btn btn-secondary' : 'btn btn-primary';
             actionsHtml += `
-                <button class="${syncStyle}" onclick="executeSync()" id="btn-sync">
+                <button class="${syncStyle} btn-sm md:btn-md flex-1" onclick="executeSync()" id="btn-sync">
                     ${syncLabel}
                 </button>
             `;
         } else if (data.can_sync && !data.sync_enabled) {
             actionsHtml += `
-                <button class="btn btn-primary" disabled title="Enable sync in Setup">
+                <button class="btn btn-primary btn-sm md:btn-md flex-1" disabled title="Enable sync in Settings">
                     Sync Timing (disabled)
                 </button>
             `;
@@ -939,7 +594,7 @@
 
         if (!hasAnyVi && data.can_translate) {
             actionsHtml += `
-                <button class="btn btn-info" onclick="executeTranslation()" id="btn-translate">
+                <button class="btn btn-info btn-sm md:btn-md flex-1" onclick="executeTranslation()" id="btn-translate">
                     AI Translate (${srcLangLabel} &rarr; VI)
                 </button>
             `;
@@ -947,36 +602,61 @@
 
         actionsHtml += '</div>';
 
-        // Determine status tag
+        // Determine status tag badge
         let statusTag;
         if (data.can_sync && data.sync_enabled) {
             statusTag = data.has_vi_on_plex
-                ? '<span class="tag tag-info">Re-sync Timing</span>'
-                : '<span class="tag tag-info">Ready to Sync</span>';
+                ? '<span class="badge badge-info font-medium">Re-sync Timing</span>'
+                : '<span class="badge badge-info font-medium">Ready to Sync</span>';
         } else if (!hasAnyVi && data.can_translate) {
-            statusTag = `<span class="tag tag-info">Translate Only</span>`;
+            statusTag = '<span class="badge badge-info font-medium">Translate Only</span>';
         } else if (hasViCandidates && data.has_vi_on_plex) {
-            statusTag = '<span class="tag tag-info">Có Vietsub khác để thử</span>';
+            statusTag = '<span class="badge badge-info font-medium">Có Vietsub khác để thử</span>';
         } else if (hasViCandidates) {
-            statusTag = '<span class="tag tag-info">Có Vietsub trên Subsource</span>';
+            statusTag = '<span class="badge badge-info font-medium">Có Vietsub trên Subsource</span>';
         } else if (data.has_vi_on_plex) {
-            // VI có sẵn nhưng không tìm được source sub để sync
-            statusTag = '<span class="tag tag-warning">Thiếu source sub để sync</span>';
+            statusTag = '<span class="badge badge-warning font-medium">Thiếu source sub để sync</span>';
         } else if (!src.available) {
-            // Không tìm được sub nguồn nào → không làm gì được
-            statusTag = '<span class="tag tag-error">Không tìm thấy sub nguồn</span>';
+            statusTag = '<span class="badge badge-error font-medium">Không tìm thấy sub nguồn</span>';
         } else {
-            // Có source sub nhưng không có target sub
-            statusTag = '<span class="tag tag-error">Không tìm thấy VI sub</span>';
+            statusTag = '<span class="badge badge-error font-medium">Không tìm thấy VI sub</span>';
+        }
+
+        // Auto-fallback AI Translation check
+        let fallbackAlertHtml = '';
+        const toggleEl = document.getElementById('auto-fallback-toggle');
+        const autoFallbackEnabled = toggleEl ? toggleEl.checked : (sessionStorage.getItem('plex_auto_fallback_translate') === 'true');
+
+        if (!hasAnyVi && data.can_translate && autoFallbackEnabled && !isTranslating) {
+            fallbackAlertHtml = `
+                <div class="alert alert-warning shadow-md my-4 flex items-center justify-between text-xs md:text-sm py-3 px-4" id="auto-fallback-alert">
+                    <div class="flex items-center gap-3">
+                        <span class="loading loading-spinner loading-sm text-warning-content shrink-0"></span>
+                        <span>Không tìm thấy Vietsub. <strong>Tự động kích hoạt AI Dịch phụ đề</strong> từ <b>${srcLangLabel}</b>...</span>
+                    </div>
+                    <button class="btn btn-xs btn-ghost border border-black/20" onclick="cancelAutoFallback()">Hủy</button>
+                </div>
+            `;
+
+            // Trigger translation after 800ms to let user see feedback
+            if (fallbackTimer) clearTimeout(fallbackTimer);
+            fallbackTimer = setTimeout(() => {
+                fallbackTimer = null;
+                executeTranslation();
+            }, 800);
         }
 
         area.innerHTML = `
-            <div class="result-card">
-                <div class="result-header">
-                    <h3>${data.title}</h3>
-                    ${statusTag}
+            <div class="card bg-bg-surface border border-border-subtle p-5 mb-6 shadow-sm">
+                <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-border-subtle mb-4">
+                    <div class="flex items-center gap-2">
+                        <h3 class="text-base font-semibold text-text-primary">${data.title}</h3>
+                        ${isCached ? `<span class="badge badge-sm badge-ghost gap-1 cursor-pointer hover:badge-warning transition-colors" onclick="previewSync(true)" title="Bấm để tải lại từ server">⚡ Cached <span class="underline ml-0.5">Làm mới</span></span>` : ''}
+                    </div>
+                    <div>${statusTag}</div>
                 </div>
-                <div class="result-body">
+                ${fallbackAlertHtml}
+                <div class="space-y-1">
                     ${subInfoHtml}
                     ${actionsHtml}
                 </div>
@@ -988,37 +668,94 @@
         selectedSubtitleId = subtitleId;
     }
 
+    // Manual search bypassing cache
     async function manualSearch() {
         const ratingKey = currentRatingKey || document.getElementById('rating-key').value.trim();
         const videoFilename = document.getElementById('manual-video-filename')?.value.trim();
-        if (!ratingKey && !videoFilename) { showAlert('Vui lòng nhập Rating Key/Plex link hoặc tên file video', 'warning'); return; }
+        if (!ratingKey && !videoFilename) {
+            showAlert('Vui lòng nhập Rating Key/Plex link hoặc tên file video', 'warning');
+            return;
+        }
+
         const btn = document.getElementById('btn-manual-search');
-        btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+        btn.disabled = true;
+        btn.innerHTML = '<span class="loading loading-spinner loading-sm"></span> Đang tìm...';
+
+        // Clear cache for this ratingKey
+        if (ratingKey && /^\d+$/.test(ratingKey)) {
+            SessionCache.remove('preview_' + ratingKey);
+        }
+
+        // Show loading skeleton
+        document.getElementById('results-area').innerHTML = `
+            <div class="card bg-bg-surface border border-border-subtle p-5 mb-4 shadow-sm animate-pulse">
+                <div class="flex items-center gap-3 mb-4">
+                    <span class="loading loading-spinner loading-md text-warning"></span>
+                    <div>
+                        <div class="text-sm font-semibold text-text-primary">Đang tìm sub thủ công từ các provider...</div>
+                        <div class="text-xs text-text-muted">Bỏ qua cache, truy vấn trực tiếp Subsource và SubDL</div>
+                    </div>
+                </div>
+                <div class="space-y-3">
+                    <div class="skeleton h-10 w-full bg-bg-input/60 rounded-md"></div>
+                    <div class="skeleton h-10 w-full bg-bg-input/60 rounded-md"></div>
+                </div>
+            </div>`;
+
         try {
             const res = await fetch('/api/subtitles/manual-search', {
-                method: 'POST', headers: {'Content-Type': 'application/json'},
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(videoFilename
                     ? {video_filename: videoFilename, use_cache: false}
                     : {rating_key: ratingKey, use_cache: false})
             });
-            if (!res.ok) { const err = await res.json(); throw new Error(err.detail || 'Manual search failed'); }
+
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || 'Manual search failed');
+            }
+
             const result = await res.json();
             if (previewData && !videoFilename) {
                 previewData.vi_candidates = result.candidates || [];
                 previewData.has_vi_on_plex = false;
-                renderPreview(previewData);
+                // Update cache with freshly searched candidates
+                if (ratingKey) {
+                    SessionCache.set('preview_' + ratingKey, previewData, 300);
+                }
+                renderPreview(previewData, false);
             } else {
                 const candidates = result.candidates || [];
                 document.getElementById('results-area').innerHTML = `
-                    <div class="result-card"><div class="result-header"><h3>Manual subtitle search</h3><span class="tag tag-info">${candidates.length} candidates</span></div>
-                    <div class="result-body">${candidates.length ? `<select class="sub-select" id="vi-sub-select" onchange="onSubSelect(this.value)">${candidates.map((c, i) => `<option value="${c.provider}:${c.id}" ${i===0?'selected':''}>[${c.provider}] ${c.name || c.filename || 'Subtitle'} (${c.quality || 'unknown'})</option>`).join('')}</select><div class="action-buttons"><button class="btn btn-primary" onclick="executeUploadTarget()">Upload bản đã chọn</button></div>` : '<div class="empty-state">Không tìm thấy subtitle phù hợp.</div>'}</div></div>`;
+                    <div class="card bg-bg-surface border border-border-subtle p-5 mb-4 shadow-sm">
+                        <div class="flex items-center justify-between pb-3 border-b border-border-subtle mb-4">
+                            <h3 class="text-base font-semibold text-text-primary">Manual subtitle search</h3>
+                            <span class="badge badge-info">${candidates.length} candidates</span>
+                        </div>
+                        <div class="space-y-4">
+                            ${candidates.length ? `
+                                <select class="select select-bordered select-sm md:select-md w-full bg-bg-input border-border-subtle text-xs md:text-sm text-text-primary" id="vi-sub-select" onchange="onSubSelect(this.value)">
+                                    ${candidates.map((c, i) => `<option value="${c.provider}:${c.id}" ${i===0?'selected':''}>[${c.provider}] ${c.name || c.filename || 'Subtitle'} (${c.quality || 'unknown'})</option>`).join('')}
+                                </select>
+                                <div class="flex gap-2">
+                                    <button class="btn btn-primary btn-sm md:btn-md" onclick="executeUploadTarget()">Upload bản đã chọn</button>
+                                </div>
+                            ` : '<div class="text-text-muted text-sm py-4 text-center">Không tìm thấy subtitle phù hợp.</div>'}
+                        </div>
+                    </div>`;
                 if (candidates.length) selectedSubtitleId = `${candidates[0].provider}:${candidates[0].id}`;
             }
             showAlert(`${(result.candidates || []).length} candidate subtitle tìm thấy`, 'success');
-        } catch (e) { showAlert('Manual search failed: ' + e.message, 'error'); }
-        finally { btn.disabled = false; btn.textContent = '🔎 Tìm sub thủ công'; }
+        } catch (e) {
+            showAlert('Manual search failed: ' + e.message, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '🔎 Tìm sub thủ công';
+        }
     }
 
+    // Execute upload target subtitle
     async function executeUploadTarget() {
         if (!currentRatingKey) {
             showAlert('No media selected', 'warning');
@@ -1052,7 +789,10 @@
             finishProgress();
             showAlert(result.message, 'success');
 
-            setTimeout(() => previewSync(), 1500);
+            // Invalidate cache for this ratingKey
+            SessionCache.remove('preview_' + currentRatingKey);
+
+            setTimeout(() => previewSync(true), 1500);
         } catch (e) {
             hideProgress();
             showAlert('Upload failed: ' + e.message, 'error');
@@ -1061,7 +801,7 @@
         }
     }
 
-    // Execute sync
+    // Execute sync timing
     async function executeSync() {
         if (!currentRatingKey) {
             showAlert('No media selected', 'warning');
@@ -1095,6 +835,10 @@
 
             const result = await res.json();
             finishProgress();
+
+            // Invalidate cache
+            SessionCache.remove('preview_' + currentRatingKey);
+
             renderSyncResult(result);
             showAlert(result.message, 'success');
 
@@ -1106,11 +850,15 @@
         }
     }
 
+    // Execute AI Translation
     async function executeTranslation() {
         if (!currentRatingKey) {
             showAlert('No media selected', 'warning');
             return;
         }
+
+        if (isTranslating) return;
+        isTranslating = true;
 
         setButtonsLoading(true);
         showProgress('Translating subtitle...');
@@ -1134,11 +882,15 @@
             finishProgress();
             showAlert(result.message || 'Translation completed', 'success');
 
-            setTimeout(() => previewSync(), 1500);
+            // Invalidate cache so next preview fetches newly translated Vietsub from Plex
+            SessionCache.remove('preview_' + currentRatingKey);
+
+            setTimeout(() => previewSync(true), 1500);
         } catch (e) {
             hideProgress();
             showAlert('Translation failed: ' + e.message, 'error');
         } finally {
+            isTranslating = false;
             setButtonsLoading(false);
         }
     }
@@ -1152,24 +904,26 @@
         const labelEl = document.getElementById('progress-label');
         container.style.display = 'block';
         fill.style.width = '0%';
-        labelEl.textContent = label;
+        labelEl.innerHTML = `<span class="loading loading-spinner loading-xs text-warning"></span> <span>${label}</span>`;
 
         let progress = 0;
         progressInterval = setInterval(() => {
             progress = Math.min(progress + 3, 90);
             fill.style.width = progress + '%';
 
-            if (progress < 30) labelEl.textContent = 'Downloading subtitles...';
-            else if (progress < 60) labelEl.textContent = 'AI processing...';
-            else if (progress < 80) labelEl.textContent = 'Applying corrections...';
-            else labelEl.textContent = 'Uploading to Plex...';
+            let stepLabel = label;
+            if (progress < 30) stepLabel = 'Downloading subtitles...';
+            else if (progress < 60) stepLabel = 'AI processing...';
+            else if (progress < 80) stepLabel = 'Applying corrections...';
+            else stepLabel = 'Uploading to Plex...';
+            labelEl.innerHTML = `<span class="loading loading-spinner loading-xs text-warning"></span> <span>${stepLabel}</span>`;
         }, 500);
     }
 
     function finishProgress() {
         if (progressInterval) clearInterval(progressInterval);
         document.getElementById('progress-fill').style.width = '100%';
-        document.getElementById('progress-label').textContent = 'Done!';
+        document.getElementById('progress-label').innerHTML = '<span class="text-success font-semibold">✓ Done!</span>';
     }
 
     function hideProgress() {
@@ -1188,9 +942,9 @@
         if (btnTranslate) btnTranslate.disabled = loading;
         if (btnPreview) btnPreview.disabled = loading;
 
-        if (loading && btnSync) btnSync.innerHTML = '<span class="spinner"></span> Processing...';
-        if (loading && btnUploadTarget) btnUploadTarget.innerHTML = '<span class="spinner"></span> Processing...';
-        if (loading && btnTranslate) btnTranslate.innerHTML = '<span class="spinner"></span> Processing...';
+        if (loading && btnSync) btnSync.innerHTML = '<span class="loading loading-spinner loading-xs"></span> Processing...';
+        if (loading && btnUploadTarget) btnUploadTarget.innerHTML = '<span class="loading loading-spinner loading-xs"></span> Processing...';
+        if (loading && btnTranslate) btnTranslate.innerHTML = '<span class="loading loading-spinner loading-xs"></span> Processing...';
 
         if (!loading && btnSync) {
             btnSync.textContent = previewData?.has_vi_on_plex ? 'Re-sync Timing (optional)' : 'Sync Timing';
@@ -1213,28 +967,28 @@
 
         const area = document.getElementById('results-area');
         area.innerHTML = `
-            <div class="result-card">
-                <div class="result-header">
-                    <h3>Sync Complete</h3>
-                    <span class="tag tag-success">Done</span>
+            <div class="card bg-bg-surface border border-border-subtle p-5 mb-6 shadow-sm">
+                <div class="flex items-center justify-between pb-3 border-b border-border-subtle mb-4">
+                    <h3 class="text-base font-semibold text-text-primary">Sync Complete</h3>
+                    <span class="badge badge-success">Done</span>
                 </div>
-                <div class="result-body">
-                    <div class="sync-stats">
-                        <div class="sync-stat">
-                            <div class="value">${stats.entries_synced}</div>
-                            <div class="label">Entries Synced</div>
+                <div>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div class="p-3 bg-bg-input rounded-md text-center">
+                            <div class="text-2xl font-bold text-plex-gold">${stats.entries_synced}</div>
+                            <div class="text-xs uppercase text-text-muted mt-1">Entries Synced</div>
                         </div>
-                        <div class="sync-stat">
-                            <div class="value">${stats.anchors_found}</div>
-                            <div class="label">Anchor Points</div>
+                        <div class="p-3 bg-bg-input rounded-md text-center">
+                            <div class="text-2xl font-bold text-plex-gold">${stats.anchors_found}</div>
+                            <div class="text-xs uppercase text-text-muted mt-1">Anchor Points</div>
                         </div>
-                        <div class="sync-stat">
-                            <div class="value">${offsetS}s</div>
-                            <div class="label">Avg Offset (${direction})</div>
+                        <div class="p-3 bg-bg-input rounded-md text-center">
+                            <div class="text-2xl font-bold text-plex-gold">${offsetS}s</div>
+                            <div class="text-xs uppercase text-text-muted mt-1">Avg Offset (${direction})</div>
                         </div>
-                        <div class="sync-stat">
-                            <div class="value">${stats.total_ref_entries}</div>
-                            <div class="label">EN Reference</div>
+                        <div class="p-3 bg-bg-input rounded-md text-center">
+                            <div class="text-2xl font-bold text-plex-gold">${stats.total_ref_entries}</div>
+                            <div class="text-xs uppercase text-text-muted mt-1">EN Reference</div>
                         </div>
                     </div>
                 </div>
@@ -1258,13 +1012,13 @@
                 ).join('');
                 section.style.display = 'block';
 
-                // Auto-select item đầu tiên (chỉ lần đầu, không ghi đè thao tác user)
+                // Auto-select first item if not chosen yet
                 if (!autoSelected && !currentRatingKey) {
                     autoSelected = true;
                     selectMedia(data.sessions[0].rating_key);
                 }
             } else {
-                container.innerHTML = '<p class="empty-state">Không có phim nào đang phát</p>';
+                container.innerHTML = '<p class="text-xs text-text-muted py-2">Không có phim nào đang phát</p>';
                 section.style.display = 'block';
             }
         } catch (e) {
@@ -1306,7 +1060,7 @@
         const card = document.querySelector(`.media-card[data-key="${ratingKey}"]`);
         if (card) card.classList.add('selected');
 
-        // Clear kết quả cũ ngay khi đổi sang video khác
+        // Clear previous results when selecting a different media item
         if (ratingKey !== currentRatingKey) {
             document.getElementById('results-area').innerHTML = '';
             selectedSubtitleId = null;
@@ -1314,11 +1068,10 @@
         }
 
         document.getElementById('rating-key').value = ratingKey;
-        previewSync();
+        previewSync(false);
     }
 
-    // ── Sync History ──────────────────────────────────────────
-
+    // Sync History
     let syncHistoryItems = [];
 
     async function loadHistory() {
@@ -1329,7 +1082,7 @@
             renderHistory(syncHistoryItems);
         } catch (e) {
             document.getElementById('history-section').innerHTML =
-                '<div class="history-empty">Failed to load history</div>';
+                '<div class="text-center py-8 text-sm text-text-muted">Failed to load history</div>';
         }
     }
 
@@ -1338,7 +1091,7 @@
         const statsEl = document.getElementById('history-stats');
 
         if (!items || items.length === 0) {
-            section.innerHTML = '<div class="history-empty">No sync history yet</div>';
+            section.innerHTML = '<div class="text-center py-8 text-sm text-text-muted">No sync history yet</div>';
             statsEl.style.display = 'none';
             return;
         }
@@ -1351,9 +1104,9 @@
 
         statsEl.style.display = 'flex';
         statsEl.innerHTML = `
-            <div class="history-stat"><strong>${success}</strong> synced</div>
-            <div class="history-stat"><strong>${failed}</strong> failed</div>
-            <div class="history-stat"><strong>${avgAnchors}</strong> avg anchors</div>
+            <div class="badge badge-outline badge-lg p-3 text-xs gap-1.5"><strong class="text-text-primary">${success}</strong> synced</div>
+            <div class="badge badge-outline badge-lg p-3 text-xs gap-1.5"><strong class="text-text-primary">${failed}</strong> failed</div>
+            <div class="badge badge-outline badge-lg p-3 text-xs gap-1.5"><strong class="text-text-primary">${avgAnchors}</strong> avg anchors</div>
         `;
 
         section.innerHTML = `
@@ -1377,14 +1130,20 @@
                         return `
                         <tr>
                             <td>
-                                <div class="history-title">${item.title || '—'}</div>
-                                <div class="history-meta">${sourceBadge}${item.ref_lang ? ' &middot; ref: ' + item.ref_lang.toUpperCase() : ''}${item.model ? ' &middot; ' + item.model : ''}</div>
+                                <div class="font-medium text-text-primary">${item.title || '—'}</div>
+                                <div class="text-xs text-text-muted mt-0.5">${sourceBadge}${item.ref_lang ? ' &middot; ref: ' + item.ref_lang.toUpperCase() : ''}${item.model ? ' &middot; ' + item.model : ''}</div>
                             </td>
-                            <td><span class="status-badge status-${item.status}">${item.status === 'success' ? '✓' : '✗'} ${item.status}</span></td>
+                            <td>
+                                <span class="badge ${item.status === 'success' ? 'badge-success' : 'badge-error'} badge-sm font-semibold">
+                                    ${item.status === 'success' ? '✓' : '✗'} ${item.status}
+                                </span>
+                            </td>
                             <td>${item.status === 'success' ? item.anchors_found : '—'}</td>
                             <td>${offsetText}</td>
                             <td>${formatDate(item.timestamp)}</td>
-                            <td><button class="btn-view" onclick="openSyncDetail(${idx})">View</button></td>
+                            <td>
+                                <button class="btn btn-ghost btn-xs border border-border-subtle hover:border-plex-gold" onclick="openSyncDetail(${idx})">View</button>
+                            </td>
                         </tr>`;
                     }).join('')}
                 </tbody>
@@ -1426,7 +1185,7 @@
         const offsetDir = (item.avg_offset_ms || 0) > 0 ? 'trễ' : 'sớm';
 
         const rows = [
-            ['Status', `<span class="status-badge status-${item.status}">${item.status === 'success' ? '✓' : '✗'} ${item.status}</span>`],
+            ['Status', `<span class="badge ${item.status === 'success' ? 'badge-success' : 'badge-error'} badge-sm font-semibold">${item.status === 'success' ? '✓' : '✗'} ${item.status}</span>`],
             ['Source', item.source === 'auto' ? 'Auto (after download)' : 'Manual'],
             ['Anchors Found', item.status === 'success' ? item.anchors_found : '—'],
             ['Avg Offset', item.status === 'success' ? `${offsetSec.toFixed(1)}s ${offsetDir}` : '—'],
@@ -1436,7 +1195,7 @@
         ];
 
         if (item.error) {
-            rows.push(['Error', `<span style="color:var(--error)">${item.error}</span>`]);
+            rows.push(['Error', `<span class="text-error">${item.error}</span>`]);
         }
 
         document.getElementById('detail-body').innerHTML = rows.map(([label, value]) =>
@@ -1450,7 +1209,8 @@
         document.getElementById('sync-detail-modal').classList.remove('active');
     }
 
-    // Init
+    // Initialization
+    initAutoFallbackToggle();
     loadStatus();
     loadNowPlaying();
     loadHistory();

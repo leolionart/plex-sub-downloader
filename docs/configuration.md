@@ -48,7 +48,7 @@ Tất cả cấu hình được lưu tại `data/config.json` và có thể ch�
 | `translation_enabled` | Bật AI translate fallback | `false` |
 | `translation_requires_approval` | Yêu cầu approve trước khi dịch | `true` |
 | `auto_translate_if_no_vi` | Tự động dịch khi không tìm được target sub | `false` |
-| `translation_context_enabled` | Trích xuất hồ sơ tập phim/nhân vật/glossary trước khi dịch batch | `true` |
+| `translation_context_enabled` | Trích xuất glossary/thuật ngữ trước khi dịch batch (mặc định tắt để tối ưu token) | `false` |
 | `translation_context_window` | Số câu trước/sau gửi kèm mỗi batch để giữ hội thoại lân cận | `10` |
 | `translation_consistency_review_enabled` | Rà soát toàn tập sau dịch để sửa xưng hô/tên riêng không nhất quán | `true` |
 

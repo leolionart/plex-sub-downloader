@@ -854,7 +854,7 @@ class SubtitleService:
             )
             if removed:
                 log.info(f"Removed {removed} existing {language} subtitle(s) before upload")
-
+                self._invalidate_media_cache(video)
         log.info("Uploading subtitle to Plex", path=str(subtitle_path))
 
         success = await asyncio.to_thread(
@@ -866,9 +866,25 @@ class SubtitleService:
 
         if not success:
             raise SubtitleServiceError("Upload to Plex failed")
-
         log.info("✓ Uploaded subtitle to Plex")
+        self._invalidate_media_cache(video)
 
+    def _invalidate_media_cache(self, video: Video) -> None:
+        """Invalidate plex client caches for a video and its parent section/show."""
+        try:
+            rk = getattr(video, "ratingKey", None)
+            if rk is not None:
+                self.plex_client.invalidate_item_cache(str(rk))
+            gp_rk = getattr(video, "grandparentRatingKey", None)
+            if gp_rk is not None:
+                self.plex_client.invalidate_item_cache(str(gp_rk))
+            sec_id = getattr(video, "librarySectionID", None) or getattr(video, "sectionKey", None)
+            if sec_id is not None and isinstance(sec_id, (str, int)):
+                self.plex_client.invalidate_section_cache(str(sec_id))
+            else:
+                self.plex_client.invalidate_section_cache(None)
+        except Exception as e:
+            logger.warning(f"Failed to invalidate media cache: {e}")
     def _cleanup_temp_files(self, rating_key: str) -> None:
         """
         Clean up temporary subtitle files.
@@ -2550,3 +2566,96 @@ class SubtitleService:
             "season_number": metadata.season_number,
             "episode_number": metadata.episode_number,
         }
+
+    def get_library_sections(self, use_cache: bool = True) -> list[dict]:
+        """Fetch Plex library sections."""
+        return self.plex_client.get_sections(use_cache=use_cache)
+
+    def clear_plex_cache(self, rating_key: str | None = None, section_key: str | None = None) -> dict[str, Any]:
+        """Invalidate specific item/section or clear all Plex caches."""
+        if rating_key:
+            self.plex_client.invalidate_item_cache(rating_key)
+            return {"cleared": "item", "rating_key": str(rating_key)}
+        if section_key:
+            self.plex_client.invalidate_section_cache(section_key)
+            return {"cleared": "section", "section_key": str(section_key)}
+        self.plex_client.clear_all_caches()
+        return {"cleared": "all"}
+
+    def get_plex_cache_stats(self) -> dict[str, Any]:
+        """Return Plex cache statistics."""
+        return self.plex_client.get_cache_stats()
+    def get_library_items(
+        self,
+        section_key: str,
+        query: str | None = None,
+        offset: int = 0,
+        limit: int = 50,
+        subtitle_filter: str = "missing_vi",
+        use_cache: bool = True,
+    ) -> dict:
+        """Fetch items in a Plex library section with subtitle filter."""
+        return self.plex_client.get_section_items(
+            section_key=section_key,
+            query=query,
+            offset=offset,
+            limit=limit,
+            subtitle_filter=subtitle_filter,
+            use_cache=use_cache,
+        )
+
+    def get_show_tree(self, rating_key: str, use_cache: bool = True) -> dict:
+        """Fetch show hierarchy with subtitle status per episode."""
+        target_lang = self.runtime_config.default_language or "vi"
+        return self.plex_client.get_show_tree(
+            rating_key=rating_key,
+            target_lang=target_lang,
+            source_lang="en",
+            use_cache=use_cache,
+        )
+
+    def get_movie_details(self, rating_key: str, use_cache: bool = True) -> dict:
+        """Fetch movie details and subtitle status."""
+        target_lang = self.runtime_config.default_language or "vi"
+        return self.plex_client.get_movie_details(
+            rating_key=rating_key,
+            target_lang=target_lang,
+            source_lang="en",
+            use_cache=use_cache,
+        )
+
+    async def batch_upload_target(
+        self,
+        rating_keys: list[str],
+        use_cache: bool = True,
+    ) -> list[dict[str, Any]]:
+        """Batch process finding and uploading target subtitles for multiple items."""
+        results = []
+        for rk in rating_keys:
+            try:
+                res = await self.execute_manual_target_upload_for_media(
+                    rating_key=rk,
+                    use_cache=use_cache,
+                )
+                results.append({"rating_key": rk, "success": True, "result": res})
+            except Exception as e:
+                logger.error(f"Batch upload failed for {rk}: {e}")
+                results.append({"rating_key": rk, "success": False, "error": str(e)})
+            await asyncio.sleep(1)
+        return results
+
+    async def batch_translate(
+        self,
+        rating_keys: list[str],
+    ) -> list[dict[str, Any]]:
+        """Batch translate multiple items from English to target language."""
+        results = []
+        for rk in rating_keys:
+            try:
+                res = await self.execute_translate_for_media(rating_key=rk)
+                results.append({"rating_key": rk, "success": True, "result": res})
+            except Exception as e:
+                logger.error(f"Batch translation failed for {rk}: {e}")
+                results.append({"rating_key": rk, "success": False, "error": str(e)})
+            await asyncio.sleep(2)
+        return results

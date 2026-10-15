@@ -1,0 +1,1524 @@
+{% extends "base.html" %}
+
+{% block title %}Plex Library Manager - Plex Subtitle Service{% endblock %}
+{% block nav_library %}active{% endblock %}
+{% block page_title %}Plex Library Manager{% endblock %}
+{% block page_description %}Chủ động quản lý, tìm kiếm và dịch phụ đề cho toàn bộ Series và Movies trên Plex{% endblock %}
+
+{% block extra_styles %}
+<style>
+    /* Scoped Library Styles: Media Grid, Cards, and Overlay */
+    .library-grid.layout-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+        gap: 16px;
+        margin-bottom: 30px;
+    }
+    @media (min-width: 640px) {
+        .library-grid.layout-grid {
+            grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+            gap: 20px;
+        }
+    }
+
+    .library-grid.layout-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-bottom: 30px;
+    }
+
+    .media-card {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+        cursor: pointer;
+    }
+    .media-card:hover {
+        transform: translateY(-4px);
+        border-color: var(--border-default);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+
+    .media-poster {
+        aspect-ratio: 2 / 3;
+        width: 100%;
+        background: #141414;
+        position: relative;
+        overflow: hidden;
+    }
+    .media-poster img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    .media-poster-placeholder {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 36px;
+        background: #1e1e24;
+        color: var(--text-muted);
+    }
+    .media-poster-overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.65);
+        backdrop-filter: blur(2px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+    }
+    .media-card:hover .media-poster-overlay {
+        opacity: 1;
+    }
+    .poster-quick-btn {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        color: #fff;
+        transform: scale(0.9);
+        transition: transform 0.2s ease;
+    }
+    .media-card:hover .poster-quick-btn {
+        transform: scale(1);
+    }
+    .poster-quick-icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: var(--plex-gold);
+        color: #111113;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 14px rgba(229, 160, 13, 0.45);
+    }
+    .poster-quick-icon i {
+        margin: 0 !important;
+        padding: 0 !important;
+        line-height: 1 !important;
+        vertical-align: middle !important;
+    }
+    .poster-quick-icon svg {
+        display: block;
+        margin: auto;
+    }
+    .poster-quick-label {
+        font-size: 11px;
+        font-weight: 600;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+    }
+
+    /* Subtitle indicators on poster */
+    .sub-indicator {
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        z-index: 2;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 3px 6px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 600;
+        backdrop-filter: blur(4px);
+        box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+    }
+    .sub-indicator.has-vi {
+        background: rgba(16, 185, 129, 0.9);
+        color: #fff;
+    }
+    .sub-indicator.can-trans {
+        background: rgba(245, 158, 11, 0.9);
+        color: #111;
+    }
+    .sub-indicator.missing {
+        background: rgba(239, 68, 68, 0.85);
+        color: #fff;
+    }
+    .sub-indicator-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        display: inline-block;
+    }
+    .sub-indicator-dot.dot-can-trans { background: #f59e0b; }
+    .sub-indicator-dot.dot-missing { background: #ef4444; }
+
+    .media-badge-type {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        z-index: 2;
+        background: rgba(0, 0, 0, 0.7);
+        color: var(--text-primary);
+        font-size: 10px;
+        font-weight: 600;
+        padding: 2px 6px;
+        border-radius: 4px;
+        backdrop-filter: blur(4px);
+    }
+
+    /* List layout mode specifics */
+    .library-grid.layout-list .media-card {
+        flex-direction: row;
+        align-items: center;
+        padding: 12px 18px;
+        gap: 16px;
+    }
+    .library-grid.layout-list .media-card:hover {
+        transform: translateX(4px);
+    }
+    .library-grid.layout-list .media-poster {
+        width: 60px;
+        height: 90px;
+        min-width: 60px;
+        max-width: 60px;
+        border-radius: 4px;
+    }
+    .library-grid.layout-list .media-poster-overlay {
+        display: none;
+    }
+    .library-grid.layout-list .media-poster .sub-indicator,
+    .library-grid.layout-list .media-poster .media-badge-type {
+        display: none;
+    }
+
+    /* Modal / Drawer Overlay */
+    .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.75);
+        backdrop-filter: blur(4px);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        padding: 16px;
+    }
+    .modal-overlay.active {
+        display: flex;
+    }
+    #taskModal.modal-overlay {
+        z-index: 1200;
+    }
+    #showModal.modal-overlay {
+        justify-content: flex-end;
+        padding: 0;
+    }
+    #showModal .drawer-content-box {
+        animation: drawerSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes drawerSlideIn {
+        from { transform: translateX(100%); }
+        to { transform: translateX(0); }
+    }
+
+    /* Button Loading & Spinner compat */
+    .btn-loading {
+        opacity: 0.75;
+        cursor: not-allowed !important;
+        pointer-events: none;
+    }
+    .spinner-icon {
+        display: inline-block;
+        vertical-align: middle;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Section selector header & Toolbar -->
+<div class="library-toolbar bg-bg-surface border border-border-subtle rounded-2xl p-5 mb-6 flex flex-col gap-3.5 shadow-sm">
+    <!-- Top Row: Library Navigation (Left) + View Mode / Actions (Right) -->
+    <div class="toolbar-header-row flex items-center justify-between gap-4 flex-wrap">
+        <div class="flex flex-wrap items-center gap-2 min-h-[38px]" id="sectionsContainer">
+            <span class="text-xs font-semibold text-text-secondary uppercase tracking-wider mr-1">Thư viện:</span>
+            <span class="text-text-muted text-xs flex items-center gap-2" id="loadingSectionsText">
+                <span class="loading loading-spinner loading-xs text-primary"></span>
+                <span>Đang tải danh sách thư viện Plex...</span>
+            </span>
+        </div>
+
+        <div class="toolbar-view-actions flex items-center gap-2.5 shrink-0">
+            <div class="join" id="layoutToggleGroup">
+                <button type="button" class="btn btn-sm join-item btn-primary" id="btnViewGrid" title="Chế độ Lưới" onclick="setLayoutMode('grid')">
+                    <i class="fa-solid fa-grip mr-1"></i>
+                    <span>Lưới</span>
+                </button>
+                <button type="button" class="btn btn-sm join-item btn-ghost bg-bg-input" id="btnViewList" title="Chế độ Danh sách" onclick="setLayoutMode('list')">
+                    <i class="fa-solid fa-list mr-1"></i>
+                    <span>Danh sách</span>
+                </button>
+            </div>
+
+            <button type="button" class="btn btn-sm btn-secondary gap-1.5" id="btnRefreshSection" onclick="refreshLibrary(true)" title="Làm mới danh sách (Xóa cache)">
+                <i class="fa-solid fa-rotate"></i>
+                <span>Làm mới / Refresh</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Bottom Row: Search Box + Filter Pills Group + Auto-Fallback Translation Toggle -->
+    <div class="search-filter-row flex items-center gap-3 flex-wrap">
+        <div class="relative w-72 sm:w-80 shrink-0">
+            <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-text-muted">
+                <i class="fa-solid fa-magnifying-glass"></i>
+            </span>
+            <input type="text" id="librarySearchInput" class="input input-sm input-bordered w-full pl-9 bg-bg-input border-border-subtle text-text-primary focus:border-primary focus:outline-none" placeholder="Tìm kiếm phim, series..." onkeydown="handleSearchKey(event)">
+        </div>
+
+        <!-- Subtitle status filter bar -->
+        <div class="join shrink-0 filter-pills-group" id="filterPillsGroup">
+            <button type="button" class="btn btn-sm join-item sub-filter-btn filter-pill btn-primary active" id="filterMissingVi" data-filter="missing_vi" onclick="setSubtitleFilter('missing_vi')">
+                <span class="w-2 h-2 rounded-full bg-error inline-block"></span>
+                <span>Thiếu Vietsub</span>
+                <span class="badge badge-xs badge-error ml-1 font-mono hidden" id="countMissingVi">0</span>
+            </button>
+            <button type="button" class="btn btn-sm join-item sub-filter-btn filter-pill btn-ghost bg-bg-input" id="filterHasVi" data-filter="has_vi" onclick="setSubtitleFilter('has_vi')">
+                <span class="w-2 h-2 rounded-full bg-success inline-block"></span>
+                <span>Đã có Vietsub</span>
+                <span class="badge badge-xs badge-success ml-1 font-mono hidden" id="countHasVi">0</span>
+            </button>
+            <button type="button" class="btn btn-sm join-item sub-filter-btn filter-pill btn-ghost bg-bg-input" id="filterCanTranslate" data-filter="can_translate" onclick="setSubtitleFilter('can_translate')">
+                <span class="w-2 h-2 rounded-full bg-warning inline-block"></span>
+                <span>Có thể dịch AI</span>
+                <span class="badge badge-xs badge-warning ml-1 font-mono hidden" id="countCanTranslate">0</span>
+            </button>
+            <button type="button" class="btn btn-sm join-item sub-filter-btn filter-pill btn-ghost bg-bg-input" id="filterAll" data-filter="all" onclick="setSubtitleFilter('all')">
+                <span>Tất cả</span>
+                <span class="badge badge-xs badge-neutral ml-1 font-mono hidden" id="countAll">0</span>
+            </button>
+        </div>
+
+        <!-- Auto-Fallback Translation Toggle -->
+        <div class="flex items-center ml-auto">
+            <label class="label cursor-pointer gap-2.5 py-1 px-3 rounded-lg bg-bg-input border border-border-subtle hover:border-border-default transition-all shadow-sm" title="Tự động dịch sang tiếng Việt nếu tìm kiếm sub không có kết quả">
+                <span class="label-text text-xs text-text-secondary font-medium">Tự động dịch nếu không tìm thấy sub</span>
+                <input type="checkbox" id="autoFallbackTranslateToggle" class="toggle toggle-warning toggle-sm auto-fallback-toggle-input" onchange="toggleAutoFallback(this.checked)">
+            </label>
+        </div>
+    </div>
+</div>
+
+<!-- Grid items container -->
+<div class="library-grid layout-grid" id="itemsGrid">
+    <div class="col-span-full flex flex-col items-center justify-center py-20 gap-3 text-text-muted">
+        <span class="loading loading-spinner loading-md text-primary"></span>
+        <span class="text-sm">Đang khởi tạo thư viện...</span>
+    </div>
+</div>
+
+<!-- Pagination / load more -->
+<div id="paginationControls" class="text-center my-8" style="display: none;">
+    <button class="btn btn-secondary px-8 font-medium shadow-md" id="loadMoreBtn" onclick="loadMoreItems()">Tải thêm</button>
+</div>
+
+<!-- Modal: Show Details & Tree (Drawer) -->
+<div class="modal-overlay" id="showModal">
+    <div class="drawer-content-box bg-bg-surface border-l border-border-subtle w-full max-w-3xl h-screen flex flex-col shadow-2xl overflow-hidden ml-auto">
+        <div class="px-6 py-4 border-b border-border-subtle flex items-center justify-between bg-bg-surface sticky top-0 z-20">
+            <div class="flex items-center gap-3 overflow-hidden">
+                <i class="fa-solid fa-tv text-primary text-xl"></i>
+                <h3 class="text-lg font-bold text-text-primary truncate m-0" id="showModalTitle">Chi tiết Series</h3>
+            </div>
+            <div class="flex items-center gap-3">
+                <label class="label cursor-pointer gap-2 py-1 px-2.5 rounded-lg bg-bg-input border border-border-subtle hover:border-border-default transition-all hidden sm:flex" title="Tự động dịch sang tiếng Việt nếu tìm kiếm sub không có kết quả">
+                    <span class="label-text text-xs text-text-secondary">Tự động dịch</span>
+                    <input type="checkbox" class="toggle toggle-warning toggle-xs auto-fallback-toggle-input" onchange="toggleAutoFallback(this.checked)">
+                </label>
+                <button class="btn btn-sm btn-circle btn-ghost text-text-muted hover:text-text-primary text-lg" onclick="closeShowModal()" aria-label="Đóng">&times;</button>
+            </div>
+        </div>
+        <div class="p-6 overflow-y-auto flex-1 flex flex-col gap-4 bg-bg-app/40" id="showModalBody">
+            <div class="flex flex-col items-center justify-center py-16 gap-3 text-text-muted">
+                <span class="loading loading-spinner loading-lg text-primary"></span>
+                <span class="text-sm">Đang tải cấu trúc Series...</span>
+            </div>
+        </div>
+        <div class="px-6 py-3 border-t border-border-subtle flex justify-end gap-3 bg-bg-surface sticky bottom-0 z-20">
+            <button class="btn btn-secondary btn-sm" onclick="closeShowModal()">Đóng</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Movie Details -->
+<div class="modal-overlay" id="movieModal">
+    <div class="bg-bg-surface border border-border-subtle rounded-2xl w-full max-w-lg shadow-2xl flex flex-col overflow-hidden m-4">
+        <div class="px-6 py-4 border-b border-border-subtle flex items-center justify-between bg-bg-surface">
+            <div class="flex items-center gap-3 overflow-hidden">
+                <i class="fa-solid fa-film text-primary text-xl"></i>
+                <h3 class="text-lg font-bold text-text-primary truncate m-0" id="movieModalTitle">Chi tiết Phim</h3>
+            </div>
+            <button class="btn btn-sm btn-circle btn-ghost text-text-muted hover:text-text-primary text-lg" onclick="closeMovieModal()" aria-label="Đóng">&times;</button>
+        </div>
+        <div class="p-6 flex flex-col gap-4" id="movieModalBody">
+            <div class="flex flex-col items-center justify-center py-12 gap-3 text-text-muted">
+                <span class="loading loading-spinner loading-md text-primary"></span>
+                <span class="text-sm">Đang tải...</span>
+            </div>
+        </div>
+        <div class="px-6 py-3 border-t border-border-subtle flex justify-end gap-3 bg-bg-surface">
+            <button class="btn btn-secondary btn-sm" onclick="closeMovieModal()">Đóng</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Task Runner Progress -->
+<div class="modal-overlay" id="taskModal">
+    <div class="bg-bg-surface border border-border-subtle rounded-2xl w-full max-w-xl shadow-2xl flex flex-col overflow-hidden m-4">
+        <div class="px-6 py-4 border-b border-border-subtle flex items-center justify-between bg-bg-surface">
+            <h3 class="text-base font-bold text-text-primary m-0" id="taskModalTitle">Tiến trình xử lý phụ đề</h3>
+        </div>
+        <div class="p-6 flex flex-col gap-4">
+            <div class="flex flex-col gap-3">
+                <div class="flex justify-between items-center text-sm">
+                    <span id="taskStatusLabel" class="font-medium text-text-primary">Đang xử lý...</span>
+                    <strong id="taskProgressPercent" class="text-primary font-mono font-bold">0%</strong>
+                </div>
+                <progress class="progress progress-warning w-full h-2.5 bg-bg-input" id="taskProgressBar" value="0" max="100"></progress>
+                <div class="text-xs text-text-secondary truncate min-h-[16px]" id="taskCurrentItem"></div>
+                <div class="bg-black/85 border border-border-subtle rounded-xl p-3.5 font-mono text-xs text-zinc-300 max-h-52 overflow-y-auto whitespace-pre-wrap leading-relaxed shadow-inner" id="taskLogsContainer">Khởi tạo tác vụ...</div>
+
+                <!-- Instant Fallback Button Container -->
+                <div id="instantFallbackContainer" style="display: none;" class="mt-2">
+                    <button type="button" class="btn btn-warning w-full text-black font-semibold gap-2 shadow-lg hover:brightness-105" id="btnInstantFallbackTranslate" onclick="triggerInstantFallbackTranslation()">
+                        <svg viewBox="0 0 24 24" class="w-5 h-5 fill-current"><path d="M12.87 15.07l-2.54-2.51.03-.03c1.74-1.94 2.98-4.17 3.71-6.53H17V4h-7V2H8v2H1v1.99h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-1.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z"/></svg>
+                        <span>Không tìm thấy sub — Dịch phụ đề ngay</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="px-6 py-3 border-t border-border-subtle flex justify-end gap-3 bg-bg-surface">
+            <button class="btn btn-secondary btn-sm" id="taskCloseBtn" onclick="closeTaskModal()" disabled>Đóng</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const ICONS = {
+        tv: `<i class="fa-solid fa-tv mr-1.5 align-middle"></i>`,
+        movie: `<i class="fa-solid fa-film mr-1.5 align-middle"></i>`,
+        tvLarge: `<i class="fa-solid fa-tv text-4xl text-text-muted/40"></i>`,
+        movieLarge: `<i class="fa-solid fa-film text-4xl text-text-muted/40"></i>`,
+        search: `<i class="fa-solid fa-magnifying-glass mr-1.5 align-middle"></i>`,
+        translate: `<i class="fa-solid fa-language mr-1.5 align-middle"></i>`,
+        check: `<i class="fa-solid fa-check mr-1 text-success align-middle"></i>`,
+        cross: `<i class="fa-solid fa-xmark mr-1 text-error align-middle"></i>`,
+        sparkles: `<i class="fa-solid fa-wand-magic-sparkles mr-1 text-warning align-middle"></i>`,
+        refresh: `<i class="fa-solid fa-rotate mr-1.5 align-middle"></i>`,
+        spinner: `<i class="fa-solid fa-circle-notch fa-spin mr-1.5 align-middle"></i>`,
+    };
+
+    function updateFilterStats(stats) {
+        if (!stats) return;
+        const countMissing = document.getElementById("countMissingVi");
+        const countHas = document.getElementById("countHasVi");
+        const countCanTrans = document.getElementById("countCanTranslate");
+        const countAll = document.getElementById("countAll");
+
+        if (countMissing && stats.missing_vi !== undefined) {
+            countMissing.textContent = stats.missing_vi;
+            countMissing.classList.remove("hidden");
+        }
+        if (countHas && stats.has_vi !== undefined) {
+            countHas.textContent = stats.has_vi;
+            countHas.classList.remove("hidden");
+        }
+        if (countCanTrans && stats.can_translate !== undefined) {
+            countCanTrans.textContent = stats.can_translate;
+            countCanTrans.classList.remove("hidden");
+        }
+        if (countAll && stats.total !== undefined) {
+            countAll.textContent = stats.total;
+            countAll.classList.remove("hidden");
+        }
+    }
+
+    let activeSectionKey = null;
+    let currentOffset = 0;
+    const pageSize = 40;
+    let totalItems = 0;
+    let activeTaskId = null;
+    let currentTaskType = null;
+    let taskPollInterval = null;
+    let currentLayoutMode = localStorage.getItem("plex_sub_layout_mode") || "grid";
+    let cachedItems = [];
+    let currentSubtitleFilter = "missing_vi";
+    let currentShowTreeData = null;
+    let currentShowRatingKey = null;
+    let showTreeFilter = "missing_vi";
+    let activeSearchButton = null;
+    let activeSearchButtonHtml = null;
+    let lastNotFoundRatingKeys = [];
+    let activeBatchKeys = [];
+
+    const AUTO_FALLBACK_KEY = "plex_auto_fallback_translate";
+
+    // ── Global SessionCache integration & ClientCache fallback ──
+    const SessionCache = window.SessionCache || {
+        get(key) {
+            try {
+                const raw = sessionStorage.getItem('psc_' + key);
+                if (!raw) return null;
+                const item = JSON.parse(raw);
+                if (item.exp && Date.now() > item.exp) {
+                    sessionStorage.removeItem('psc_' + key);
+                    return null;
+                }
+                return item.val;
+            } catch (e) {
+                return null;
+            }
+        },
+        set(key, value, ttlSeconds = 300) {
+            try {
+                const exp = ttlSeconds ? Date.now() + (ttlSeconds * 1000) : null;
+                sessionStorage.setItem('psc_' + key, JSON.stringify({ val: value, exp }));
+            } catch (e) {}
+        },
+        remove(key) {
+            try { sessionStorage.removeItem('psc_' + key); } catch (e) {}
+        },
+        clear(prefix = "") {
+            try {
+                const fullPrefix = 'psc_' + (prefix || '');
+                const toRemove = [];
+                for (let i = 0; i < sessionStorage.length; i++) {
+                    const k = sessionStorage.key(i);
+                    if (k && k.startsWith(fullPrefix)) toRemove.push(k);
+                }
+                toRemove.forEach(k => sessionStorage.removeItem(k));
+            } catch (e) {}
+        }
+    };
+    if (!window.SessionCache) window.SessionCache = SessionCache;
+
+    // Backward-compatible ClientCache wrapper (5-minute TTL)
+    const ClientCache = {
+        TTL_MS: 5 * 60 * 1000,
+        memory: new Map(),
+
+        get(key) {
+            return SessionCache.get(key);
+        },
+
+        set(key, data) {
+            SessionCache.set(key, data, 300);
+        },
+
+        clear() {
+            SessionCache.clear();
+        }
+    };
+
+    function isAutoFallbackEnabled() {
+        return sessionStorage.getItem(AUTO_FALLBACK_KEY) === "true";
+    }
+
+    function toggleAutoFallback(enabled) {
+        sessionStorage.setItem(AUTO_FALLBACK_KEY, enabled ? "true" : "false");
+        document.querySelectorAll(".auto-fallback-toggle-input").forEach(el => {
+            el.checked = enabled;
+        });
+        showToast(
+            enabled 
+                ? "Đã bật: Tự động dịch phụ đề AI nếu không tìm thấy sub."
+                : "Đã tắt: Sẽ hiển thị nút bấm dịch phụ đề ngay khi không tìm thấy sub.",
+            "info"
+        );
+    }
+
+    function initAutoFallbackUI() {
+        const isEnabled = isAutoFallbackEnabled();
+        document.querySelectorAll(".auto-fallback-toggle-input").forEach(el => {
+            el.checked = isEnabled;
+        });
+    }
+
+    function setButtonLoading(btn, loadingText = "Đang tìm sub...") {
+        if (!btn) return;
+        resetActiveSearchButton();
+        activeSearchButton = btn;
+        activeSearchButtonHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.classList.add("btn-loading");
+        btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin mr-1.5 align-middle"></i><span>${escapeHtml(loadingText)}</span>`;
+    }
+    function resetActiveSearchButton() {
+        if (activeSearchButton) {
+            activeSearchButton.disabled = false;
+            activeSearchButton.classList.remove("btn-loading");
+            if (activeSearchButtonHtml) {
+                activeSearchButton.innerHTML = activeSearchButtonHtml;
+            }
+            activeSearchButton = null;
+            activeSearchButtonHtml = null;
+        }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        setLayoutMode(currentLayoutMode, false);
+        applySubtitleFilterUI();
+        initAutoFallbackUI();
+        loadSections();
+    });
+
+    function setSubtitleFilter(filter) {
+        currentSubtitleFilter = filter;
+        applySubtitleFilterUI();
+        currentOffset = 0;
+        cachedItems = [];
+        loadCurrentSectionItems();
+    }
+
+    function applySubtitleFilterUI() {
+        document.querySelectorAll("#filterPillsGroup .sub-filter-btn").forEach(btn => {
+            const isActive = btn.dataset.filter === currentSubtitleFilter;
+            if (isActive) {
+                btn.classList.add("btn-primary");
+                btn.classList.remove("btn-ghost", "bg-bg-input");
+            } else {
+                btn.classList.remove("btn-primary");
+                btn.classList.add("btn-ghost", "bg-bg-input");
+            }
+        });
+    }
+    const setFilter = setSubtitleFilter;
+
+    function setLayoutMode(mode, triggerRender = true) {
+        currentLayoutMode = (mode === "list") ? "list" : "grid";
+        localStorage.setItem("plex_sub_layout_mode", currentLayoutMode);
+
+        const grid = document.getElementById("itemsGrid");
+        const btnGrid = document.getElementById("btnViewGrid");
+        const btnList = document.getElementById("btnViewList");
+
+        if (grid) {
+            grid.classList.toggle("layout-grid", currentLayoutMode === "grid");
+            grid.classList.toggle("layout-list", currentLayoutMode === "list");
+        }
+
+        if (btnGrid) {
+            btnGrid.classList.toggle("btn-primary", currentLayoutMode === "grid");
+            btnGrid.classList.toggle("btn-ghost", currentLayoutMode !== "grid");
+            btnGrid.classList.toggle("bg-bg-input", currentLayoutMode !== "grid");
+        }
+        if (btnList) {
+            btnList.classList.toggle("btn-primary", currentLayoutMode === "list");
+            btnList.classList.toggle("btn-ghost", currentLayoutMode !== "list");
+            btnList.classList.toggle("bg-bg-input", currentLayoutMode !== "list");
+        }
+
+        if (triggerRender && cachedItems && cachedItems.length > 0) {
+            renderItems(cachedItems, false);
+        }
+    }
+
+    function escapeHtml(str) {
+        if (!str) return "";
+        return String(str)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    function renderSubtitleIndicator(item, inline = false) {
+        if (inline) {
+            if (item.has_vi) {
+                return `
+                    <span class="badge badge-success badge-sm gap-1 font-medium" title="Đã có Vietsub">
+                        <svg class="w-3 h-3 fill-none stroke-current" stroke-width="3" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                        <span>Vietsub</span>
+                    </span>
+                `.trim();
+            }
+            if (item.can_translate) {
+                return `
+                    <span class="badge badge-warning badge-sm gap-1 font-medium" title="Có thể dịch từ Engsub">
+                        <span class="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block"></span>
+                        <span>Dịch AI</span>
+                    </span>
+                `.trim();
+            }
+            return `
+                <span class="badge badge-error badge-sm gap-1 font-medium" title="Chưa có Vietsub">
+                    ${ICONS.cross} <span>Chưa có sub</span>
+                </span>
+            `.trim();
+        }
+
+        // Poster badge
+        if (item.has_vi) {
+            return `
+                <span class="sub-indicator has-vi" title="Đã có Vietsub">
+                    <svg class="w-3 h-3 fill-none stroke-current" stroke-width="3" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                </span>
+            `.trim();
+        }
+        if (item.can_translate) {
+            return `
+                <span class="sub-indicator can-trans" title="Có thể dịch từ Engsub">
+                    <span class="sub-indicator-dot dot-can-trans"></span>
+                    <span class="text-[9px] font-bold tracking-wider">EN</span>
+                </span>
+            `.trim();
+        }
+        return `
+            <span class="sub-indicator missing" title="Chưa có Vietsub">
+                <span class="sub-indicator-dot dot-missing"></span>
+            </span>
+        `.trim();
+    }
+
+    function getItemStatusBadge(item) {
+        return renderSubtitleIndicator(item, true);
+    }
+
+    function renderItems(items, append = false) {
+        const grid = document.getElementById("itemsGrid");
+        if (!grid) return;
+
+        if (!append) {
+            grid.innerHTML = "";
+        }
+
+        items.forEach(item => {
+            const card = document.createElement("div");
+            card.className = "media-card";
+            const isShow = item.type === "show";
+            const thumbUrl = item.thumb ? `/api/sync/thumb/${item.rating_key}` : "";
+            const subIndicator = renderSubtitleIndicator(item, false);
+            const subIndicatorInline = renderSubtitleIndicator(item, true);
+            const safeTitle = escapeHtml(item.title);
+            const summaryText = item.summary ? escapeHtml(item.summary) : '<span class="text-text-muted italic">Chưa có mô tả tóm tắt</span>';
+
+            card.onclick = (e) => {
+                if (isShow) {
+                    openShowTree(item.rating_key);
+                } else {
+                    const btn = card.querySelector(".media-actions button");
+                    startBatchAction([item.rating_key], 'upload_target', btn);
+                }
+            };
+
+            if (currentLayoutMode === "list") {
+                card.innerHTML = `
+                    <div class="media-poster">
+                        ${thumbUrl ? `<img src="${thumbUrl}" alt="${safeTitle}" loading="lazy">` : `<span class="media-poster-placeholder flex items-center justify-center">${isShow ? ICONS.tvLarge : ICONS.movieLarge}</span>`}
+                    </div>
+                    <div class="p-0 flex flex-col flex-1 min-w-0">
+                        <h4 class="text-sm font-semibold text-text-primary truncate m-0 mb-1" title="${safeTitle}">${safeTitle}</h4>
+                        <div class="text-xs text-text-secondary flex items-center gap-2 flex-wrap mb-2">
+                            <span class="badge badge-neutral badge-sm">${isShow ? 'Series' : 'Phim lẻ'}</span>
+                            <span>•</span>
+                            <span>${item.year || 'N/A'}</span>
+                            <span>•</span>
+                            ${subIndicatorInline}
+                            ${item.genres && item.genres.length ? `<span>•</span><span class="truncate">${escapeHtml(item.genres.slice(0, 2).join(', '))}</span>` : ''}
+                        </div>
+                        <p class="text-xs text-text-muted line-clamp-2 m-0">${summaryText}</p>
+                    </div>
+                    <div class="shrink-0 flex items-center gap-2">
+                        <div class="media-actions flex gap-2">
+                            ${isShow 
+                                 ? `<button class="btn btn-sm btn-primary gap-1.5" onclick="event.stopPropagation(); openShowTree('${item.rating_key}')">${ICONS.tv} Quản lý Series</button>`
+                                 : `<button class="btn btn-sm btn-primary gap-1.5" onclick="event.stopPropagation(); startBatchAction(['${item.rating_key}'], 'upload_target', this)">${ICONS.search} Tìm sub</button>`
+                            }
+                    </div>
+                `;
+            } else {
+                card.innerHTML = `
+                    <div class="media-poster">
+                        ${thumbUrl ? `<img src="${thumbUrl}" alt="${safeTitle}" loading="lazy">` : `<span class="media-poster-placeholder flex items-center justify-center">${isShow ? ICONS.tvLarge : ICONS.movieLarge}</span>`}
+                        ${subIndicator}
+                        <span class="media-badge-type">${isShow ? 'Series' : 'Phim lẻ'}</span>
+                        <div class="media-poster-overlay">
+                            <div class="poster-quick-btn">
+                                <span class="poster-quick-icon">${isShow ? '<svg viewBox="0 0 24 24" style="width:22px;height:22px;fill:currentColor;display:block;"><path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 1.99-.9 1.99-2L23 5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z"/></svg>' : '<svg viewBox="0 0 24 24" style="width:22px;height:22px;fill:currentColor;display:block;"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>'}</span>
+                                <span class="poster-quick-label">${isShow ? 'Mở Series' : 'Tìm sub ngay'}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="p-3 flex flex-col flex-1">
+                        <h4 class="text-sm font-semibold text-text-primary truncate m-0 mb-1" title="${safeTitle}">${safeTitle}</h4>
+                        <div class="text-xs text-text-secondary flex items-center justify-between gap-1 mb-3">
+                            <span>${item.year || 'N/A'}</span>
+                            ${item.genres && item.genres.length ? `<span class="truncate text-text-muted">${escapeHtml(item.genres[0])}</span>` : ''}
+                        </div>
+                        <div class="media-actions mt-auto flex gap-1">
+                            ${isShow 
+                                ? `<button class="btn btn-sm btn-primary flex-1 gap-1.5" onclick="event.stopPropagation(); openShowTree('${item.rating_key}')">${ICONS.tv} Quản lý Series</button>`
+                                : `<button class="btn btn-sm btn-primary flex-1 gap-1.5" onclick="event.stopPropagation(); startBatchAction(['${item.rating_key}'], 'upload_target', this)">${ICONS.search} Tìm sub</button>`
+                            }
+                    </div>
+                `;
+            }
+
+            grid.appendChild(card);
+        });
+    }
+
+    async function loadSections(bypassCache = false) {
+        const container = document.getElementById("sectionsContainer");
+        const cacheKey = "library_sections";
+        let sections = null;
+
+        if (!bypassCache) {
+            sections = SessionCache.get(cacheKey);
+        }
+
+        if (!sections) {
+            try {
+                const res = await fetch("/api/library/sections");
+                const data = await res.json();
+                sections = data.sections || [];
+                SessionCache.set(cacheKey, sections, 300);
+            } catch (err) {
+                console.error("Failed to load sections:", err);
+                container.innerHTML = `<span class="text-error text-xs">Lỗi kết nối thư viện Plex</span>`;
+                return;
+            }
+        }
+
+        if (sections.length === 0) {
+            container.innerHTML = `<span class="text-text-muted text-xs">Không tìm thấy thư viện nào trên máy chủ Plex.</span>`;
+            return;
+        }
+
+        container.innerHTML = `<span class="text-xs font-semibold text-text-secondary uppercase tracking-wider mr-1">Thư viện:</span>`;
+        sections.forEach((sec, idx) => {
+            const btn = document.createElement("button");
+            btn.className = `btn btn-sm ${idx === 0 ? "btn-primary" : "btn-ghost bg-bg-input border-border-subtle"} gap-1.5 section-btn`;
+            btn.dataset.key = sec.key;
+            btn.innerHTML = `
+                <svg viewBox="0 0 24 24" class="w-4 h-4 fill-current"><path d="${sec.type === 'show' ? 'M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 1.99-.9 1.99-2L23 5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z' : 'M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z'}"/></svg>
+                <span>${escapeHtml(sec.title)}</span>
+            `;
+            btn.onclick = () => selectSection(sec.key);
+            container.appendChild(btn);
+        });
+
+        // Select first section by default
+        selectSection(sections[0].key);
+    }
+
+    function selectSection(key) {
+        activeSectionKey = key;
+        document.querySelectorAll(".section-btn").forEach(btn => {
+            const isActive = btn.dataset.key === String(key);
+            btn.classList.toggle("btn-primary", isActive);
+            btn.classList.toggle("btn-ghost", !isActive);
+            btn.classList.toggle("bg-bg-input", !isActive);
+        });
+        currentOffset = 0;
+        cachedItems = [];
+        loadCurrentSectionItems();
+    }
+
+    async function loadCurrentSectionItems(append = false, bypassCache = false) {
+        if (!activeSectionKey) return;
+        const grid = document.getElementById("itemsGrid");
+        const query = document.getElementById("librarySearchInput").value.trim();
+        const cacheKey = `sec_${activeSectionKey}_off${currentOffset}_lim${pageSize}_q${encodeURIComponent(query)}_f${currentSubtitleFilter}`;
+
+        if (!append && !bypassCache) {
+            const cachedData = SessionCache.get(cacheKey);
+            if (cachedData) {
+                if (cachedData.stats) {
+                    updateFilterStats(cachedData.stats);
+                }
+                totalItems = cachedData.total_size || 0;
+                const items = cachedData.items || [];
+                if (items.length === 0) {
+                    grid.innerHTML = `<div class="col-span-full text-center py-16 text-text-muted text-sm">Không có mục nào trong thư viện này.</div>`;
+                    document.getElementById("paginationControls").style.display = "none";
+                    return;
+                }
+                renderItems(items, false);
+                const pagination = document.getElementById("paginationControls");
+                if (currentOffset + items.length < totalItems) {
+                    pagination.style.display = "block";
+                } else {
+                    pagination.style.display = "none";
+                }
+                return;
+            }
+        }
+
+        const loadMoreBtn = document.getElementById("loadMoreBtn");
+        if (append && loadMoreBtn) {
+            loadMoreBtn.disabled = true;
+            loadMoreBtn.classList.add("btn-loading");
+            loadMoreBtn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin mr-2 align-middle"></i><span>Đang tải thêm phim...</span>`;
+        }
+        if (!append) {
+            cachedItems = [];
+            grid.innerHTML = `
+                <div class="col-span-full flex flex-col items-center justify-center py-16 gap-3 text-text-muted">
+                    <i class="fa-solid fa-circle-notch fa-spin text-3xl text-primary mb-2"></i>
+                    <span class="text-sm">Đang tải danh mục phim...</span>
+                </div>
+            `;
+        }
+
+        try {
+            const url = `/api/library/sections/${activeSectionKey}/items?offset=${currentOffset}&limit=${pageSize}&query=${encodeURIComponent(query)}&filter=${encodeURIComponent(currentSubtitleFilter)}`;
+            const res = await fetch(url);
+            const data = await res.json();
+
+            SessionCache.set(cacheKey, data, 300);
+
+            totalItems = data.total_size || 0;
+            const items = data.items || [];
+            if (data.stats) {
+                updateFilterStats(data.stats);
+            }
+            if (!append && items.length === 0) {
+                cachedItems = [];
+                grid.innerHTML = `<div class="col-span-full text-center py-16 text-text-muted text-sm">Không có mục nào trong thư viện này.</div>`;
+                document.getElementById("paginationControls").style.display = "none";
+                return;
+            }
+
+            if (append) {
+                cachedItems = cachedItems.concat(items);
+            } else {
+                cachedItems = items;
+            }
+
+            renderItems(items, append);
+
+            const pagination = document.getElementById("paginationControls");
+            if (currentOffset + items.length < totalItems) {
+                pagination.style.display = "block";
+            } else {
+                pagination.style.display = "none";
+            }
+
+        } catch (err) {
+            console.error("Failed to load section items:", err);
+            showToast(`Lỗi tải danh mục: ${err.message}`, "error");
+        } finally {
+            if (loadMoreBtn) {
+                loadMoreBtn.disabled = false;
+                loadMoreBtn.classList.remove("btn-loading");
+                loadMoreBtn.innerHTML = `<span>Tải thêm</span>`;
+            }
+        }
+    }
+
+    function refreshLibrary(clearCache = true) {
+        if (clearCache) {
+            ClientCache.clear();
+            SessionCache.clear();
+            showToast("Đã xóa bộ nhớ đệm và làm mới dữ liệu.", "info");
+        }
+        currentOffset = 0;
+        cachedItems = [];
+        loadCurrentSectionItems(false, true);
+    }
+
+    function loadMoreItems() {
+        const loadMoreBtn = document.getElementById("loadMoreBtn");
+        if (loadMoreBtn && loadMoreBtn.disabled) return;
+        currentOffset += pageSize;
+        loadCurrentSectionItems(true);
+    }
+
+    function handleSearchKey(event) {
+        if (event.key === "Enter") {
+            currentOffset = 0;
+            cachedItems = [];
+            loadCurrentSectionItems();
+        }
+    }
+
+    /* Modal / Drawer: Show Tree */
+    async function openShowTree(ratingKey, forceRefresh = false) {
+        const modal = document.getElementById("showModal");
+        const body = document.getElementById("showModalBody");
+        const title = document.getElementById("showModalTitle");
+
+        currentShowRatingKey = ratingKey;
+        showTreeFilter = "missing_vi";
+
+        modal.classList.add("active");
+
+        const cacheKey = 'show_tree_' + ratingKey;
+        const cached = (!forceRefresh) ? SessionCache.get(cacheKey) : null;
+
+        if (cached) {
+            currentShowTreeData = cached;
+            title.innerText = `${cached.title} (${cached.year || 'Series'})`;
+            renderShowTreeContent();
+            // Background silent refresh
+            fetchShowTree(ratingKey, false);
+            return;
+        }
+
+        body.innerHTML = `
+            <div class="flex flex-col items-center justify-center py-16 gap-3 text-text-muted">
+                <span class="loading loading-spinner loading-lg text-primary"></span>
+                <span class="text-sm">Đang quét cấu trúc Series & trạng thái phụ đề từng tập...</span>
+            </div>
+        `;
+
+        await fetchShowTree(ratingKey, true);
+    }
+
+    async function fetchShowTree(ratingKey, updateLoadingOnFail = false) {
+        try {
+            const res = await fetch(`/api/library/shows/${ratingKey}/tree`);
+            const data = await res.json();
+            currentShowTreeData = data;
+            SessionCache.set('show_tree_' + ratingKey, data, 300);
+
+            if (currentShowRatingKey === ratingKey) {
+                const title = document.getElementById("showModalTitle");
+                if (title) title.innerText = `${data.title} (${data.year || 'Series'})`;
+                renderShowTreeContent();
+            }
+        } catch (err) {
+            console.error("Failed to load show tree:", err);
+            if (updateLoadingOnFail) {
+                const body = document.getElementById("showModalBody");
+                if (body) {
+                    body.innerHTML = `<div class="alert alert-error text-sm">Lỗi khi tải cấu trúc series: ${escapeHtml(err.message)}</div>`;
+                }
+            }
+        }
+    }
+
+    function setShowTreeFilter(filter) {
+        showTreeFilter = filter;
+        renderShowTreeContent();
+    }
+
+    function toggleShowTreeFilterAll() {
+        if (showTreeFilter === "missing_vi") {
+            setShowTreeFilter("all");
+        } else {
+            setShowTreeFilter("missing_vi");
+        }
+    }
+    const toggleShowAllEpisodes = toggleShowTreeFilterAll;
+
+    function renderShowTreeContent() {
+        if (!currentShowTreeData) return;
+        const data = currentShowTreeData;
+        const body = document.getElementById("showModalBody");
+        const ratingKey = currentShowRatingKey;
+
+        const allHaveVi = (data.missing_vi_count === 0);
+        const hasHiddenVi = (data.vi_count > 0 && showTreeFilter === 'missing_vi');
+
+        let noticeHtml = '';
+        if (allHaveVi) {
+            noticeHtml = `
+                <div class="alert alert-success bg-success/15 border-success/30 text-success text-xs py-2 px-3 rounded-lg flex items-center gap-2 cursor-pointer mb-3" onclick="toggleShowTreeFilterAll()">
+                    <svg class="w-4 h-4 shrink-0 fill-current" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                    <span><strong>Tất cả các tập đã có Vietsub</strong> ${showTreeFilter === 'missing_vi' ? `(Đang ẩn ${data.total_episodes} tập - Bấm để xem toàn bộ)` : `(Đang hiển thị toàn bộ ${data.total_episodes} tập)`}</span>
+                </div>
+            `;
+        } else if (hasHiddenVi) {
+            noticeHtml = `
+                <div class="alert alert-info bg-info/10 border-info/20 text-info text-xs py-2 px-3 rounded-lg flex items-center gap-2 cursor-pointer mb-3" onclick="toggleShowTreeFilterAll()" title="Bấm để hiển thị tất cả các tập">
+                    <svg class="w-4 h-4 shrink-0 fill-current" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+                    <span>Đang ẩn các tập đã có Vietsub - <strong>Bấm để hiện tất cả</strong></span>
+                </div>
+            `;
+        } else if (showTreeFilter === 'all' && data.vi_count > 0) {
+            noticeHtml = `
+                <div class="alert bg-bg-input border-border-subtle text-text-secondary text-xs py-2 px-3 rounded-lg flex items-center gap-2 cursor-pointer mb-3" onclick="toggleShowTreeFilterAll()" title="Bấm để chỉ hiển thị các tập thiếu Vietsub">
+                    <svg class="w-4 h-4 shrink-0 fill-current" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+                    <span>Đang hiển thị toàn bộ <strong>${data.total_episodes}</strong> tập (${data.vi_count} đã có Vietsub, ${data.missing_vi_count} thiếu) - <strong>Chỉ hiện tập thiếu Vietsub</strong></span>
+                </div>
+            `;
+        }
+
+        let html = `
+            <div class="bg-bg-input/80 border border-border-subtle p-4 rounded-xl mb-4 flex flex-wrap justify-between items-center gap-3">
+                <div>
+                    <div class="text-xs font-semibold text-text-primary mb-1">Tổng quan phụ đề:</div>
+                    <div class="flex flex-wrap gap-2 items-center">
+                        <span class="badge badge-info badge-sm">Tổng: ${data.total_episodes}</span>
+                        <span class="badge badge-success badge-sm">Đã có Vietsub: ${data.vi_count}</span>
+                        <span class="badge badge-warning badge-sm">Có thể dịch: ${data.can_translate_count}</span>
+                        <span class="badge badge-error badge-sm">Thiếu: ${data.missing_vi_count}</span>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 flex-wrap">
+                    <button class="btn btn-sm btn-secondary gap-1.5" onclick="startBatchActionForShow('${ratingKey}', 'upload_target', this)">
+                        ${ICONS.search} Tìm sub cả Show
+                    </button>
+                    <button class="btn btn-sm btn-primary gap-1.5" onclick="startBatchActionForShow('${ratingKey}', 'translate', this)">
+                        ${ICONS.translate} Dịch tập thiếu cả Show
+                    </button>
+                </div>
+            </div>
+
+            <!-- Show Tree Episode Filter Bar -->
+            <div class="show-tree-filter-bar flex flex-wrap items-center justify-between gap-3 mb-3 pb-2 border-b border-border-subtle">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="text-xs text-text-secondary font-medium">Lọc tập:</span>
+                    <div class="join" id="showTreeFilterGroup">
+                        <button type="button" class="btn btn-xs join-item ${showTreeFilter === 'missing_vi' ? 'btn-primary' : 'btn-ghost bg-bg-input'}" onclick="setShowTreeFilter('missing_vi')">
+                            <span class="w-1.5 h-1.5 rounded-full bg-error inline-block mr-1"></span>
+                            <span>Thiếu Vietsub</span>
+                        </button>
+                        <button type="button" class="btn btn-xs join-item ${showTreeFilter === 'all' ? 'btn-primary' : 'btn-ghost bg-bg-input'}" onclick="setShowTreeFilter('all')">
+                            <span>Tất cả</span>
+                        </button>
+                        <button type="button" class="btn btn-xs join-item ${showTreeFilter === 'can_translate' ? 'btn-primary' : 'btn-ghost bg-bg-input'}" onclick="setShowTreeFilter('can_translate')">
+                            <span class="w-1.5 h-1.5 rounded-full bg-warning inline-block mr-1"></span>
+                            <span>Có thể dịch AI</span>
+                        </button>
+                    </div>
+                </div>
+
+                <button type="button" class="btn btn-xs btn-outline btn-secondary" onclick="toggleShowTreeFilterAll()">
+                    ${showTreeFilter === 'missing_vi' ? 'Hiện tất cả tập' : 'Chỉ hiện tập thiếu Vietsub'}
+                </button>
+            </div>
+
+            ${noticeHtml}
+        `;
+
+        (data.seasons || []).forEach(season => {
+            const missingEpKeys = (season.episodes || []).filter(e => !e.has_vi).map(e => e.rating_key);
+            const translatableEpKeys = (season.episodes || []).filter(e => e.can_translate).map(e => e.rating_key);
+
+            let visibleEpisodes = season.episodes || [];
+            if (showTreeFilter === 'missing_vi') {
+                visibleEpisodes = visibleEpisodes.filter(e => !e.has_vi);
+            } else if (showTreeFilter === 'can_translate') {
+                visibleEpisodes = visibleEpisodes.filter(e => e.can_translate);
+            }
+
+            html += `
+                <div class="border border-border-subtle rounded-xl overflow-hidden bg-bg-surface mb-4">
+                    <div class="bg-bg-input px-4 py-3 flex items-center justify-between gap-3 flex-wrap border-b border-border-subtle">
+                        <h4 class="font-semibold text-text-primary text-sm m-0">${escapeHtml(season.title)} (${visibleEpisodes.length}/${season.episodes.length} tập)</h4>
+                        <div class="flex items-center gap-2">
+                            <button type="button" class="btn btn-xs sm:btn-sm btn-secondary gap-1.5" onclick="startBatchActionForSeason('${season.rating_key}', 'upload_target', this)">
+                                ${ICONS.search} Tìm sub Mùa
+                            </button>
+                            <button type="button" class="btn btn-xs sm:btn-sm btn-primary gap-1.5" onclick="startBatchActionForSeason('${season.rating_key}', 'translate', this)">
+                                ${ICONS.translate} Dịch tập thiếu
+                            </button>
+                        </div>
+                    </div>
+                    <div class="divide-y divide-border-subtle flex flex-col">
+            `;
+
+            if (visibleEpisodes.length === 0) {
+                html += `
+                    <div class="p-4 text-text-muted text-xs italic text-center">
+                        ${showTreeFilter === 'missing_vi' ? `${ICONS.check} Tất cả các tập trong mùa này đã có Vietsub.` : 'Không có tập nào phù hợp bộ lọc.'}
+                    </div>
+                `;
+            } else {
+                visibleEpisodes.forEach(ep => {
+                    let badge = '';
+                    if (ep.has_vi) {
+                        badge = `<span class="badge badge-success badge-sm gap-1">${ICONS.check} Đã có Vietsub</span>`;
+                    } else if (ep.can_translate) {
+                        badge = `<span class="badge badge-warning badge-sm gap-1">${ICONS.sparkles} Có thể dịch AI</span>`;
+                    } else {
+                        badge = `<span class="badge badge-error badge-sm gap-1">${ICONS.cross} Chưa có sub</span>`;
+                    }
+
+                    html += `
+                        <div class="px-4 py-3 flex items-center justify-between gap-3 hover:bg-bg-surface-hover transition-colors">
+                            <div class="flex-1 min-w-0 pr-3">
+                                <div class="text-sm font-medium text-text-primary truncate" title="Tập ${ep.episode_number}: ${escapeHtml(ep.title)}">
+                                    <span class="text-text-muted font-normal mr-1.5">Tập ${ep.episode_number}:</span>
+                                    <span>${escapeHtml(ep.title)}</span>
+                                </div>
+                            </div>
+                            <div class="shrink-0 flex items-center gap-3">
+                                <div class="shrink-0">
+                                    ${badge}
+                                </div>
+                                <div class="shrink-0 flex items-center gap-1.5">
+                                    <button class="btn btn-xs sm:btn-sm btn-secondary gap-1.5" onclick="quickUploadTarget('${ep.rating_key}', this)">
+                                        ${ICONS.search} Tìm sub
+                                    </button>
+                                    ${ep.can_translate ? `<button class="btn btn-xs sm:btn-sm btn-primary gap-1.5" onclick="quickTranslate('${ep.rating_key}', this)">${ICONS.translate} Dịch AI</button>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            html += `
+                    </div>
+                </div>
+            `;
+        });
+
+        body.innerHTML = html;
+    }
+
+    function closeShowModal() {
+        document.getElementById("showModal").classList.remove("active");
+    }
+
+    /* Modal Movie Details */
+    async function openMovieDetail(ratingKey, forceRefresh = false) {
+        const modal = document.getElementById("movieModal");
+        const body = document.getElementById("movieModalBody");
+
+        modal.classList.add("active");
+
+        const cacheKey = 'movie_detail_' + ratingKey;
+        const cached = (!forceRefresh) ? SessionCache.get(cacheKey) : null;
+
+        if (cached) {
+            renderMovieDetailContent(cached);
+            fetchMovieDetail(ratingKey, false);
+            return;
+        }
+
+        body.innerHTML = `
+            <div class="flex flex-col items-center justify-center py-12 gap-3 text-text-muted">
+                <span class="loading loading-spinner loading-md text-primary"></span>
+                <span class="text-sm">Đang tải thông tin phim...</span>
+            </div>
+        `;
+
+        await fetchMovieDetail(ratingKey, true);
+    }
+
+    async function fetchMovieDetail(ratingKey, updateLoadingOnFail = false) {
+        try {
+            const res = await fetch(`/api/library/movies/${ratingKey}`);
+            const data = await res.json();
+            SessionCache.set('movie_detail_' + ratingKey, data, 300);
+            renderMovieDetailContent(data);
+        } catch (err) {
+            console.error("Failed to load movie detail:", err);
+            if (updateLoadingOnFail) {
+                const body = document.getElementById("movieModalBody");
+                if (body) {
+                    body.innerHTML = `<div class="alert alert-error text-sm">Lỗi: ${escapeHtml(err.message)}</div>`;
+                }
+            }
+        }
+    }
+
+    function renderMovieDetailContent(data) {
+        const title = document.getElementById("movieModalTitle");
+        if (title) title.innerText = `${escapeHtml(data.title)} (${data.year || 'N/A'})`;
+
+        let badge = '';
+        if (data.has_vi) {
+            badge = `<span class="badge badge-success badge-sm gap-1">${ICONS.check} Đã có Vietsub</span>`;
+        } else if (data.can_translate) {
+            badge = `<span class="badge badge-warning badge-sm gap-1">${ICONS.sparkles} Có thể dịch AI</span>`;
+        } else {
+            badge = `<span class="badge badge-error badge-sm gap-1">${ICONS.cross} Chưa có subtitle</span>`;
+        }
+
+        const body = document.getElementById("movieModalBody");
+        if (!body) return;
+
+        body.innerHTML = `
+            <div class="flex flex-col gap-4">
+                <div class="flex items-center justify-between p-3 rounded-xl bg-bg-input border border-border-subtle">
+                    <span class="text-xs text-text-secondary font-medium">Trạng thái phụ đề:</span>
+                    ${badge}
+                </div>
+                <div class="flex items-center justify-between p-3 rounded-xl bg-bg-input border border-border-subtle">
+                    <span class="text-xs text-text-secondary">Tự động dịch nếu tìm kiếm không ra sub</span>
+                    <input type="checkbox" class="toggle toggle-warning toggle-xs auto-fallback-toggle-input" onchange="toggleAutoFallback(this.checked)" ${isAutoFallbackEnabled() ? 'checked' : ''}>
+                </div>
+                <p class="text-xs text-text-secondary leading-relaxed bg-bg-app/50 p-3 rounded-xl border border-border-subtle">
+                    ${data.summary ? escapeHtml(data.summary) : '<span class="italic text-text-muted">Không có mô tả tóm tắt cho phim này.</span>'}
+                </p>
+                <div class="pt-2 flex gap-3">
+                    <button class="btn btn-secondary flex-1 gap-2" id="movieSearchSubBtn" onclick="quickUploadTarget('${data.rating_key}', this)">
+                        ${ICONS.search} Tìm &amp; Tải Vietsub
+                    </button>
+                    ${data.can_translate ? `<button class="btn btn-primary flex-1 gap-2" onclick="quickTranslate('${data.rating_key}', this)">${ICONS.translate} Dịch AI từ Engsub</button>` : ''}
+            </div>
+        `;
+    }
+
+    function closeMovieModal() {
+        document.getElementById("movieModal").classList.remove("active");
+    }
+
+    /* Quick single item actions */
+    async function quickUploadTarget(ratingKey, btn = null) {
+        startBatchAction([ratingKey], 'upload_target', btn);
+    }
+
+    async function quickTranslate(ratingKey, btn = null) {
+        startBatchAction([ratingKey], 'translate', btn);
+    }
+
+    /* Batch Actions */
+    function startBatchActionForSeason(seasonRatingKey, actionType, clickedBtn = null) {
+        if (clickedBtn) {
+            setButtonLoading(clickedBtn, "Đang quét...");
+        }
+        try {
+            if (!currentShowTreeData) {
+                resetActiveSearchButton();
+                showToast("Dữ liệu series chưa sẵn sàng!", "error");
+                return;
+            }
+            const season = (currentShowTreeData.seasons || []).find(s => String(s.rating_key) === String(seasonRatingKey));
+            if (!season) {
+                resetActiveSearchButton();
+                showToast("Không tìm thấy mùa phim!", "error");
+                return;
+            }
+
+            const keys = [];
+            (season.episodes || []).forEach(e => {
+                if (actionType === 'translate') {
+                    if (e.can_translate) keys.push(e.rating_key);
+                } else {
+                    if (!e.has_vi) keys.push(e.rating_key);
+                }
+            });
+
+            if (keys.length === 0) {
+                resetActiveSearchButton();
+                showToast("Không có tập phim nào trong mùa này cần xử lý!", "info");
+                return;
+            }
+            startBatchAction(keys, actionType, clickedBtn);
+        } catch (err) {
+            resetActiveSearchButton();
+            showToast(`Lỗi: ${err.message}`, "error");
+        }
+    }
+
+    async function startBatchActionForShow(ratingKey, actionType, clickedBtn = null) {
+        if (clickedBtn) {
+            setButtonLoading(clickedBtn, "Đang quét...");
+        }
+        try {
+            let data = (currentShowTreeData && String(currentShowRatingKey) === String(ratingKey))
+                ? currentShowTreeData
+                : SessionCache.get('show_tree_' + ratingKey);
+
+            if (!data) {
+                const res = await fetch(`/api/library/shows/${ratingKey}/tree`);
+                data = await res.json();
+            }
+            const keys = [];
+            (data.seasons || []).forEach(s => {
+                (s.episodes || []).forEach(e => {
+                    if (actionType === 'translate') {
+                        if (e.can_translate) keys.push(e.rating_key);
+                    } else {
+                        if (!e.has_vi) keys.push(e.rating_key);
+                    }
+                });
+            });
+
+            if (keys.length === 0) {
+                resetActiveSearchButton();
+                showToast("Không có tập phim nào cần xử lý!", "info");
+                return;
+            }
+            startBatchAction(keys, actionType, clickedBtn);
+        } catch (err) {
+            resetActiveSearchButton();
+            showToast(`Lỗi: ${err.message}`, "error");
+        }
+    }
+
+    async function startBatchAction(ratingKeys, actionType, clickedBtn = null) {
+        if (!ratingKeys || ratingKeys.length === 0) {
+            showToast("Không có tập phim nào được chọn!", "info");
+            return;
+        }
+
+        activeBatchKeys = ratingKeys;
+        if (clickedBtn) {
+            const text = actionType === 'translate' ? 'Đang kích hoạt dịch...' : 'Đang tìm sub...';
+            setButtonLoading(clickedBtn, text);
+        }
+
+        const endpoint = actionType === 'translate' ? '/api/library/batch/translate' : '/api/library/batch/upload-target';
+        
+        try {
+            const res = await fetch(endpoint, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ rating_keys: ratingKeys, use_cache: true })
+            });
+
+            const data = await res.json();
+            if (!res.ok) {
+                resetActiveSearchButton();
+                throw new Error(data.detail || "Không thể khởi động tác vụ");
+            }
+
+            openTaskModal(data.task_id, actionType);
+        } catch (err) {
+            resetActiveSearchButton();
+            console.error("Batch start failed:", err);
+            showToast(`Lỗi: ${err.message}`, "error");
+        }
+    }
+
+    function openTaskModal(taskId, taskType = 'upload_target') {
+        activeTaskId = taskId;
+        currentTaskType = taskType;
+        const modal = document.getElementById("taskModal");
+        const btn = document.getElementById("taskCloseBtn");
+        const logBox = document.getElementById("taskLogsContainer");
+        const progressBar = document.getElementById("taskProgressBar");
+        const percent = document.getElementById("taskProgressPercent");
+        const statusLabel = document.getElementById("taskStatusLabel");
+        const fallbackContainer = document.getElementById("instantFallbackContainer");
+
+        if (fallbackContainer) fallbackContainer.style.display = "none";
+        btn.disabled = true;
+        logBox.innerText = "Đang kết nối...";
+        progressBar.value = 0;
+        percent.innerText = "0%";
+        statusLabel.innerText = "Đang xử lý...";
+        modal.classList.add("active");
+
+        if (taskPollInterval) clearInterval(taskPollInterval);
+        taskPollInterval = setInterval(pollTaskStatus, 1000);
+        pollTaskStatus();
+    }
+
+    async function pollTaskStatus() {
+        if (!activeTaskId) return;
+        try {
+            const res = await fetch(`/api/library/tasks/${activeTaskId}`);
+            if (!res.ok) return;
+            const task = await res.json();
+
+            const pct = task.total > 0 ? Math.round((task.current / task.total) * 100) : 0;
+            document.getElementById("taskProgressBar").value = pct;
+            document.getElementById("taskProgressPercent").innerText = `${pct}% (${task.current}/${task.total})`;
+            document.getElementById("taskCurrentItem").innerText = task.current_item ? `Đang xử lý: ${task.current_item}` : '';
+
+            const logs = (task.logs || []).join("\n");
+            const logBox = document.getElementById("taskLogsContainer");
+            logBox.innerText = logs;
+            logBox.scrollTop = logBox.scrollHeight;
+
+            if (task.status === "completed" || task.status === "failed") {
+                clearInterval(taskPollInterval);
+                resetActiveSearchButton();
+                document.getElementById("taskStatusLabel").innerText = task.status === "completed" ? "Hoàn tất" : "Thất bại";
+                document.getElementById("taskCloseBtn").disabled = false;
+
+                // Invalidate SessionCache for processed rating keys
+                if (activeBatchKeys && activeBatchKeys.length) {
+                    activeBatchKeys.forEach(k => {
+                        SessionCache.remove('show_tree_' + k);
+                        SessionCache.remove('movie_detail_' + k);
+                    });
+                }
+                if (currentShowRatingKey) {
+                    SessionCache.remove('show_tree_' + currentShowRatingKey);
+                }
+                SessionCache.clear('sec_');
+
+                // When subtitle search completes with 0 results:
+                if (currentTaskType === 'upload_target' && task.status === "completed") {
+                    const notFoundItems = (task.results || []).filter(r => r.status === 'not_found' || r.has_vi === false);
+                    if (notFoundItems.length > 0) {
+                        lastNotFoundRatingKeys = notFoundItems.map(r => r.rating_key);
+                        if (isAutoFallbackEnabled()) {
+                            showToast(`Không tìm thấy sub (${lastNotFoundRatingKeys.length} mục) — Tự động dịch phụ đề ngay...`, "info");
+                            logBox.innerText += "\n[Tự động] Không tìm thấy phụ đề có sẵn — Kích hoạt tiến trình dịch AI...";
+                            logBox.scrollTop = logBox.scrollHeight;
+                            document.getElementById("taskStatusLabel").innerText = "Chuyển sang Dịch AI...";
+                            setTimeout(() => {
+                                const keys = [...lastNotFoundRatingKeys];
+                                lastNotFoundRatingKeys = [];
+                                startBatchAction(keys, 'translate');
+                            }, 1000);
+                            return;
+                        } else {
+                            const fallbackContainer = document.getElementById("instantFallbackContainer");
+                            if (fallbackContainer) {
+                                fallbackContainer.style.display = "block";
+                            }
+                        }
+                    }
+                }
+
+                if (task.status === "completed") {
+                    showToast("Tác vụ xử lý phụ đề đã hoàn tất!", "success");
+                }
+            }
+        } catch (err) {
+            console.error("Task poll error:", err);
+        }
+    }
+
+    function triggerInstantFallbackTranslation() {
+        if (!lastNotFoundRatingKeys || lastNotFoundRatingKeys.length === 0) return;
+        const fallbackContainer = document.getElementById("instantFallbackContainer");
+        if (fallbackContainer) fallbackContainer.style.display = "none";
+        const keys = [...lastNotFoundRatingKeys];
+        lastNotFoundRatingKeys = [];
+        startBatchAction(keys, 'translate');
+    }
+
+    function closeTaskModal() {
+        if (taskPollInterval) clearInterval(taskPollInterval);
+        document.getElementById("taskModal").classList.remove("active");
+        const fallbackContainer = document.getElementById("instantFallbackContainer");
+        if (fallbackContainer) fallbackContainer.style.display = "none";
+        activeTaskId = null;
+        lastNotFoundRatingKeys = [];
+        resetActiveSearchButton();
+
+        // Refresh active show if open, or refresh library items
+        const showModal = document.getElementById("showModal");
+        if (showModal && showModal.classList.contains("active") && currentShowRatingKey) {
+            openShowTree(currentShowRatingKey, true);
+        } else {
+            loadCurrentSectionItems(false, true);
+        }
+    }
+
+    // Close modal / drawer on background overlay click
+    document.addEventListener("DOMContentLoaded", () => {
+        const showModal = document.getElementById("showModal");
+        if (showModal) {
+            showModal.addEventListener("click", (e) => {
+                if (e.target === showModal) closeShowModal();
+            });
+        }
+        const movieModal = document.getElementById("movieModal");
+        if (movieModal) {
+            movieModal.addEventListener("click", (e) => {
+                if (e.target === movieModal) closeMovieModal();
+            });
+        }
+    });
+</script>
+{% endblock %}

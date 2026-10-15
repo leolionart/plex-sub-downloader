@@ -3,13 +3,17 @@ Plex client wrapper sử dụng python-plexapi.
 Handles tất cả interactions với Plex Media Server.
 """
 
+import copy
+import concurrent.futures
 import logging
 from pathlib import Path
-from typing import cast
+import time
+from typing import cast, Any
 
 from plexapi.server import PlexServer
 from plexapi.video import Movie, Episode, Show, Season, Video
 from plexapi.exceptions import NotFound, Unauthorized, BadRequest
+from requests.exceptions import Timeout as RequestsTimeout, ConnectionError as RequestsConnectionError
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -23,6 +27,7 @@ from tenacity import (
 from app.models.runtime_config import RuntimeConfig
 from app.models.webhook import MediaMetadata
 from app.utils.logger import get_logger
+from app.utils.ttl_cache import TTLCache
 
 logger = get_logger(__name__)
 
@@ -48,12 +53,112 @@ class PlexClient:
         self._server: PlexServer | None = None
         self._config = config
         self._mock_mode = mock_mode
+        self._sections_cache = TTLCache(default_ttl=1800.0, maxsize=20, copy_on_read=True)
+        self._section_subtitles_cache = TTLCache(default_ttl=1800.0, maxsize=50, copy_on_read=True)
+        self._section_items_cache = TTLCache(default_ttl=600.0, maxsize=200, copy_on_read=True)
+        self._show_tree_cache = TTLCache(default_ttl=1200.0, maxsize=200, copy_on_read=True)
+        self._movie_details_cache = TTLCache(default_ttl=1200.0, maxsize=500, copy_on_read=True)
         if not self._mock_mode:
             if self._config.plex_url and self._config.plex_token:
                 self._connect()
             else:
                 logger.warning("Plex credentials not configured — will connect after setup")
 
+    def clear_subtitle_cache(self) -> None:
+        """Clear cached section subtitle keys and section item caches."""
+        self._section_subtitles_cache.clear()
+        self._section_items_cache.clear()
+
+    def clear_all_caches(self) -> None:
+        """Clear all Plex in-memory caches."""
+        self._sections_cache.clear()
+        self._section_subtitles_cache.clear()
+        self._section_items_cache.clear()
+        self._show_tree_cache.clear()
+        self._movie_details_cache.clear()
+
+    def get_cache_stats(self) -> dict[str, Any]:
+        """Return statistics across all Plex in-memory caches."""
+        return {
+            "sections": self._sections_cache.stats() if hasattr(self._sections_cache, "stats") else {},
+            "section_items": self._section_items_cache.stats() if hasattr(self._section_items_cache, "stats") else {},
+            "section_subtitles": self._section_subtitles_cache.stats() if hasattr(self._section_subtitles_cache, "stats") else {},
+            "show_tree": self._show_tree_cache.stats() if hasattr(self._show_tree_cache, "stats") else {},
+            "movie_details": self._movie_details_cache.stats() if hasattr(self._movie_details_cache, "stats") else {},
+        }
+
+    def invalidate_item_cache(self, rating_key: str | int | Any) -> None:
+        """Invalidate cached data for a specific media item (show tree, movie details, section lists)."""
+        rk = str(rating_key)
+        logger.debug(f"Invalidating item cache for rating_key={rk}")
+
+        # Invalidate movie details cache
+        if hasattr(self._movie_details_cache, "invalidate_predicate"):
+            self._movie_details_cache.invalidate_predicate(lambda k, v: str(k[0]) == rk)
+        else:
+            self._movie_details_cache = {
+                k: v for k, v in self._movie_details_cache.items()
+                if str(k[0]) != rk
+            }
+
+        # Invalidate show tree cache (match show key or any episode/season rating_key inside the show tree)
+        def _match_show_tree(k: Any, entry: Any) -> bool:
+            if str(k[0]) == rk:
+                return True
+            tree_data = entry.get("data", entry) if isinstance(entry, dict) else entry
+            if not isinstance(tree_data, dict):
+                return False
+            for season in tree_data.get("seasons", []):
+                if str(season.get("rating_key")) == rk:
+                    return True
+                for ep in season.get("episodes", []):
+                    if str(ep.get("rating_key")) == rk:
+                        return True
+            return False
+
+        if hasattr(self._show_tree_cache, "invalidate_predicate"):
+            self._show_tree_cache.invalidate_predicate(_match_show_tree)
+        else:
+            keys_to_remove = [k for k, v in self._show_tree_cache.items() if _match_show_tree(k, v)]
+            for k in keys_to_remove:
+                self._show_tree_cache.pop(k, None)
+
+        # Invalidate section items cache if this item is part of any cached page
+        def _match_section_item(k: Any, entry: Any) -> bool:
+            page_data = entry.get("data", entry) if isinstance(entry, dict) else entry
+            if not isinstance(page_data, dict):
+                return False
+            items = page_data.get("items", [])
+            return any(str(item.get("rating_key")) == rk for item in items)
+
+        if hasattr(self._section_items_cache, "invalidate_predicate"):
+            self._section_items_cache.invalidate_predicate(_match_section_item)
+        else:
+            sec_keys_to_remove = [k for k, v in self._section_items_cache.items() if _match_section_item(k, v)]
+            for k in sec_keys_to_remove:
+                self._section_items_cache.pop(k, None)
+
+    def invalidate_section_cache(self, section_key: str | int | Any | None = None) -> None:
+        """Invalidate cached section items and section subtitle keys."""
+        if section_key is None:
+            logger.debug("Invalidating all section caches")
+            self._sections_cache.clear()
+            self._section_items_cache.clear()
+            self._section_subtitles_cache.clear()
+        else:
+            sec = str(section_key)
+            logger.debug(f"Invalidating section cache for section_key={sec}")
+            if hasattr(self._section_items_cache, "invalidate_predicate"):
+                self._section_items_cache.invalidate_predicate(lambda k, v: str(k[0]) == sec)
+            else:
+                self._section_items_cache = {
+                    k: v for k, v in self._section_items_cache.items()
+                    if str(k[0]) != sec
+                }
+            if hasattr(self._section_subtitles_cache, "delete"):
+                self._section_subtitles_cache.delete(sec)
+            else:
+                self._section_subtitles_cache.pop(sec, None)
     def _connect(self) -> None:
         """Establish connection to Plex server với retry logic."""
         max_attempts = getattr(self._config, "max_retries", 3)
@@ -61,15 +166,15 @@ class PlexClient:
 
         @retry(
             stop=stop_after_attempt(max_attempts),
-            wait=wait_exponential(multiplier=1, min=retry_delay, max=30),
-            retry=retry_if_exception_type((ConnectionError, TimeoutError)),
+            wait=wait_exponential(multiplier=1, min=retry_delay, max=10),
+            retry=retry_if_exception_type((ConnectionError, TimeoutError, RequestsConnectionError, RequestsTimeout)),
         )
         def _do_connect() -> None:
             try:
                 logger.info(f"Connecting to Plex server at {self._config.plex_url}")
                 if not self._config.plex_url or not self._config.plex_token:
                     raise PlexClientError("Plex URL/token missing in runtime config")
-                self._server = PlexServer(self._config.plex_url, self._config.plex_token)
+                self._server = PlexServer(self._config.plex_url, self._config.plex_token, timeout=15)
                 # Log server identity
                 try:
                     machine_id = getattr(self._server, "machineIdentifier", None)
@@ -159,6 +264,37 @@ class PlexClient:
         except ValueError as e:
             raise PlexClientError(f"Invalid ratingKey format: {rating_key}") from e
 
+    def get_item(self, rating_key: str) -> Any:
+        """
+        Fetch any media item (Movie, Show, Season, Episode) from ratingKey.
+
+        Args:
+            rating_key: Plex ratingKey
+
+        Returns:
+            Plex item object
+
+        Raises:
+            PlexClientError: If item not found or invalid ratingKey
+        """
+        if self._mock_mode:
+            from unittest.mock import MagicMock
+            mock_item = MagicMock()
+            mock_item.rating_key = str(rating_key)
+            mock_item.thumb = f"/mock/thumb/{rating_key}.jpg"
+            mock_item.title = "Mock Media"
+            return mock_item
+
+        try:
+            logger.debug(f"Fetching media item with ratingKey: {rating_key}")
+            return self.server.fetchItem(int(rating_key))
+        except NotFound:
+            raise PlexClientError(f"Item with ratingKey {rating_key} not found")
+        except ValueError as e:
+            raise PlexClientError(f"Invalid ratingKey format: {rating_key}") from e
+        except Exception as e:
+            raise PlexClientError(f"Failed to fetch item {rating_key}: {e}") from e
+
     def extract_metadata(self, video: Video) -> MediaMetadata:
         """
         Extract metadata từ Plex Video object.
@@ -241,7 +377,8 @@ class PlexClient:
             return None
         lang = lang.lower().strip()
         iso_map = {
-            "vie": "vi", "eng": "en", "fra": "fr", "fre": "fr",
+            "vie": "vi", "vietnamese": "vi", "eng": "en", "english": "en",
+            "fra": "fr", "fre": "fr",
             "deu": "de", "ger": "de", "zho": "zh", "chi": "zh",
             "spa": "es", "rus": "ru", "jpn": "ja", "kor": "ko",
             "ara": "ar", "bul": "bg", "hrv": "hr", "ces": "cs",
@@ -262,16 +399,40 @@ class PlexClient:
         Plex exposes multiple language fields:
         - languageTag: ISO 639-1 (2-letter, e.g. "vi", "en")
         - languageCode: ISO 639-2 (3-letter, e.g. "vie", "eng")
-
-        The service uses ISO 639-1 codes, so prefer languageTag for matching.
+        - language: Language name or code (e.g. "vi", "vie", "Vietnamese")
         """
         tag = getattr(stream, "languageTag", None)
         code = getattr(stream, "languageCode", None)
+        lang = getattr(stream, "language", None)
         target_norm = PlexClient.normalize_language(language)
-        return (
-            PlexClient.normalize_language(tag) == target_norm or
-            PlexClient.normalize_language(code) == target_norm
-        )
+
+        if target_norm:
+            if (
+                PlexClient.normalize_language(tag) == target_norm or
+                PlexClient.normalize_language(code) == target_norm or
+                PlexClient.normalize_language(lang) == target_norm
+            ):
+                return True
+
+        if target_norm == "vi" or (language and language.lower().strip() in ("vi", "vie")):
+            vi_codes = {"vi", "vie", "vietnamese"}
+            if (
+                (tag and str(tag).lower().strip() in vi_codes) or
+                (code and str(code).lower().strip() in vi_codes) or
+                (lang and str(lang).lower().strip() in vi_codes)
+            ):
+                return True
+
+        if target_norm == "en" or (language and language.lower().strip() in ("en", "eng")):
+            en_codes = {"en", "eng", "english"}
+            if (
+                (tag and str(tag).lower().strip() in en_codes) or
+                (code and str(code).lower().strip() in en_codes) or
+                (lang and str(lang).lower().strip() in en_codes)
+            ):
+                return True
+
+        return False
 
     def _get_existing_subtitle_languages(self, video: Video) -> list[str]:
         """
@@ -321,22 +482,33 @@ class PlexClient:
         subtitle_info = []
 
         try:
-            for media in video.media:
-                for part in media.parts:
-                    for stream in part.streams:
-                        if stream.streamType == 3 and self._stream_matches_language(stream, language):
-                            codec = getattr(stream, "codec", "unknown") or "unknown"
-                            key = getattr(stream, "key", None)
-                            is_image_based = codec.lower() in ("pgs", "vobsub", "dvdsub", "dvd_subtitle")
-                            subtitle_info.append({
-                                "codec": codec,
-                                "forced": getattr(stream, "forced", False),
-                                "title": getattr(stream, "title", ""),
-                                "format": getattr(stream, "format", ""),
-                                "has_key": key is not None,
-                                "is_embedded": key is None,
-                                "is_image_based": is_image_based,
-                            })
+            streams_to_check = []
+            for media in getattr(video, "media", []):
+                for part in getattr(media, "parts", []):
+                    for stream in getattr(part, "streams", []):
+                        if getattr(stream, "streamType", None) == 3:
+                            streams_to_check.append(stream)
+
+            if not streams_to_check and hasattr(video, "subtitleStreams") and callable(video.subtitleStreams):
+                try:
+                    streams_to_check = list(video.subtitleStreams())
+                except Exception:
+                    pass
+
+            for stream in streams_to_check:
+                if self._stream_matches_language(stream, language):
+                    codec = getattr(stream, "codec", "unknown") or "unknown"
+                    key = getattr(stream, "key", None)
+                    is_image_based = str(codec).lower() in ("pgs", "vobsub", "dvdsub", "dvd_subtitle")
+                    subtitle_info.append({
+                        "codec": codec,
+                        "forced": getattr(stream, "forced", False),
+                        "title": getattr(stream, "title", ""),
+                        "format": getattr(stream, "format", ""),
+                        "has_key": key is not None,
+                        "is_embedded": key is None,
+                        "is_image_based": is_image_based,
+                    })
 
             logger.debug(f"Subtitle details for '{language}': {len(subtitle_info)} found")
             return {
@@ -444,6 +616,20 @@ class PlexClient:
 
             # Trigger refresh để Plex scan subtitle mới
             self._refresh_metadata(video)
+            self.clear_subtitle_cache()
+
+            rk = getattr(video, "ratingKey", None)
+            if rk is not None:
+                self.invalidate_item_cache(rk)
+            gp_rk = getattr(video, "grandparentRatingKey", None)
+            if gp_rk is not None:
+                self.invalidate_item_cache(gp_rk)
+
+            sec_id = getattr(video, "librarySectionID", None) or getattr(video, "sectionKey", None)
+            if sec_id is not None and isinstance(sec_id, (str, int)):
+                self.invalidate_section_cache(sec_id)
+            else:
+                self.invalidate_section_cache(None)
 
             return True
 
@@ -496,7 +682,20 @@ class PlexClient:
 
             if removed:
                 self._refresh_metadata(video)
+                self.clear_subtitle_cache()
 
+                rk = getattr(video, "ratingKey", None)
+                if rk is not None:
+                    self.invalidate_item_cache(rk)
+                gp_rk = getattr(video, "grandparentRatingKey", None)
+                if gp_rk is not None:
+                    self.invalidate_item_cache(gp_rk)
+
+                sec_id = getattr(video, "librarySectionID", None) or getattr(video, "sectionKey", None)
+                if sec_id is not None and isinstance(sec_id, (str, int)):
+                    self.invalidate_section_cache(sec_id)
+                else:
+                    self.invalidate_section_cache(None)
         except Exception as e:
             logger.warning(f"Error removing subtitles: {e}")
 
@@ -649,3 +848,416 @@ class PlexClient:
             return self.server.url(thumb_path, includeToken=True)
         except Exception:
             return None
+
+    def get_sections(self, use_cache: bool = True) -> list[dict]:
+        """Get all library sections (movies, shows, etc.)."""
+        if use_cache:
+            cached = self._sections_cache.get("all")
+            if cached is not None:
+                logger.debug("Cache hit for library sections")
+                return copy.deepcopy(cached)
+
+        if self._mock_mode:
+            result = [
+                {"key": "1", "title": "Movies", "type": "movie"},
+                {"key": "2", "title": "TV Shows", "type": "show"},
+            ]
+            if use_cache:
+                self._sections_cache.set("all", result)
+            return result
+        try:
+            sections = self.server.library.sections()
+            result = [
+                {
+                    "key": str(s.key),
+                    "title": s.title,
+                    "type": s.type,
+                }
+                for s in sections
+            ]
+            if use_cache:
+                self._sections_cache.set("all", result)
+            return result
+        except Exception as e:
+            logger.error(f"Failed to get library sections: {e}")
+            raise PlexClientError(f"Failed to fetch library sections: {e}") from e
+
+    def _get_section_subtitle_keys(self, section: Any, section_key: str, use_cache: bool = True) -> tuple[set[str], set[str]]:
+        """
+        Get ratingKeys of items that have Vietnamese and English subtitles for a library section.
+        Caches results in memory to avoid repeated queries during pagination.
+        """
+        sk = str(section_key)
+        if use_cache:
+            cached = self._section_subtitles_cache.get(sk)
+            if cached is not None:
+                if isinstance(cached, dict) and "vi_keys" in cached and "en_keys" in cached:
+                    return cached["vi_keys"], cached["en_keys"]
+
+        def _fetch_vi():
+            try:
+                return {str(getattr(i, "ratingKey", i)) for i in section.search(filters={"subtitleLanguage": "vi"})}
+            except Exception as e:
+                logger.warning(f"Failed to fetch vi subtitle keys for section {section_key}: {e}")
+                return set()
+
+        def _fetch_en():
+            try:
+                return {str(getattr(i, "ratingKey", i)) for i in section.search(filters={"subtitleLanguage": "en"})}
+            except Exception as e:
+                logger.warning(f"Failed to fetch en subtitle keys for section {section_key}: {e}")
+                return set()
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            fut_vi = executor.submit(_fetch_vi)
+            fut_en = executor.submit(_fetch_en)
+            vi_keys = fut_vi.result()
+            en_keys = fut_en.result()
+
+        res = {
+            "vi_keys": vi_keys,
+            "en_keys": en_keys,
+        }
+        if use_cache:
+            self._section_subtitles_cache.set(sk, res)
+        return vi_keys, en_keys
+
+
+    def get_section_items(
+        self,
+        section_key: str,
+        query: str | None = None,
+        offset: int = 0,
+        limit: int = 50,
+        subtitle_filter: str = "missing_vi",
+        use_cache: bool = True,
+    ) -> dict:
+        """Fetch items in a library section with optional search, subtitle filter, and pagination."""
+        cache_key = (
+            str(section_key),
+            query.strip() if query and query.strip() else None,
+            subtitle_filter,
+            offset,
+            limit,
+        )
+        if use_cache:
+            cached = self._section_items_cache.get(cache_key)
+            if cached is not None:
+                logger.debug(f"Cache hit for section items: {cache_key}")
+                data = cached.get("data") if isinstance(cached, dict) and "data" in cached else cached
+                return copy.deepcopy(data)
+        else:
+            if hasattr(self._section_items_cache, "delete"):
+                self._section_items_cache.delete(cache_key)
+            else:
+                self._section_items_cache.pop(cache_key, None)
+
+        if self._mock_mode:
+            result = {
+                "section_key": str(section_key),
+                "section_title": "Mock Section",
+                "section_type": "movie",
+                "total_size": 1,
+                "offset": offset,
+                "limit": limit,
+                "stats": {
+                    "total": 1,
+                    "has_vi": 1 if subtitle_filter == "has_vi" else 0,
+                    "missing_vi": 0 if subtitle_filter == "has_vi" else 1,
+                    "can_translate": 1,
+                },
+                "items": [
+                    {
+                        "rating_key": "1001",
+                        "title": "Mock Movie",
+                        "year": 2024,
+                        "type": "movie",
+                        "thumb": None,
+                        "summary": "Mock summary",
+                        "genres": ["Action", "Sci-Fi"],
+                        "has_vi": False,
+                        "has_en": True,
+                        "can_translate": True,
+                    }
+                ],
+            }
+            if use_cache:
+                self._section_items_cache.set(cache_key, result)
+            return result
+
+        try:
+            section = self.server.library.sectionByID(int(section_key))
+            filters = {}
+            if subtitle_filter == "missing_vi":
+                filters["subtitleLanguage!"] = "vi"
+            elif subtitle_filter == "has_vi":
+                filters["subtitleLanguage"] = "vi"
+            elif subtitle_filter == "can_translate":
+                filters["subtitleLanguage!"] = "vi"
+                filters["subtitleLanguage"] = "en"
+
+            title_query = query.strip() if query and query.strip() else None
+
+            all_matching = section.search(
+                title=title_query,
+                filters=filters or None,
+            )
+            total = len(all_matching)
+            paged = all_matching[offset : offset + limit]
+
+            vi_keys, en_keys = self._get_section_subtitle_keys(section, str(section_key))
+
+            items = []
+            for item in paged:
+                genres = [g.tag for g in getattr(item, "genres", [])] if hasattr(item, "genres") and item.genres else []
+                rk = str(item.ratingKey)
+                has_vi = rk in vi_keys
+                can_translate = (rk not in vi_keys and rk in en_keys)
+                items.append({
+                    "rating_key": rk,
+                    "title": item.title,
+                    "year": getattr(item, "year", None),
+                    "type": item.type,
+                    "thumb": getattr(item, "thumb", None),
+                    "summary": getattr(item, "summary", "") or "",
+                    "genres": genres,
+                    "has_vi": has_vi,
+                    "has_en": rk in en_keys,
+                    "can_translate": can_translate,
+                })
+
+            total_size_attr = getattr(section, "totalSize", None)
+            total_in_section = total_size_attr if isinstance(total_size_attr, int) else total
+            result = {
+                "section_key": str(section_key),
+                "section_title": section.title,
+                "section_type": section.type,
+                "total_size": total,
+                "offset": offset,
+                "limit": limit,
+                "stats": {
+                    "total": total_in_section,
+                    "has_vi": len(vi_keys),
+                    "missing_vi": max(0, total_in_section - len(vi_keys)),
+                    "can_translate": len(en_keys - vi_keys),
+                },
+                "items": items,
+            }
+            if use_cache:
+                self._section_items_cache.set(cache_key, result)
+            return result
+
+        except Exception as e:
+            logger.error(f"Failed to get items for section {section_key}: {e}")
+            raise PlexClientError(f"Failed to get section items: {e}") from e
+
+    def get_show_tree(
+        self,
+        rating_key: str,
+        target_lang: str = "vi",
+        source_lang: str = "en",
+        use_cache: bool = True,
+    ) -> dict:
+        """Fetch show hierarchy with season/episode subtitle audit status."""
+        cache_key = (str(rating_key), str(target_lang), str(source_lang))
+        if use_cache:
+            cached = self._show_tree_cache.get(cache_key)
+            if cached is not None:
+                logger.debug(f"Cache hit for show tree: {cache_key}")
+                data = cached.get("data") if isinstance(cached, dict) and "data" in cached else cached
+                return copy.deepcopy(data)
+        else:
+            if hasattr(self._show_tree_cache, "delete"):
+                self._show_tree_cache.delete(cache_key)
+            else:
+                self._show_tree_cache.pop(cache_key, None)
+
+        if self._mock_mode:
+            result = {
+                "rating_key": str(rating_key),
+                "title": "Mock Show",
+                "year": 2024,
+                "thumb": None,
+                "summary": "Mock summary",
+                "total_episodes": 1,
+                "vi_count": 0,
+                "can_translate_count": 1,
+                "missing_vi_count": 1,
+                "seasons": [
+                    {
+                        "rating_key": "2001",
+                        "season_number": 1,
+                        "title": "Season 1",
+                        "episodes": [
+                            {
+                                "rating_key": "3001",
+                                "season_number": 1,
+                                "episode_number": 1,
+                                "title": "Episode 1",
+                                "has_vi": False,
+                                "has_en": True,
+                                "can_translate": True,
+                                "vi_details": {"has_subtitle": False, "subtitle_count": 0, "subtitle_info": []},
+                                "en_details": {"has_subtitle": True, "subtitle_count": 1, "subtitle_info": []},
+                            }
+                        ],
+                    }
+                ],
+            }
+            if use_cache:
+                self._show_tree_cache.set(cache_key, result)
+            return result
+
+
+        try:
+            item = self.server.fetchItem(int(rating_key))
+            if item.type != "show":
+                raise PlexClientError(f"Item {rating_key} is of type {item.type}, expected 'show'")
+
+            seasons_data = []
+            total_episodes = 0
+            vi_count = 0
+            can_translate_count = 0
+
+            for season in item.seasons():
+                s_num = getattr(season, "index", 0) or 0
+                episodes_data = []
+                for ep in season.episodes():
+                    total_episodes += 1
+                    ep_key = str(ep.ratingKey)
+                    ep_num = getattr(ep, "index", 0) or 0
+
+                    vi_det = self.get_subtitle_details(ep, target_lang)
+                    if not vi_det.get("has_subtitle") and target_lang in ("vi", "vie"):
+                        alt_target = "vie" if target_lang == "vi" else "vi"
+                        alt_vi_det = self.get_subtitle_details(ep, alt_target)
+                        if alt_vi_det.get("has_subtitle"):
+                            vi_det = alt_vi_det
+
+                    en_det = self.get_subtitle_details(ep, source_lang)
+                    if not en_det.get("has_subtitle") and source_lang in ("en", "eng"):
+                        alt_source = "eng" if source_lang == "en" else "en"
+                        alt_en_det = self.get_subtitle_details(ep, alt_source)
+                        if alt_en_det.get("has_subtitle"):
+                            en_det = alt_en_det
+                    has_vi = vi_det.get("has_subtitle", False)
+                    has_en = en_det.get("has_subtitle", False)
+                    can_translate = False
+                    if not has_vi and has_en:
+                        infos = en_det.get("subtitle_info", [])
+                        can_translate = any(not info.get("is_image_based", False) for info in infos)
+
+                    if has_vi:
+                        vi_count += 1
+                    elif can_translate:
+                        can_translate_count += 1
+
+                    episodes_data.append({
+                        "rating_key": ep_key,
+                        "season_number": s_num,
+                        "episode_number": ep_num,
+                        "title": ep.title,
+                        "thumb": getattr(ep, "thumb", None),
+                        "has_vi": has_vi,
+                        "has_en": has_en,
+                        "can_translate": can_translate,
+                        "vi_details": vi_det,
+                        "en_details": en_det,
+                    })
+
+                seasons_data.append({
+                    "rating_key": str(season.ratingKey),
+                    "season_number": s_num,
+                    "title": season.title,
+                    "episodes": episodes_data,
+                })
+
+            result = {
+                "rating_key": str(item.ratingKey),
+                "title": item.title,
+                "year": getattr(item, "year", None),
+                "thumb": getattr(item, "thumb", None),
+                "summary": getattr(item, "summary", "") or "",
+                "total_episodes": total_episodes,
+                "vi_count": vi_count,
+                "can_translate_count": can_translate_count,
+                "missing_vi_count": total_episodes - vi_count,
+                "seasons": seasons_data,
+            }
+            if use_cache:
+                self._show_tree_cache.set(cache_key, result)
+            return result
+
+        except Exception as e:
+            logger.error(f"Failed to get show tree for {rating_key}: {e}")
+            raise PlexClientError(f"Failed to get show tree: {e}") from e
+
+    def get_movie_details(
+        self,
+        rating_key: str,
+        target_lang: str = "vi",
+        source_lang: str = "en",
+        use_cache: bool = True,
+    ) -> dict:
+        """Fetch movie details and subtitle status."""
+        cache_key = (str(rating_key), str(target_lang), str(source_lang))
+        if use_cache:
+            cached = self._movie_details_cache.get(cache_key)
+            if cached is not None:
+                logger.debug(f"Cache hit for movie details: {cache_key}")
+                data = cached.get("data") if isinstance(cached, dict) and "data" in cached else cached
+                return copy.deepcopy(data)
+        else:
+            if hasattr(self._movie_details_cache, "delete"):
+                self._movie_details_cache.delete(cache_key)
+            else:
+                self._movie_details_cache.pop(cache_key, None)
+
+        if self._mock_mode:
+            result = {
+                "rating_key": str(rating_key),
+                "title": "Mock Movie",
+                "year": 2024,
+                "type": "movie",
+                "thumb": None,
+                "summary": "Mock summary",
+                "has_vi": False,
+                "has_en": True,
+                "can_translate": True,
+                "vi_details": {"has_subtitle": False, "subtitle_count": 0, "subtitle_info": []},
+                "en_details": {"has_subtitle": True, "subtitle_count": 1, "subtitle_info": []},
+            }
+            if use_cache:
+                self._movie_details_cache.set(cache_key, result)
+            return result
+
+
+        video = self.get_video(rating_key)
+        vi_det = self.get_subtitle_details(video, target_lang)
+        en_det = self.get_subtitle_details(video, source_lang)
+        has_vi = vi_det.get("has_subtitle", False)
+        has_en = en_det.get("has_subtitle", False)
+        can_translate = False
+        if not has_vi and has_en:
+            infos = en_det.get("subtitle_info", [])
+            can_translate = any(not info.get("is_image_based", False) for info in infos)
+
+        result = {
+            "rating_key": str(video.ratingKey),
+            "title": video.title,
+            "year": getattr(video, "year", None),
+            "type": getattr(video, "type", "movie"),
+
+            "thumb": getattr(video, "thumb", None),
+            "summary": getattr(video, "summary", "") or "",
+            "has_vi": has_vi,
+            "has_en": has_en,
+            "can_translate": can_translate,
+            "vi_details": vi_det,
+            "en_details": en_det,
+        }
+        if use_cache:
+            self._movie_details_cache.set(cache_key, result)
+        return result
+
+    get_media_details = get_movie_details

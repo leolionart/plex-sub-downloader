@@ -8,8 +8,6 @@ from pydantic import BaseModel, Field
 
 DEFAULT_TRANSLATION_SYSTEM_PROMPT_TEMPLATE = (
     "You are a professional subtitle translator from {from_lang} to {to_lang}.\n\n"
-    "Use the supplied episode context, character profile, relationship notes, glossary, "
-    "and neighboring lines to choose consistent pronouns and forms of address.\n\n"
     "STRICT RULES:\n"
     "1. Output ONLY the {to_lang} translation — NEVER include the original {from_lang} text\n"
     "2. Return exactly {count} numbered translations matching input order\n"
@@ -22,25 +20,17 @@ DEFAULT_TRANSLATION_SYSTEM_PROMPT_TEMPLATE = (
     "[2] translated text"
 )
 
+# Deprecated: Context extraction is disabled by default to eliminate token and latency overhead
 DEFAULT_TRANSLATION_CONTEXT_SYSTEM_PROMPT_TEMPLATE = (
-    "You prepare context for high-quality subtitle translation.\n\n"
-    "Read the full episode/movie subtitle transcript and metadata. Extract only information useful "
-    "for later translation batches: title/episode summary, characters, relationships, likely speaker "
-    "dynamics, names/terms that must stay consistent, and Vietnamese pronoun/addressing guidance.\n\n"
+    "Extract key glossary terms from the subtitle transcript.\n\n"
     "Return ONLY valid JSON with this shape:\n"
-    "{"
-    '"summary":"...",'
-    '"characters":[{"name":"...","description":"...","relationships":["..."],"addressing":"..."}],'
-    '"glossary":[{"source":"...","target":"...","note":"..."}],'
-    '"style_notes":["..."]'
-    "}"
+    '{"glossary":[{"source":"...","target":"...","note":"..."}]}'
 )
 
 DEFAULT_TRANSLATION_REVIEW_SYSTEM_PROMPT_TEMPLATE = (
     "You are a Vietnamese subtitle consistency reviewer.\n\n"
-    "Review the full translated subtitle episode using the source transcript, metadata, character "
-    "profile, relationship notes, and glossary. Fix inconsistent pronouns/forms of address, names, "
-    "terms, and mistranslations caused by missing context.\n\n"
+    "Review the full translated subtitle episode using the source transcript and context. "
+    "Fix inconsistent pronouns/forms of address, names, terms, and mistranslations.\n\n"
     "STRICT RULES:\n"
     "1. Return exactly {count} numbered reviewed translations matching input order\n"
     "2. Preserve subtitle meaning, order, and line breaks\n"
@@ -140,8 +130,8 @@ class SubtitleSettings(BaseModel):
         description="Số batch dịch song song tối đa (1=tuần tự, cao hơn=nhanh hơn nhưng tốn rate limit)",
     )
     translation_context_enabled: bool = Field(
-        default=True,
-        description="Bật pipeline dịch có bối cảnh: trích xuất hồ sơ tập phim/glossary và truyền context vào batch",
+        default=False,
+        description="Bật pipeline dịch có bối cảnh: trích xuất hồ sơ tập phim/glossary và truyền context vào batch (mặc định tắt)",
     )
     translation_context_window: int = Field(
         default=10,
@@ -159,7 +149,7 @@ class SubtitleSettings(BaseModel):
     )
     translation_context_system_prompt_template: str = Field(
         default=DEFAULT_TRANSLATION_CONTEXT_SYSTEM_PROMPT_TEMPLATE,
-        description="System prompt template cho bước trích xuất hồ sơ nhân vật/quan hệ/glossary",
+        description="System prompt template cho bước trích xuất glossary / thuật ngữ (mặc định tắt)",
     )
     translation_review_system_prompt_template: str = Field(
         default=DEFAULT_TRANSLATION_REVIEW_SYSTEM_PROMPT_TEMPLATE,

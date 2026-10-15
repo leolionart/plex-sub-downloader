@@ -221,15 +221,6 @@ class OpenAITranslationClient:
         """Build a numbered translation prompt with optional episode/batch context."""
         sections: list[str] = []
         if context:
-            sections.append(
-                "EPISODE / MOVIE CONTEXT:\n"
-                + json.dumps(context.get("profile") or {}, ensure_ascii=False, indent=2)
-            )
-            metadata = context.get("metadata")
-            if metadata:
-                sections.append(
-                    "MEDIA METADATA:\n" + json.dumps(metadata, ensure_ascii=False, indent=2)
-                )
             previous_context = context.get("previous_context") or []
             if previous_context:
                 sections.append(
@@ -244,9 +235,11 @@ class OpenAITranslationClient:
                 )
 
         numbered_lines = [f"[{i}] {text}" for i, text in enumerate(texts, 1)]
+        if not sections:
+            return "\n".join(numbered_lines)
+
         sections.append("LINES TO TRANSLATE:\n" + "\n".join(numbered_lines))
         return "\n\n".join(sections)
-
     @staticmethod
     def _format_context_entries(entries: list[dict[str, Any]]) -> str:
         return "\n".join(f"[{entry['index']}] {entry['text']}" for entry in entries)
@@ -290,6 +283,7 @@ class OpenAITranslationClient:
         batch_size: int = 25,
         max_concurrent: int = 5,
         media_metadata: dict[str, Any] | None = None,
+        context_enabled: bool | None = None,
     ) -> dict[str, Any]:
         """
         Translate entire .srt subtitle file with parallel batch processing.
@@ -301,6 +295,8 @@ class OpenAITranslationClient:
             to_lang: Target language
             batch_size: Number of subtitle entries per API call
             max_concurrent: Max concurrent API calls (semaphore limit)
+            media_metadata: Optional media metadata
+            context_enabled: Whether to run context extraction (defaults to settings)
 
         Returns:
             Dict với stats: {lines_translated, batches, cost_estimate}
@@ -316,7 +312,8 @@ class OpenAITranslationClient:
             raise TranslationClientError("No subtitle entries found")
 
         profile: dict[str, Any] = {}
-        context_enabled = self._config.subtitle_settings.translation_context_enabled
+        if context_enabled is None:
+            context_enabled = self._config.subtitle_settings.translation_context_enabled
         if context_enabled:
             try:
                 profile = await self.extract_episode_context(
@@ -349,15 +346,16 @@ class OpenAITranslationClient:
                 batch_num = batch_idx + 1
                 logger.info(f"Translating batch {batch_num}/{total_batches} ({len(batch)} entries)")
                 texts = [entry["text"] for entry in batch]
-                context = self._build_batch_context(
-                    entries=entries,
-                    batch_start=batch_idx * batch_size,
-                    batch_size=len(batch),
-                    context_window=context_window,
-                    profile=profile,
-                    media_metadata=media_metadata,
-                )
-
+                context = None
+                if context_enabled:
+                    context = self._build_batch_context(
+                        entries=entries,
+                        batch_start=batch_idx * batch_size,
+                        batch_size=len(batch),
+                        context_window=context_window,
+                        profile=profile,
+                        media_metadata=media_metadata,
+                    )
                 try:
                     translated_texts = await self.translate_text_batch(
                         texts,
@@ -428,6 +426,9 @@ class OpenAITranslationClient:
         }
 
         return stats
+    # Alias for translate_srt_file
+    translate_subtitles = translate_srt_file
+
 
     async def extract_episode_context(
         self,
@@ -483,7 +484,7 @@ class OpenAITranslationClient:
         translated_entries: list[dict[str, Any]],
         from_lang: str,
         to_lang: str,
-        profile: dict[str, Any],
+        profile: dict[str, Any] | None = None,
         media_metadata: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """Run a final full-episode consistency pass over translated subtitles."""
@@ -521,7 +522,7 @@ class OpenAITranslationClient:
                                 "from_lang": from_lang,
                                 "to_lang": to_lang,
                                 "metadata": media_metadata or {},
-                                "profile": profile,
+                                "profile": profile or {},
                                 "source": [
                                     {"index": entry["index"], "text": entry["text"]}
                                     for entry in source_entries
@@ -556,7 +557,7 @@ class OpenAITranslationClient:
         batch_start: int,
         batch_size: int,
         context_window: int,
-        profile: dict[str, Any],
+        profile: dict[str, Any] | None = None,
         media_metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         batch_end = batch_start + batch_size
@@ -564,7 +565,7 @@ class OpenAITranslationClient:
         next_end = min(len(entries), batch_end + context_window)
         return {
             "metadata": media_metadata or {},
-            "profile": profile,
+            "profile": profile or {},
             "previous_context": entries[previous_start:batch_start],
             "next_context": entries[batch_end:next_end],
         }

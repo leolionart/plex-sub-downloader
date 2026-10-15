@@ -46,3 +46,32 @@ def test_search_override_preserves_explicit_language_and_matching_fields() -> No
         episode=1,
         video_filename="From.S03E01.mkv",
     )
+
+
+def test_subtitle_translate_request() -> None:
+    from app.routes.subtitles import SubtitleTranslateRequest
+
+    req = SubtitleTranslateRequest(rating_key="12345")
+    assert req.rating_key == "12345"
+    assert req.from_lang == "en"
+    assert req.use_cache is True
+
+
+@pytest.mark.asyncio
+async def test_translate_endpoint(monkeypatch) -> None:
+    from unittest.mock import AsyncMock, MagicMock
+    from httpx import AsyncClient, ASGITransport
+    from app.main import app
+
+    mock_service = MagicMock()
+    mock_service.runtime_config.ai_available = True
+    mock_service.execute_translate_for_media = AsyncMock(
+        return_value={"status": "success", "message": "Translated"}
+    )
+    monkeypatch.setattr("app.main.subtitle_service", mock_service)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/api/subtitles/translate", json={"rating_key": "12345"})
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "success", "message": "Translated"}

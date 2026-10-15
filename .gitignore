@@ -75,3 +75,9 @@ data/*
 
 # Playwright MCP
 .playwright-mcp/
+
+# Local skills and attachments
+.attachments/
+.gemini/
+*.skill
+gh-release-workflow/

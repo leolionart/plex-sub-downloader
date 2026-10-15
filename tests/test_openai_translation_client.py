@@ -72,21 +72,67 @@ async def test_translate_srt_file_uses_episode_context_and_batch_windows(tmp_pat
     assert "REVIEW VI Line 1" in output.read_text(encoding="utf-8")
 
 
-def test_build_translation_user_prompt_includes_context() -> None:
+def test_build_translation_user_prompt_excludes_character_profile() -> None:
     client = OpenAITranslationClient(RuntimeConfig(openai_api_key="test-key"))
 
     prompt = client._build_translation_user_prompt(
         ["Hello"],
         {
             "metadata": {"title": "FROM"},
-            "profile": {"summary": "A tense scene"},
+            "profile": {
+                "summary": "A tense scene",
+                "characters": [{"name": "Alice", "relationships": ["Bob's sister"]}],
+            },
             "previous_context": [{"index": 1, "text": "Who are you?"}],
             "next_context": [{"index": 3, "text": "Run!"}],
         },
     )
 
-    assert "EPISODE / MOVIE CONTEXT" in prompt
+    assert "EPISODE / MOVIE CONTEXT" not in prompt
+    assert "Alice" not in prompt
+    assert "relationships" not in prompt
     assert "PREVIOUS CONTEXT" in prompt
     assert "NEXT CONTEXT" in prompt
     assert "LINES TO TRANSLATE" in prompt
     assert "[1] Hello" in prompt
+
+
+def test_build_translation_user_prompt_minimal_without_context() -> None:
+    client = OpenAITranslationClient(RuntimeConfig(openai_api_key="test-key"))
+
+    prompt = client._build_translation_user_prompt(["Hello", "World"])
+    assert prompt == "[1] Hello\n[2] World"
+
+
+@pytest.mark.asyncio
+async def test_translate_srt_file_bypasses_context_by_default(tmp_path: Path) -> None:
+    client = OpenAITranslationClient(RuntimeConfig(openai_api_key="test-key"))
+    source = tmp_path / "source.srt"
+    output = tmp_path / "output.srt"
+    write_srt(source, 4)
+
+    client.extract_episode_context = AsyncMock()
+    seen_contexts = []
+
+    async def fake_translate_text_batch(texts, from_lang="en", to_lang="vi", context=None):
+        seen_contexts.append(context)
+        return [f"VI {text}" for text in texts]
+
+    client.translate_text_batch = fake_translate_text_batch
+
+    stats = await client.translate_srt_file(
+        source,
+        output,
+        batch_size=2,
+        max_concurrent=1,
+    )
+
+    assert stats["context_enabled"] is False
+    assert stats["context_profile_extracted"] is False
+    client.extract_episode_context.assert_not_called()
+    assert all(c is None for c in seen_contexts)
+
+
+def test_translate_subtitles_alias() -> None:
+    client = OpenAITranslationClient(RuntimeConfig(openai_api_key="test-key"))
+    assert client.translate_subtitles == client.translate_srt_file

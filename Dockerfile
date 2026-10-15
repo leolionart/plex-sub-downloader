@@ -49,7 +49,7 @@ RUN mkdir -p /app/data /tmp/plex-subtitles && \
 EXPOSE 8000
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=20s --timeout=5s --start-period=30s --retries=3 \
     CMD gosu appuser python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"
 
 # Entrypoint fixes permissions then drops to appuser
