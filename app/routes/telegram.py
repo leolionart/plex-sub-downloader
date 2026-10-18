@@ -13,10 +13,12 @@ router = APIRouter(prefix="/api/telegram", tags=["telegram"])
 
 
 def get_subtitle_service():
-    from app.main import subtitle_service
-    if not subtitle_service:
+    import app.main as main_app
+    if not main_app.subtitle_service:
+        main_app.ensure_service_initialized()
+    if not main_app.subtitle_service:
         raise HTTPException(status_code=503, detail="Service not initialized")
-    return subtitle_service
+    return main_app.subtitle_service
 
 
 @router.post("/webhook")

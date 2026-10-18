@@ -57,6 +57,41 @@ class TestPlexClientConnection:
             PlexClient(RuntimeConfig(plex_url="http://localhost:32400", plex_token="test-token"))
 
 
+    @patch("app.clients.plex_client.PlexServer")
+    def test_connect_deferred_when_plex_booting(self, mock_server):
+        """When Plex is booting/unreachable at startup, PlexClient defers connection instead of crashing init."""
+        ready_server = Mock()
+        ready_server.friendlyName = "Recovered Plex Server"
+        mock_server.side_effect = [
+            ConnectionError("Connection refused"),
+            ConnectionError("Connection refused"),
+            ConnectionError("Connection refused"),
+            ready_server,
+        ]
+
+        client = PlexClient(
+            RuntimeConfig(plex_url="http://localhost:32400", plex_token="test-token", max_retries=3, retry_delay=0)
+        )
+        assert client._server is None
+        assert client.server.friendlyName == "Recovered Plex Server"
+
+    @pytest.mark.asyncio
+    async def test_health_check_returns_503_when_uninitialized_and_auto_heals(self, monkeypatch):
+        """Health check returns 503 if ensure_service_initialized fails, and 200 when service is active."""
+        import app.main as main_app
+
+        monkeypatch.setattr(main_app, "subtitle_service", None)
+        monkeypatch.setattr(main_app, "runtime_config", None)
+        monkeypatch.setattr(main_app, "ensure_service_initialized", lambda: None)
+
+        resp = await main_app.health_check()
+        assert getattr(resp, "status_code", 200) == 503
+
+        monkeypatch.setattr(main_app, "subtitle_service", Mock())
+        monkeypatch.setattr(main_app, "runtime_config", RuntimeConfig())
+        ok_resp = await main_app.health_check()
+        assert ok_resp == {"status": "healthy"}
+
 class TestGetVideo:
     """Test get_video method."""
 

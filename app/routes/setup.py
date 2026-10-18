@@ -35,12 +35,14 @@ class RuntimeConfigPayload(RuntimeConfig):
 
 def _get_services(require_subtitle_service: bool = False):
     """Lazy import to avoid circular imports."""
-    from app.main import config_store, subtitle_service, runtime_config
-    if not config_store or not runtime_config:
+    import app.main as main_app
+    if not main_app.config_store or not main_app.runtime_config or (require_subtitle_service and not main_app.subtitle_service):
+        main_app.ensure_service_initialized()
+    if not main_app.config_store or not main_app.runtime_config:
         raise HTTPException(status_code=503, detail="Service not initialized")
-    if require_subtitle_service and not subtitle_service:
+    if require_subtitle_service and not main_app.subtitle_service:
         raise HTTPException(status_code=503, detail="Service not fully configured — complete setup first")
-    return config_store, subtitle_service, runtime_config
+    return main_app.config_store, main_app.subtitle_service, main_app.runtime_config
 
 
 def _detect_lan_ip() -> str:

@@ -88,6 +88,23 @@ def reinit_service() -> SubtitleService | None:
         return None
 
 
+
+def ensure_service_initialized() -> SubtitleService | None:
+    """Ensure config_store, runtime_config, and subtitle_service are initialized (auto-heal on demand)."""
+    global subtitle_service, runtime_config, config_store
+    if subtitle_service is not None and runtime_config is not None:
+        return subtitle_service
+    try:
+        if config_store is None:
+            config_store = ConfigStore(settings.config_file)
+        if runtime_config is None:
+            runtime_config = config_store.load()
+        if subtitle_service is None:
+            return reinit_service()
+    except Exception as e:
+        logger.warning(f"Auto-initialization attempt failed: {e}")
+    return subtitle_service
+
 app = FastAPI(
     title="Plex Subtitle Service",
     description="Automated Vietnamese subtitle downloader and uploader for Plex",
@@ -196,6 +213,8 @@ async def library_ui(request: Request) -> HTMLResponse:
 async def settings_ui(request: Request) -> HTMLResponse:
     """Unified setup and service settings page."""
     if not subtitle_service or not runtime_config:
+        ensure_service_initialized()
+    if not subtitle_service or not runtime_config:
         return HTMLResponse("Service not initialized", status_code=503)
 
     configured = _is_configured(runtime_config)
@@ -226,6 +245,8 @@ async def settings_ui(request: Request) -> HTMLResponse:
 async def settings_preferences_ui(request: Request) -> HTMLResponse:
     """Preferences section embedded by the unified configuration page."""
     if not subtitle_service or not runtime_config:
+        ensure_service_initialized()
+    if not subtitle_service or not runtime_config:
         return HTMLResponse("Service not initialized", status_code=503)
     configured = _is_configured(runtime_config)
     stats = subtitle_service.stats.get_all() if configured else {"total_downloads": 0, "total_skipped": 0, "total_translations": 0, "total_syncs": 0, "success_rate": 0}
@@ -254,6 +275,8 @@ async def translation_ui(request: Request) -> HTMLResponse:
 @app.get("/sync", response_class=HTMLResponse)
 async def sync_ui(request: Request) -> HTMLResponse:
     """Sync Timing UI."""
+    if not subtitle_service or not runtime_config:
+        ensure_service_initialized()
     if not subtitle_service or not runtime_config:
         return HTMLResponse("Service not initialized", status_code=503)
     configured = _is_configured(runtime_config)
@@ -290,6 +313,8 @@ async def api_info() -> dict[str, Any]:
 async def get_settings() -> dict[str, Any]:
     """Get current settings API."""
     if not subtitle_service or not runtime_config:
+        ensure_service_initialized()
+    if not subtitle_service or not runtime_config:
         raise HTTPException(status_code=503, detail="Service not initialized")
 
     config = subtitle_service.get_config()
@@ -301,6 +326,8 @@ async def get_settings() -> dict[str, Any]:
 @app.post("/api/settings")
 async def update_settings(request: Request) -> dict[str, str]:
     """Update settings API."""
+    if not subtitle_service or not config_store or not runtime_config:
+        ensure_service_initialized()
     if not subtitle_service or not config_store or not runtime_config:
         raise HTTPException(status_code=503, detail="Service not initialized")
 
@@ -325,9 +352,16 @@ async def update_settings(request: Request) -> dict[str, str]:
     }
 
 
-@app.get("/health")
-async def health_check() -> dict[str, str]:
-    """Health check endpoint cho Docker."""
+@app.get("/health", response_model=None)
+async def health_check() -> dict[str, str] | JSONResponse:
+    """Health check endpoint cho Docker — auto-heals or returns 503 if service cannot initialize."""
+    if subtitle_service is None or runtime_config is None:
+        ensure_service_initialized()
+    if subtitle_service is None or runtime_config is None:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "unhealthy", "detail": "Service not initialized"},
+        )
     return {"status": "healthy"}
 
 
@@ -514,6 +548,8 @@ async def _process_subtitle_task(rating_key: str, event: str, request_id: str) -
         event: Webhook event type
         request_id: Request ID cho logging
     """
+    if subtitle_service is None:
+        ensure_service_initialized()
     if subtitle_service is None:
         logger.error(f"[{request_id}] Service not initialized — configure via /setup first")
         return

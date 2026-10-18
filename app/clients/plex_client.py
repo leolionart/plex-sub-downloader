@@ -60,7 +60,15 @@ class PlexClient:
         self._movie_details_cache = TTLCache(default_ttl=1200.0, maxsize=500, copy_on_read=True)
         if not self._mock_mode:
             if self._config.plex_url and self._config.plex_token:
-                self._connect()
+                try:
+                    self._connect()
+                except PlexClientError:
+                    raise
+                except Exception as e:
+                    logger.warning(
+                        f"Plex server temporarily unreachable during startup (will auto-connect on demand): {e}"
+                    )
+                    self._server = None
             else:
                 logger.warning("Plex credentials not configured — will connect after setup")
 
