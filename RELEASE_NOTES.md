@@ -1,5 +1,10 @@
 # Release Notes
 
+## Unreleased - 2026-10-18 10:51 +07
+
+Generated before push from commits:
+
+- `7ffe692` fix(resilience): defer Plex connect on boot, auto-heal uninitialized service, and return 503 on /health when uninitialized
 
 ## Unreleased - 2026-10-15 21:00 +07
 
