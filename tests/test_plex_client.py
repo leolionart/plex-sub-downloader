@@ -608,3 +608,52 @@ class TestPlexClientCachingAndInvalidation:
         assert stats_after["sections"]["size"] == 0
         assert stats_after["movie_details"]["size"] == 0
         assert stats_after["show_tree"]["size"] == 0
+
+
+class TestGetSessions:
+    """Test normalized Now Playing session metadata."""
+
+    def test_episode_includes_parent_show_and_section_metadata(self, plex_client, mock_plex_server):
+        episode = Mock(spec=Episode)
+        episode.ratingKey = 67890
+        episode.title = "Pilot"
+        episode.type = "episode"
+        episode.year = 2008
+        episode.seasonNumber = 1
+        episode.episodeNumber = 1
+        episode.media = []
+        episode.grandparentRatingKey = 12345
+        episode.grandparentTitle = "Breaking Bad"
+        episode.librarySectionID = "2"
+        episode.thumb = "/library/metadata/67890/thumb"
+        episode.player = Mock(title="Living Room", state="playing")
+        episode.duration = 1000
+        episode.viewOffset = 250
+        mock_plex_server.sessions.return_value = [episode]
+
+        sessions = plex_client.get_sessions()
+
+        assert sessions[0]["media_type"] == "episode"
+        assert sessions[0]["show_rating_key"] == "12345"
+        assert sessions[0]["show_title"] == "Breaking Bad"
+        assert sessions[0]["section_key"] == "2"
+
+    def test_movie_does_not_get_parent_show_fields(self, plex_client, mock_plex_server):
+        movie = Mock(spec=Movie)
+        movie.ratingKey = 111
+        movie.title = "Movie"
+        movie.type = "movie"
+        movie.year = 2024
+        movie.media = []
+        movie.thumb = None
+        movie.player = None
+        movie.duration = 0
+        movie.viewOffset = 0
+        mock_plex_server.sessions.return_value = [movie]
+
+        sessions = plex_client.get_sessions()
+
+        assert sessions[0]["media_type"] == "movie"
+        assert "show_rating_key" not in sessions[0]
+        assert "show_title" not in sessions[0]
+        assert "section_key" not in sessions[0]

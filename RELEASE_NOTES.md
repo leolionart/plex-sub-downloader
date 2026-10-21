@@ -1,6 +1,13 @@
 # Release Notes
 
-## Unreleased - 2026-10-18 10:51 +07
+## Unreleased - 2026-10-21
+
+- **Subtitle Workspace and Library Navigation**:
+  - Added direct navigation from a playing TV episode to its complete Series in Plex Library Manager.
+  - Added URL state for library sections, movies, series, filters, search, and sorting so deep links restore the selected context.
+  - Preserved cached library, show-tree, and movie-detail scans across modal close and browser history navigation; explicit Refresh and completed subtitle actions remain the refresh points.
+  - Added regression coverage for episode parent-series session metadata and library URL-state behavior.
+
 
 Generated before push from commits:
 

@@ -243,6 +243,24 @@ async def test_library_ui_page(mock_service):
 
 
 @pytest.mark.asyncio
+async def test_library_ui_url_state_contract(mock_service):
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(
+            "/library?section=2&show=201&movie=101&filter=all&q=Severance&sort=titleSort:asc"
+        )
+        assert response.status_code == 200
+        html = response.text
+        assert "getLibraryUrlParams" in html
+        assert "requestedSection" in html
+        assert "requestedShow" in html
+        assert "requestedMovie" in html
+        assert "window.addEventListener(\"popstate\"" in html
+        assert "fetchShowTree(ratingKey, false)" not in html
+        assert "fetchMovieDetail(ratingKey, false)" not in html
+
+
+@pytest.mark.asyncio
 async def test_library_ui_bulk_selection_controls(mock_service):
     """Test that /library renders multi-selection and floating bulk action bar."""
     transport = ASGITransport(app=app)
@@ -259,8 +277,6 @@ async def test_library_ui_bulk_selection_controls(mock_service):
         assert 'id="btnSelectAllPage"' in html
         # Season bulk action handler
         assert "startBatchActionForSeason" in html
-
-
 @pytest.mark.asyncio
 async def test_batch_upload_target_expands_shows(mock_service):
     """Test that batch upload expands show rating_keys to episodes."""

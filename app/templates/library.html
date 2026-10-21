@@ -624,24 +624,71 @@
     let cachedItems = [];
     let currentSubtitleFilter = "missing_vi";
     let currentSort = localStorage.getItem("plex_library_sort") || "addedAt:desc";
-
-    function handleSortChange(sortVal) {
-        currentSort = sortVal;
-        localStorage.setItem("plex_library_sort", sortVal);
-        currentOffset = 0;
-        cachedItems = [];
-        clearSelection();
-        loadCurrentSectionItems(false, true);
-    }
     let currentShowTreeData = null;
     let currentShowRatingKey = null;
+    let currentMovieRatingKey = null;
     let showTreeFilter = "missing_vi";
     let activeSearchButton = null;
     let activeSearchButtonHtml = null;
     let lastNotFoundRatingKeys = [];
     let activeBatchKeys = [];
+    let isApplyingHistoryState = false;
 
+    function getLibraryUrlParams() {
+        return new URLSearchParams(window.location.search);
+    }
 
+    function syncLibraryUrl(replace = false) {
+        if (isApplyingHistoryState) return;
+        const params = new URLSearchParams();
+        if (activeSectionKey) params.set("section", String(activeSectionKey));
+        if (currentShowRatingKey) params.set("show", String(currentShowRatingKey));
+        if (currentMovieRatingKey) params.set("movie", String(currentMovieRatingKey));
+        if (currentSubtitleFilter && currentSubtitleFilter !== "missing_vi") {
+            params.set("filter", currentSubtitleFilter);
+        }
+        const searchInput = document.getElementById("librarySearchInput");
+        const query = searchInput ? searchInput.value.trim() : "";
+        if (query) params.set("q", query);
+        if (currentSort && currentSort !== "addedAt:desc") {
+            params.set("sort", currentSort);
+        }
+
+        const newQuery = params.toString();
+        const newUrl = newQuery ? `${window.location.pathname}?${newQuery}` : window.location.pathname;
+        const currentRelative = `${window.location.pathname}${window.location.search}`;
+        if (newUrl === currentRelative) return;
+
+        if (replace) {
+            window.history.replaceState({
+                section: activeSectionKey,
+                show: currentShowRatingKey,
+                movie: currentMovieRatingKey,
+                filter: currentSubtitleFilter,
+                q: query,
+                sort: currentSort
+            }, "", newUrl);
+        } else {
+            window.history.pushState({
+                section: activeSectionKey,
+                show: currentShowRatingKey,
+                movie: currentMovieRatingKey,
+                filter: currentSubtitleFilter,
+                q: query,
+                sort: currentSort
+            }, "", newUrl);
+        }
+    }
+
+    function handleSortChange(sortVal) {
+        currentSort = sortVal;
+        localStorage.setItem("plex_library_sort", sortVal);
+        syncLibraryUrl(false);
+        currentOffset = 0;
+        cachedItems = [];
+        clearSelection();
+        loadCurrentSectionItems(false, true);
+    }
     let selectedRatingKeys = new Set();
 
     function toggleItemSelection(ratingKey, isChecked) {
@@ -852,6 +899,22 @@
     }
 
     function initLibraryApp() {
+        const urlParams = getLibraryUrlParams();
+        const requestedFilter = urlParams.get("filter");
+        if (requestedFilter) {
+            currentSubtitleFilter = requestedFilter;
+        }
+        const requestedSort = urlParams.get("sort");
+        if (requestedSort) {
+            currentSort = requestedSort;
+            localStorage.setItem("plex_library_sort", requestedSort);
+        }
+        const requestedQuery = urlParams.get("q");
+        const searchInput = document.getElementById("librarySearchInput");
+        if (requestedQuery !== null && searchInput) {
+            searchInput.value = requestedQuery;
+        }
+
         setLayoutMode(currentLayoutMode, false);
         applySubtitleFilterUI();
         initAutoFallbackUI();
@@ -869,6 +932,7 @@
     function setSubtitleFilter(filter) {
         currentSubtitleFilter = filter;
         applySubtitleFilterUI();
+        syncLibraryUrl(false);
         currentOffset = 0;
         cachedItems = [];
         clearSelection();
@@ -1012,8 +1076,7 @@
                 if (isShow) {
                     openShowTree(item.rating_key);
                 } else {
-                    const btn = card.querySelector(".media-actions button");
-                    startBatchAction([item.rating_key], 'upload_target', btn);
+                    openMovieDetail(item.rating_key);
                 }
             };
 
@@ -1122,12 +1185,26 @@
             btn.onclick = () => selectSection(sec.key);
             container.appendChild(btn);
         });
-
-        // Select first section by default
-        selectSection(sections[0].key);
+        // Select section matching URL if present, otherwise default to first
+        const urlParams = getLibraryUrlParams();
+        const requestedSection = urlParams.get("section");
+        const matchedSec = requestedSection
+            ? sections.find(s => String(s.key) === String(requestedSection))
+            : null;
+        const targetKey = matchedSec ? matchedSec.key : sections[0].key;
+        selectSection(targetKey, false);
+        // Automatically trigger modals if show or movie query parameter is present on initial load
+        const requestedShow = urlParams.get("show");
+        const requestedMovie = urlParams.get("movie");
+        if (requestedShow) {
+            openShowTree(requestedShow, false, false);
+        } else if (requestedMovie) {
+            openMovieDetail(requestedMovie, false, false);
+        }
+        syncLibraryUrl(true);
     }
 
-    function selectSection(key) {
+    function selectSection(key, updateUrl = true) {
         activeSectionKey = key;
         document.querySelectorAll(".section-btn").forEach(btn => {
             const isActive = btn.dataset.key === String(key);
@@ -1135,6 +1212,9 @@
             btn.classList.toggle("btn-ghost", !isActive);
             btn.classList.toggle("bg-bg-input", !isActive);
         });
+        if (updateUrl) {
+            syncLibraryUrl(false);
+        }
         currentOffset = 0;
         cachedItems = [];
         clearSelection();
@@ -1257,6 +1337,7 @@
 
     function handleSearchKey(event) {
         if (event.key === "Enter") {
+            syncLibraryUrl(false);
             currentOffset = 0;
             cachedItems = [];
             loadCurrentSectionItems();
@@ -1264,14 +1345,15 @@
     }
 
     /* Modal / Drawer: Show Tree */
-    async function openShowTree(ratingKey, forceRefresh = false) {
+    async function openShowTree(ratingKey, forceRefresh = false, updateUrl = true) {
         const modal = document.getElementById("showModal");
         const body = document.getElementById("showModalBody");
         const title = document.getElementById("showModalTitle");
 
-        currentShowRatingKey = ratingKey;
+        currentShowRatingKey = String(ratingKey);
+        currentMovieRatingKey = null;
         showTreeFilter = "missing_vi";
-
+        if (updateUrl) syncLibraryUrl(false);
         modal.classList.add("active");
 
         const cacheKey = 'show_tree_' + ratingKey;
@@ -1281,8 +1363,6 @@
             currentShowTreeData = cached;
             title.innerText = `${cached.title} (${cached.year || 'Series'})`;
             renderShowTreeContent();
-            // Background silent refresh
-            fetchShowTree(ratingKey, false);
             return;
         }
 
@@ -1491,15 +1571,20 @@
         body.innerHTML = html;
     }
 
-    function closeShowModal() {
+    function closeShowModal(updateUrl = true) {
         document.getElementById("showModal").classList.remove("active");
+        currentShowRatingKey = null;
+        if (updateUrl) syncLibraryUrl(false);
     }
 
     /* Modal Movie Details */
-    async function openMovieDetail(ratingKey, forceRefresh = false) {
+    async function openMovieDetail(ratingKey, forceRefresh = false, updateUrl = true) {
         const modal = document.getElementById("movieModal");
         const body = document.getElementById("movieModalBody");
 
+        currentMovieRatingKey = String(ratingKey);
+        currentShowRatingKey = null;
+        if (updateUrl) syncLibraryUrl(false);
         modal.classList.add("active");
 
         const cacheKey = 'movie_detail_' + ratingKey;
@@ -1507,7 +1592,6 @@
 
         if (cached) {
             renderMovieDetailContent(cached);
-            fetchMovieDetail(ratingKey, false);
             return;
         }
 
@@ -1576,8 +1660,10 @@
         `;
     }
 
-    function closeMovieModal() {
+    function closeMovieModal(updateUrl = true) {
         document.getElementById("movieModal").classList.remove("active");
+        currentMovieRatingKey = null;
+        if (updateUrl) syncLibraryUrl(false);
     }
 
     /* Quick single item actions */
@@ -1813,14 +1899,69 @@
         lastNotFoundRatingKeys = [];
         resetActiveSearchButton();
 
-        // Refresh active show if open, or refresh library items
+        // Refresh invalidated detail or section data after subtitle actions
         const showModal = document.getElementById("showModal");
+        const movieModal = document.getElementById("movieModal");
         if (showModal && showModal.classList.contains("active") && currentShowRatingKey) {
-            openShowTree(currentShowRatingKey, true);
+            openShowTree(currentShowRatingKey, true, false);
+        } else if (movieModal && movieModal.classList.contains("active") && currentMovieRatingKey) {
+            openMovieDetail(currentMovieRatingKey, true, false);
         } else {
             loadCurrentSectionItems(false, true);
         }
     }
+
+    async function restoreLibraryFromUrl() {
+        const params = getLibraryUrlParams();
+        isApplyingHistoryState = true;
+        const requestedFilter = params.get("filter") || "missing_vi";
+        const requestedSort = params.get("sort") || "addedAt:desc";
+        const requestedQuery = params.get("q") || "";
+        currentSubtitleFilter = requestedFilter;
+        currentSort = requestedSort;
+        localStorage.setItem("plex_library_sort", requestedSort);
+        const searchInput = document.getElementById("librarySearchInput");
+        if (searchInput) searchInput.value = requestedQuery;
+        const sortSelect = document.getElementById("librarySortSelect");
+        if (sortSelect) sortSelect.value = requestedSort;
+        applySubtitleFilterUI();
+
+        const requestedSection = params.get("section");
+        const sectionButton = requestedSection
+            ? Array.from(document.querySelectorAll(".section-btn")).find(btn => String(btn.dataset.key) === String(requestedSection))
+            : null;
+        const targetSection = sectionButton ? sectionButton.dataset.key : activeSectionKey;
+        if (targetSection) {
+            selectSection(targetSection, false);
+        }
+
+        closeShowModal(false);
+        closeMovieModal(false);
+        isApplyingHistoryState = false;
+
+        const requestedShow = params.get("show");
+        const requestedMovie = params.get("movie");
+        if (requestedShow) {
+            openShowTree(requestedShow, false, false);
+        } else if (requestedMovie) {
+            openMovieDetail(requestedMovie, false, false);
+        }
+    }
+
+    window.addEventListener("popstate", () => {
+        restoreLibraryFromUrl();
+    });
+
+    document.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return;
+        const showModal = document.getElementById("showModal");
+        const movieModal = document.getElementById("movieModal");
+        if (showModal && showModal.classList.contains("active")) {
+            closeShowModal();
+        } else if (movieModal && movieModal.classList.contains("active")) {
+            closeMovieModal();
+        }
+    });
 
     // Close modal / drawer on background overlay click
     document.addEventListener("DOMContentLoaded", () => {

@@ -1079,8 +1079,22 @@
         const progressHtml = item.progress !== undefined
             ? `<div class="progress-mini"><div class="progress-mini-fill" style="width:${item.progress}%"></div></div>`
             : '';
-
         const selectedClass = isSelected ? ' selected' : '';
+        let seriesLinkHtml = '';
+        const showKey = item.show_rating_key || item.grandparent_rating_key;
+        if (item.media_type === 'episode' && showKey) {
+            const sectionParam = item.section_key ? `section=${encodeURIComponent(item.section_key)}&` : '';
+            const seriesUrl = `/library?${sectionParam}show=${encodeURIComponent(showKey)}`;
+            seriesLinkHtml = `
+                <a href="${seriesUrl}"
+                   class="btn btn-xs btn-outline btn-warning mt-2 w-full flex items-center justify-center gap-1.5 font-medium z-10"
+                   title="Mở toàn bộ Series trên Library Manager để quản lý tất cả các tập"
+                   onclick="event.stopPropagation();">
+                    <i class="fa-solid fa-tv text-[11px]"></i>
+                    <span>Mở Series trên Library</span>
+                </a>
+            `;
+        }
 
         return `
             <div class="media-card${selectedClass}" data-key="${item.rating_key}" onclick="selectMedia('${item.rating_key}')">
@@ -1089,6 +1103,7 @@
                 <div class="media-meta">${item.media_type}${item.year ? ' &middot; ' + item.year : ''}</div>
                 ${playerHtml}
                 ${progressHtml}
+                ${seriesLinkHtml}
             </div>
         `;
     }

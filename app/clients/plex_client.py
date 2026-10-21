@@ -415,15 +415,23 @@ class PlexClient:
         elif isinstance(video, Episode):
             # Episode metadata
             episode = cast(Episode, video)
-            show = episode.show()
+            show = None
+            try:
+                show = episode.show() if callable(getattr(episode, "show", None)) else getattr(episode, "show", None)
+            except Exception:
+                show = None
+            raw_show_title = getattr(episode, "grandparentTitle", None)
+            if not isinstance(raw_show_title, str) and show:
+                raw_show_title = getattr(show, "title", None)
+            show_title = raw_show_title if isinstance(raw_show_title, str) else None
 
             metadata = MediaMetadata(
                 media_type="episode",
-                show_title=show.title,
+                show_title=show_title,
                 season_number=episode.seasonNumber,
                 episode_number=episode.episodeNumber,
-                imdb_id=self._extract_guid(show, "imdb"),  # Show's IMDb ID
-                tmdb_id=self._extract_guid(show, "tmdb"),  # Show's TMDb ID
+                imdb_id=self._extract_guid(show, "imdb") if show else None,  # Show's IMDb ID
+                tmdb_id=self._extract_guid(show, "tmdb") if show else None,  # Show's TMDb ID
                 **base_data,
             )
         elif isinstance(video, Show):
@@ -883,7 +891,7 @@ class PlexClient:
                 thumb = getattr(session, "thumb", None)
                 duration = getattr(session, "duration", 0) or 0
                 view_offset = getattr(session, "viewOffset", 0) or 0
-                results.append({
+                result = {
                     "rating_key": str(session.ratingKey),
                     "title": str(metadata),
                     "media_type": metadata.media_type,
@@ -894,7 +902,22 @@ class PlexClient:
                         "state": getattr(player, "state", "unknown") if player else "unknown",
                     },
                     "progress": round((view_offset / duration) * 100) if duration > 0 else 0,
-                })
+                }
+                if isinstance(session, Episode):
+                    show_rating_key = getattr(session, "grandparentRatingKey", None)
+                    if not show_rating_key:
+                        show = getattr(session, "show", None)
+                        try:
+                            show = show() if callable(show) else show
+                        except Exception:
+                            show = None
+                        show_rating_key = getattr(show, "ratingKey", None) if show else None
+                    result.update({
+                        "show_rating_key": str(show_rating_key) if show_rating_key else None,
+                        "show_title": getattr(session, "grandparentTitle", None),
+                        "section_key": getattr(session, "librarySectionID", None) or getattr(session, "sectionKey", None),
+                    })
+                results.append(result)
             return results
         except Exception as e:
             logger.warning(f"Failed to get sessions: {e}")
