@@ -59,9 +59,10 @@ async def telegram_webhook(update: dict[str, Any]) -> dict[str, Any]:
             await service.telegram_client.send_message(text, reply_markup=buttons or None)
         elif action in {"upload_best", "upload"}:
             selected_id = None if not subtitle_id or subtitle_id == "best" else subtitle_id
-            result = await service.execute_manual_target_upload_for_media(
-                rating_key=rating_key, subtitle_id=selected_id, use_cache=False
-            )
+            upload_kwargs: dict[str, Any] = {"rating_key": rating_key}
+            if selected_id:
+                upload_kwargs.update({"subtitle_id": selected_id, "use_cache": False})
+            result = await service.execute_manual_target_upload_for_media(**upload_kwargs)
             await service.telegram_client.send_message(result.get("message", "Đã xử lý"))
         elif action == "sync":
             result = await service.execute_sync_for_media(rating_key=rating_key, request_id=rating_key)
@@ -82,5 +83,5 @@ async def telegram_webhook(update: dict[str, Any]) -> dict[str, Any]:
         await service.telegram_client.send_message(f"❌ Không thể thực hiện `{action}`: {exc}")
         return {"ok": False, "action": action, "rating_key": rating_key, "error": str(exc)}
     if message.get("message_id"):
-        await service.telegram_client.edit_message_reply_markup(message["message_id"], chat_id=chat_id)
+        await service.telegram_client.edit_message_reply_markup(message["message_id"])
     return {"ok": True, "action": action, "rating_key": rating_key}

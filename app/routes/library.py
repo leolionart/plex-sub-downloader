@@ -162,20 +162,14 @@ async def get_show_tree(
     use_cache: bool = Query(True),
     refresh: bool = Query(False),
 ):
-    """Get hierarchical show structure with subtitle status for each episode."""
     service = get_subtitle_service()
     effective_use_cache = use_cache and not refresh
     try:
-        tree = await asyncio.to_thread(
-            service.get_show_tree,
-            rating_key,
-            use_cache=effective_use_cache,
-        )
+        tree = await asyncio.to_thread(service.get_show_tree, rating_key, use_cache=effective_use_cache)
         return tree
     except Exception as e:
         logger.error(f"Error fetching show tree for {rating_key}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.get("/movies/{rating_key}")
 async def get_movie_details(
@@ -183,19 +177,38 @@ async def get_movie_details(
     use_cache: bool = Query(True),
     refresh: bool = Query(False),
 ):
-    """Get movie details and subtitle status."""
     service = get_subtitle_service()
     effective_use_cache = use_cache and not refresh
     try:
-        details = await asyncio.to_thread(
-            service.get_movie_details,
-            rating_key,
-            use_cache=effective_use_cache,
-        )
+        details = await asyncio.to_thread(service.get_movie_details, rating_key, use_cache=effective_use_cache)
         return details
     except Exception as e:
         logger.error(f"Error fetching movie details for {rating_key}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+def _persist_translation_skip(service: Any, rating_key: str, skipped: bool) -> dict[str, Any]:
+    import app.main as main_app
+
+    keys = service.set_translation_skip(rating_key, skipped)
+    if main_app.config_store and main_app.runtime_config:
+        main_app.config_store.save(main_app.runtime_config)
+    return {"rating_key": str(rating_key), "translation_skipped": skipped, "translation_skip_rating_keys": keys}
+
+
+@router.get("/translation-skip/{rating_key}")
+async def get_translation_skip(rating_key: str):
+    service = get_subtitle_service()
+    return {"rating_key": str(rating_key), "translation_skipped": service.is_translation_skipped(rating_key)}
+
+
+@router.post("/translation-skip/{rating_key}")
+async def enable_translation_skip(rating_key: str):
+    return _persist_translation_skip(get_subtitle_service(), rating_key, True)
+
+
+@router.delete("/translation-skip/{rating_key}")
+async def disable_translation_skip(rating_key: str):
+    return _persist_translation_skip(get_subtitle_service(), rating_key, False)
 
 async def _run_batch_upload_task(
     task_id: str,
@@ -284,6 +297,16 @@ async def _run_batch_translate_task(
         try:
             preview = await service.preview_sync_for_media(rk)
             item_label = preview.get("title", item_label)
+            if service.is_translation_skipped(rk):
+                task_tracker.update_progress(
+                    task_id=task_id,
+                    current=idx,
+                    item_title=item_label,
+                    log_message=f"[{idx}/{total}] {item_label}: Đã được đánh dấu bỏ qua dịch AI.",
+                    result_item={"rating_key": rk, "title": item_label, "status": "skipped_translation"},
+                )
+                await asyncio.sleep(0.2)
+                continue
 
             if preview.get("has_vi_subtitle"):
                 task_tracker.update_progress(
@@ -307,25 +330,23 @@ async def _run_batch_translate_task(
                 await asyncio.sleep(0.5)
                 continue
 
-            task_tracker.update_progress(
-                task_id=task_id,
-                current=idx,
-                item_title=item_label,
-                log_message=f"[{idx}/{total}] {item_label}: Đang gửi AI dịch thuật...",
-            )
-
             res = await service.execute_translate_for_media(
                 rating_key=rk,
                 pronoun_override=pronoun_override,
             )
             status = res.get("status") if isinstance(res, dict) else "success"
-
+            result_status = "skipped_translation" if status == "skipped_translation" else "success"
+            message = (
+                f"[{idx}/{total}] {item_label}: Đã bỏ qua theo cài đặt."
+                if result_status == "skipped_translation"
+                else f"[{idx}/{total}] {item_label}: Đã dịch và upload Vietsub thành công!"
+            )
             task_tracker.update_progress(
                 task_id=task_id,
                 current=idx,
                 item_title=item_label,
-                log_message=f"[{idx}/{total}] {item_label}: ✓ Đã dịch và upload Vietsub thành công!",
-                result_item={"rating_key": rk, "title": item_label, "status": "success"},
+                log_message=message,
+                result_item={"rating_key": rk, "title": item_label, "status": result_status},
             )
         except Exception as exc:
             logger.error(f"Batch translate error for {rk}: {exc}")
@@ -402,8 +423,10 @@ async def batch_translate(request: BatchActionRequest, background_tasks: Backgro
     expanded_keys = await asyncio.to_thread(_expand_rating_keys_to_videos, service, request.rating_keys)
     if not expanded_keys:
         expanded_keys = request.rating_keys
+    expanded_keys = [rk for rk in expanded_keys if not service.is_translation_skipped(rk)]
+    if not expanded_keys:
+        raise HTTPException(status_code=400, detail="All selected media are excluded from AI translation")
 
-    task_id = task_tracker.create_task("translate", len(expanded_keys))
     background_tasks.add_task(
         _run_batch_translate_task,
         task_id=task_id,

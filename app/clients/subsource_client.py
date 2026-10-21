@@ -286,14 +286,16 @@ class SubsourceClient:
             response.raise_for_status()
             data = response.json()
 
-            movies = data.get("data", [])
+            movies = data.get("data", data.get("results", []))
             if movies:
-                movie_id = movies[0]["movieId"]
-                logger.info(
-                    f"Found movie via IMDb: {movies[0]['title']} "
-                    f"(movieId={movie_id}, subs={movies[0].get('subtitleCount', 0)})"
-                )
-                return movie_id
+                movie = movies[0]
+                movie_id = movie.get("movieId", movie.get("id"))
+                if movie_id is not None:
+                    logger.info(
+                        f"Found movie via IMDb: {movie.get('title', movie.get('name', 'Unknown'))} "
+                        f"(movieId={movie_id}, subs={movie.get('subtitleCount', 0)})"
+                    )
+                    return int(movie_id)
 
         except httpx.HTTPStatusError as e:
             logger.warning(f"Movie search by IMDb failed: {e.response.status_code}")
@@ -348,6 +350,23 @@ class SubsourceClient:
             logger.warning(f"Movie search by title error: {e}")
 
         return None
+
+    async def _search_by_title(self, params: SubtitleSearchParams) -> list[SubtitleResult]:
+        """Backward-compatible title search used by older callers and tests."""
+        movie_id = await self._search_movie_by_title(params.title, params.year, params.season)
+        if not movie_id:
+            return []
+        return await self._search_subtitles_for_movie(movie_id, params.language, params)
+
+    @staticmethod
+    def _detect_quality_type(item: dict[str, Any]) -> str:
+        """Classify legacy subtitle payloads using release metadata."""
+        text = " ".join(str(item.get(key) or "") for key in ("name", "release_info", "productionType")).lower()
+        if any(token in text for token in ("ai", "generated", "machine", "gpt", "gemini")):
+            return "ai"
+        if any(token in text for token in ("retail", "official", "web-dl", "webdl", "bluray", "blu-ray", "hdtv")):
+            return "retail"
+        return "translated"
 
     # ── Subtitle search ───────────────────────────────────────────
 
@@ -609,45 +628,37 @@ class SubsourceClient:
         return sequence_score * 0.40 + token_score * 0.60
 
     def _parse_subtitle_results(self, data: dict[str, Any]) -> list[SubtitleResult]:
-        """Parse Subsource API v1 subtitle response."""
+        """Parse current and legacy Subsource API subtitle response shapes."""
         results: list[SubtitleResult] = []
 
-        for item in data.get("data", []):
+        for item in data.get("data", data.get("results", [])):
             try:
-                subtitle_id = str(item["subtitleId"])
-                release_info_list = item.get("releaseInfo", [])
-                release_info = release_info_list[0] if release_info_list else ""
-
-                # Build name from release info or fallback
-                name = release_info or f"subtitle-{subtitle_id}"
-
-                # Extract season/episode from release name
+                subtitle_id = str(item.get("subtitleId", item.get("id")))
+                release_info_value = item.get("releaseInfo", item.get("release_info", ""))
+                if isinstance(release_info_value, list):
+                    release_info = release_info_value[0] if release_info_value else ""
+                else:
+                    release_info = str(release_info_value or "")
+                name = str(item.get("name") or release_info or f"subtitle-{subtitle_id}")
                 parsed_season, parsed_episode = self._extract_season_episode(name)
 
-                # Map productionType to quality_type
                 production_type = (item.get("productionType") or "").lower()
-                quality_map = {
-                    "retail": "retail",
-                    "translated": "translated",
-                    "ai": "ai",
-                    "machine": "ai",
-                }
-                quality_type = quality_map.get(production_type, "unknown")
+                quality_map = {"retail": "retail", "translated": "translated", "ai": "ai", "machine": "ai"}
+                quality_type = quality_map.get(production_type) or self._detect_quality_type(item)
 
-                # Rating: use total or compute from good/bad
                 rating_data = item.get("rating", {})
-                good = rating_data.get("good", 0)
-                total = rating_data.get("total", 0)
-                rating = (good / total * 10) if total > 0 else None
+                if isinstance(rating_data, dict):
+                    good = rating_data.get("good", 0)
+                    total = rating_data.get("total", 0)
+                    rating = (good / total * 10) if total > 0 else None
+                else:
+                    rating = float(rating_data) if rating_data is not None else None
 
-                # Uploader
                 contributors = item.get("contributors", [])
-                uploader = contributors[0]["displayname"] if contributors else None
+                uploader = contributors[0].get("displayname") if contributors and isinstance(contributors[0], dict) else None
+                download_url = item.get("download_url") or f"{self.base_url}/v1/subtitles/{subtitle_id}/download"
 
-                # Download URL
-                download_url = f"{self.base_url}/v1/subtitles/{subtitle_id}/download"
-
-                result = SubtitleResult(
+                results.append(SubtitleResult(
                     id=subtitle_id,
                     provider=self.name,
                     name=name,
@@ -660,9 +671,7 @@ class SubsourceClient:
                     quality_type=quality_type,
                     season=parsed_season,
                     episode=parsed_episode,
-                )
-                results.append(result)
-
+                ))
             except Exception as e:
                 logger.warning(f"Failed to parse subtitle result: {e}")
                 continue

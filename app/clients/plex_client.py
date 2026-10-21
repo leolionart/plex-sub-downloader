@@ -594,6 +594,8 @@ class PlexClient:
                     codec = getattr(stream, "codec", "unknown") or "unknown"
                     key = getattr(stream, "key", None)
                     is_image_based = str(codec).lower() in ("pgs", "vobsub", "dvdsub", "dvd_subtitle")
+                    is_text_based = str(codec).lower() in ("srt", "ass", "ssa", "subrip", "text", "mov_text", "webvtt")
+                    is_downloadable = bool(key) and is_text_based and not is_image_based
                     subtitle_info.append({
                         "codec": codec,
                         "forced": getattr(stream, "forced", False),
@@ -602,13 +604,20 @@ class PlexClient:
                         "has_key": key is not None,
                         "is_embedded": key is None,
                         "is_image_based": is_image_based,
+                        "is_text_based": is_text_based,
+                        "is_downloadable": is_downloadable,
                     })
 
-            logger.debug(f"Subtitle details for '{language}': {len(subtitle_info)} found")
+            usable = any(info.get("is_downloadable") for info in subtitle_info)
+            logger.debug(f"Found subtitle details for '{language}': {len(subtitle_info)} found, usable={usable}")
             return {
-                "has_subtitle": len(subtitle_info) > 0,
+                "has_subtitle": bool(subtitle_info),
                 "subtitle_count": len(subtitle_info),
                 "subtitle_info": subtitle_info,
+                "source_usable": usable,
+                "target_usable": usable,
+                "embedded_only": bool(subtitle_info) and not usable and any(i.get("is_embedded") for i in subtitle_info),
+                "image_only": bool(subtitle_info) and not usable and all(i.get("is_image_based") for i in subtitle_info),
             }
 
         except Exception as e:
@@ -1123,8 +1132,12 @@ class PlexClient:
             for item in paged:
                 genres = [g.tag for g in getattr(item, "genres", [])] if hasattr(item, "genres") and item.genres else []
                 rk = str(item.ratingKey)
-                has_vi = rk in vi_keys
-                can_translate = (rk not in vi_keys and rk in en_keys)
+                vi_det = self.get_subtitle_details(item, "vi")
+                en_det = self.get_subtitle_details(item, "en")
+                has_vi = bool(vi_det.get("has_subtitle")) if vi_det.get("subtitle_info") else rk in vi_keys
+                has_en = bool(en_det.get("has_subtitle")) if en_det.get("subtitle_info") else rk in en_keys
+                target_usable = bool(vi_det.get("target_usable")) if vi_det.get("subtitle_info") else has_vi
+                source_usable = bool(en_det.get("source_usable")) if en_det.get("subtitle_info") else has_en
                 items.append({
                     "rating_key": rk,
                     "title": item.title,
@@ -1134,8 +1147,12 @@ class PlexClient:
                     "summary": getattr(item, "summary", "") or "",
                     "genres": genres,
                     "has_vi": has_vi,
-                    "has_en": rk in en_keys,
-                    "can_translate": can_translate,
+                    "has_en": has_en,
+                    "vi_embedded": bool(vi_det.get("embedded_only") or vi_det.get("image_only")),
+                    "en_embedded": bool(en_det.get("embedded_only") or en_det.get("image_only")),
+                    "source_usable": source_usable,
+                    "target_usable": target_usable,
+                    "can_translate": bool(not has_vi and source_usable),
                 })
 
             total_size_attr = getattr(section, "totalSize", None)
@@ -1252,12 +1269,9 @@ class PlexClient:
                         alt_en_det = self.get_subtitle_details(ep, alt_source)
                         if alt_en_det.get("has_subtitle"):
                             en_det = alt_en_det
-                    has_vi = vi_det.get("has_subtitle", False)
-                    has_en = en_det.get("has_subtitle", False)
-                    can_translate = False
-                    if not has_vi and has_en:
-                        infos = en_det.get("subtitle_info", [])
-                        can_translate = any(not info.get("is_image_based", False) for info in infos)
+                    has_vi = bool(vi_det.get("has_subtitle"))
+                    has_en = bool(en_det.get("has_subtitle"))
+                    can_translate = bool(not has_vi and en_det.get("source_usable"))
 
                     if has_vi:
                         vi_count += 1
@@ -1272,6 +1286,10 @@ class PlexClient:
                         "thumb": getattr(ep, "thumb", None),
                         "has_vi": has_vi,
                         "has_en": has_en,
+                        "vi_embedded": bool(vi_det.get("embedded_only") or vi_det.get("image_only")),
+                        "en_embedded": bool(en_det.get("embedded_only") or en_det.get("image_only")),
+                        "source_usable": has_en,
+                        "target_usable": has_vi,
                         "can_translate": can_translate,
                         "vi_details": vi_det,
                         "en_details": en_det,
@@ -1347,23 +1365,23 @@ class PlexClient:
         video = self.get_video(rating_key)
         vi_det = self.get_subtitle_details(video, target_lang)
         en_det = self.get_subtitle_details(video, source_lang)
-        has_vi = vi_det.get("has_subtitle", False)
-        has_en = en_det.get("has_subtitle", False)
-        can_translate = False
-        if not has_vi and has_en:
-            infos = en_det.get("subtitle_info", [])
-            can_translate = any(not info.get("is_image_based", False) for info in infos)
+        has_vi = bool(vi_det.get("has_subtitle"))
+        has_en = bool(en_det.get("has_subtitle"))
+        can_translate = bool(not has_vi and en_det.get("source_usable"))
 
         result = {
             "rating_key": str(video.ratingKey),
             "title": video.title,
             "year": getattr(video, "year", None),
             "type": getattr(video, "type", "movie"),
-
             "thumb": getattr(video, "thumb", None),
             "summary": getattr(video, "summary", "") or "",
             "has_vi": has_vi,
             "has_en": has_en,
+            "vi_embedded": bool(vi_det.get("embedded_only") or vi_det.get("image_only")),
+            "en_embedded": bool(en_det.get("embedded_only") or en_det.get("image_only")),
+            "source_usable": has_en,
+            "target_usable": has_vi,
             "can_translate": can_translate,
             "vi_details": vi_det,
             "en_details": en_det,

@@ -657,3 +657,38 @@ class TestGetSessions:
         assert "show_rating_key" not in sessions[0]
         assert "show_title" not in sessions[0]
         assert "section_key" not in sessions[0]
+
+
+def test_get_subtitle_details_marks_embedded_and_image_streams_unusable(plex_client):
+    embedded = Mock()
+    embedded.streamType = 3
+    embedded.languageTag = "en"
+    embedded.languageCode = "eng"
+    embedded.codec = "srt"
+    embedded.key = None
+    image = Mock()
+    image.streamType = 3
+    image.languageTag = "vi"
+    image.languageCode = "vie"
+    image.codec = "pgs"
+    image.key = "/library/metadata/1"
+
+    part = Mock(streams=[embedded, image])
+    media = Mock(parts=[part])
+    video = Mock(media=[media])
+
+    en = plex_client.get_subtitle_details(video, "en")
+    vi = plex_client.get_subtitle_details(video, "vi")
+
+    assert en["has_subtitle"] is True
+    assert en["source_usable"] is False
+    assert en["embedded_only"] is True
+    assert vi["has_subtitle"] is True
+    assert vi["target_usable"] is False
+
+
+def test_translation_skip_rating_keys_persist_in_settings(plex_client, test_config):
+    from app.models.settings import SubtitleSettings
+
+    settings = SubtitleSettings(translation_skip_rating_keys=["101"])
+    assert "101" in settings.translation_skip_rating_keys

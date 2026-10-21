@@ -374,8 +374,8 @@
                     <option value="addedAt:asc">Thêm cũ nhất</option>
                     <option value="originallyAvailableAt:desc">Ngày phát hành (Mới nhất)</option>
                     <option value="originallyAvailableAt:asc">Ngày phát hành (Cũ nhất)</option>
-                    <option value="titleSort:asc">Tên (A → Z)</option>
-                    <option value="titleSort:desc">Tên (Z → A)</option>
+                    <option value="titleSort:asc">Tên (A - Z)</option>
+                    <option value="titleSort:desc">Tên (Z - A)</option>
                     <option value="rating:desc">Đánh giá cao nhất</option>
                 </select>
             </div>
@@ -542,7 +542,7 @@
             </div>
         </div>
         <div class="px-6 py-3 border-t border-border-subtle flex justify-end gap-3 bg-bg-surface">
-            <button class="btn btn-secondary btn-sm" id="taskCloseBtn" onclick="closeTaskModal()" disabled>Đóng</button>
+            <button class="btn btn-secondary btn-sm" id="taskCloseBtn" onclick="closeTaskModal()">Đóng</button>
         </div>
     </div>
 </div>
@@ -586,6 +586,7 @@
         sparkles: `<i class="fa-solid fa-wand-magic-sparkles mr-1 text-warning align-middle"></i>`,
         refresh: `<i class="fa-solid fa-rotate mr-1.5 align-middle"></i>`,
         spinner: `<i class="fa-solid fa-circle-notch fa-spin mr-1.5 align-middle"></i>`,
+        skip: `<i class="fa-solid fa-ban mr-1.5 align-middle"></i>`,
     };
 
     function updateFilterStats(stats) {
@@ -1546,15 +1547,12 @@
                                     <span>${escapeHtml(ep.title)}</span>
                                 </div>
                             </div>
-                            <div class="shrink-0 flex items-center gap-3">
-                                <div class="shrink-0">
-                                    ${badge}
-                                </div>
-                                <div class="shrink-0 flex items-center gap-1.5">
-                                    <button class="btn btn-xs sm:btn-sm btn-secondary gap-1.5" onclick="quickUploadTarget('${ep.rating_key}', this)">
-                                        ${ICONS.search} Tìm sub
-                                    </button>
-                                    ${ep.can_translate ? `<button class="btn btn-xs sm:btn-sm btn-primary gap-1.5" onclick="quickTranslate('${ep.rating_key}', this)">${ICONS.translate} Dịch AI</button>` : ''}
+                            <div class="shrink-0 flex flex-wrap items-center justify-end gap-2">
+                                <div class="shrink-0">${badge}</div>
+                                <div class="shrink-0 flex flex-wrap items-center justify-end gap-1.5">
+                                    <button class="btn btn-xs sm:btn-sm btn-secondary gap-1.5 whitespace-nowrap" onclick="quickUploadTarget('${ep.rating_key}', this)">${ICONS.search} Tìm sub</button>
+                                    <button class="btn btn-xs sm:btn-sm ${ep.translation_skipped ? 'btn-warning' : 'btn-ghost border border-border-subtle'} gap-1.5 whitespace-nowrap" onclick="toggleTranslationSkip('${ep.rating_key}', this)">${ep.translation_skipped ? ICONS.check + ' Bật dịch' : ICONS.skip + ' Bỏ qua dịch'}</button>
+                                    ${ep.can_translate && !ep.translation_skipped ? `<button class="btn btn-xs sm:btn-sm btn-primary gap-1.5 whitespace-nowrap" onclick="quickTranslate('${ep.rating_key}', this)">${ICONS.translate} Dịch AI</button>` : ''}
                                 </div>
                             </div>
                         </div>
@@ -1637,27 +1635,41 @@
 
         const body = document.getElementById("movieModalBody");
         if (!body) return;
-
+        const skipped = Boolean(data.translation_skipped);
         body.innerHTML = `
             <div class="flex flex-col gap-4">
-                <div class="flex items-center justify-between p-3 rounded-xl bg-bg-input border border-border-subtle">
-                    <span class="text-xs text-text-secondary font-medium">Trạng thái phụ đề:</span>
-                    ${badge}
+                <div class="flex items-center justify-between gap-3 p-3 rounded-xl bg-bg-input border border-border-subtle">
+                    <span class="text-xs text-text-secondary font-medium">Trạng thái phụ đề:</span>${badge}
                 </div>
-                <div class="flex items-center justify-between p-3 rounded-xl bg-bg-input border border-border-subtle">
-                    <span class="text-xs text-text-secondary">Tự động dịch nếu tìm kiếm không ra sub</span>
-                    <input type="checkbox" class="toggle toggle-warning toggle-xs auto-fallback-toggle-input" onchange="toggleAutoFallback(this.checked)" ${isAutoFallbackEnabled() ? 'checked' : ''}>
-                </div>
+                <button type="button" class="btn btn-sm ${skipped ? 'btn-warning' : 'btn-ghost border border-border-subtle'} w-full justify-center gap-2 whitespace-nowrap" onclick="toggleTranslationSkip('${data.rating_key}', this)">
+                    ${skipped ? ICONS.check + ' Bật lại dịch AI' : ICONS.skip + ' Bỏ qua dịch AI'}
+                </button>
                 <p class="text-xs text-text-secondary leading-relaxed bg-bg-app/50 p-3 rounded-xl border border-border-subtle">
                     ${data.summary ? escapeHtml(data.summary) : '<span class="italic text-text-muted">Không có mô tả tóm tắt cho phim này.</span>'}
                 </p>
-                <div class="pt-2 flex gap-3">
-                    <button class="btn btn-secondary flex-1 gap-2" id="movieSearchSubBtn" onclick="quickUploadTarget('${data.rating_key}', this)">
-                        ${ICONS.search} Tìm &amp; Tải Vietsub
-                    </button>
-                    ${data.can_translate ? `<button class="btn btn-primary flex-1 gap-2" onclick="quickTranslate('${data.rating_key}', this)">${ICONS.translate} Dịch AI từ Engsub</button>` : ''}
+                <div class="pt-2 flex flex-col sm:flex-row gap-3">
+                    <button class="btn btn-secondary flex-1 gap-2 whitespace-nowrap" id="movieSearchSubBtn" onclick="quickUploadTarget('${data.rating_key}', this)">${ICONS.search} Tìm &amp; Tải Vietsub</button>
+                    ${data.can_translate && !skipped ? `<button class="btn btn-primary flex-1 gap-2 whitespace-nowrap" onclick="quickTranslate('${data.rating_key}', this)">${ICONS.translate} Dịch AI từ Engsub</button>` : ''}
+                </div>
             </div>
         `;
+    }
+
+    async function toggleTranslationSkip(ratingKey, button) {
+        const data = await fetch(`/api/library/translation-skip/${encodeURIComponent(ratingKey)}`, {
+            method: button.textContent.includes('Bật') ? 'DELETE' : 'POST'
+        }).then(async response => {
+            if (!response.ok) throw new Error((await response.json()).detail || 'Không thể cập nhật trạng thái bỏ qua dịch');
+            return response.json();
+        }).catch(error => {
+            showToast(error.message, 'error');
+            return null;
+        });
+        if (!data) return;
+        SessionCache.remove('movie_detail_' + ratingKey);
+        SessionCache.clear('sec_');
+        showToast(data.translation_skipped ? 'Đã bỏ qua dịch AI cho media này.' : 'Đã bật lại dịch AI.', 'success');
+        openMovieDetail(ratingKey, true, false);
     }
 
     function closeMovieModal(updateUrl = true) {
@@ -1833,48 +1845,45 @@
                 clearInterval(taskPollInterval);
                 resetActiveSearchButton();
                 document.getElementById("taskStatusLabel").innerText = task.status === "completed" ? "Hoàn tất" : "Thất bại";
-                document.getElementById("taskCloseBtn").disabled = false;
 
-                // Invalidate SessionCache for processed rating keys
                 if (activeBatchKeys && activeBatchKeys.length) {
                     activeBatchKeys.forEach(k => {
                         SessionCache.remove('show_tree_' + k);
                         SessionCache.remove('movie_detail_' + k);
                     });
                 }
-                if (currentShowRatingKey) {
-                    SessionCache.remove('show_tree_' + currentShowRatingKey);
-                }
+                if (currentShowRatingKey) SessionCache.remove('show_tree_' + currentShowRatingKey);
                 SessionCache.clear('sec_');
 
-                // When subtitle search completes with 0 results:
-                if (currentTaskType === 'upload_target' && task.status === "completed") {
-                    const notFoundItems = (task.results || []).filter(r => r.status === 'not_found' || r.has_vi === false);
-                    if (notFoundItems.length > 0) {
-                        lastNotFoundRatingKeys = notFoundItems.map(r => r.rating_key);
-                        if (isAutoFallbackEnabled()) {
-                            showToast(`Không tìm thấy sub (${lastNotFoundRatingKeys.length} mục) — Tự động dịch phụ đề ngay...`, "info");
-                            logBox.innerText += "\n[Tự động] Không tìm thấy phụ đề có sẵn — Kích hoạt tiến trình dịch AI...";
-                            logBox.scrollTop = logBox.scrollHeight;
-                            document.getElementById("taskStatusLabel").innerText = "Chuyển sang Dịch AI...";
-                            setTimeout(() => {
-                                const keys = [...lastNotFoundRatingKeys];
-                                lastNotFoundRatingKeys = [];
-                                startBatchAction(keys, 'translate');
-                            }, 1000);
-                            return;
-                        } else {
-                            const fallbackContainer = document.getElementById("instantFallbackContainer");
-                            if (fallbackContainer) {
-                                fallbackContainer.style.display = "block";
-                            }
-                        }
-                    }
+                const notFoundItems = currentTaskType === 'upload_target' && task.status === "completed"
+                    ? (task.results || []).filter(r => r.status === 'not_found' || r.has_vi === false)
+                    : [];
+                if (notFoundItems.length > 0 && !isAutoFallbackEnabled()) {
+                    lastNotFoundRatingKeys = notFoundItems.map(r => r.rating_key);
+                    const fallbackContainer = document.getElementById("instantFallbackContainer");
+                    if (fallbackContainer) fallbackContainer.style.display = "block";
+                    document.getElementById("taskCloseBtn").disabled = false;
+                    showToast(`Không tìm thấy sub (${lastNotFoundRatingKeys.length} mục). Có thể dịch AI ngay.`, "info");
+                    return;
                 }
 
-                if (task.status === "completed") {
-                    showToast("Tác vụ xử lý phụ đề đã hoàn tất!", "success");
+                const fallbackKeys = notFoundItems.map(r => r.rating_key);
+                if (notFoundItems.length > 0 && isAutoFallbackEnabled()) {
+                    lastNotFoundRatingKeys = fallbackKeys;
+                    showToast(`Không tìm thấy sub (${fallbackKeys.length} mục) — đang chuyển sang dịch AI.`, "info");
+                    closeTaskModal();
+                    setTimeout(() => startBatchAction(fallbackKeys, 'translate'), 300);
+                    return;
                 }
+
+
+                if (task.status === "failed") {
+                    showToast("Tác vụ xử lý phụ đề thất bại. Xem log để biết chi tiết.", "error");
+                    document.getElementById("taskCloseBtn").disabled = false;
+                    return;
+                }
+                showToast("Tác vụ xử lý phụ đề đã hoàn tất!", "success");
+                closeTaskModal();
             }
         } catch (err) {
             console.error("Task poll error:", err);
@@ -1887,6 +1896,7 @@
         if (fallbackContainer) fallbackContainer.style.display = "none";
         const keys = [...lastNotFoundRatingKeys];
         lastNotFoundRatingKeys = [];
+        closeTaskModal();
         startBatchAction(keys, 'translate');
     }
 

@@ -100,16 +100,41 @@ class SubtitleService:
         await self.match_validator_client.close()
         await self.sync_client.close()
 
+    def get_translation_skip_rating_keys(self) -> list[str]:
+        """Return persisted media keys excluded from AI translation."""
+        return list(self.config.subtitle_settings.translation_skip_rating_keys)
+
+    def set_translation_skip(self, rating_key: str, skipped: bool) -> list[str]:
+        """Persist one media key's AI-translation exclusion state."""
+        rk = str(rating_key)
+        current = set(self.config.subtitle_settings.translation_skip_rating_keys)
+        if skipped:
+            current.add(rk)
+        else:
+            current.discard(rk)
+        updated = self.config.subtitle_settings.model_copy(
+            update={"translation_skip_rating_keys": sorted(current, key=str)}
+        )
+        self.update_settings(updated)
+        self.plex_client.clear_all_caches()
+        return list(updated.translation_skip_rating_keys)
+
+    def is_translation_skipped(self, rating_key: str) -> bool:
+        return str(rating_key) in set(self.config.subtitle_settings.translation_skip_rating_keys)
+
+    def _apply_translation_skip_to_item(self, item: dict[str, Any]) -> dict[str, Any]:
+        item = dict(item)
+        skipped = self.is_translation_skipped(str(item.get("rating_key", "")))
+        item["translation_skipped"] = skipped
+        if skipped:
+            item["can_translate"] = False
+        return item
+
     def update_settings(self, new_settings: SubtitleSettings) -> None:
-        """Update subtitle settings từ Web UI."""
+        """Update subtitle settings from the Web UI or persistent skip controls."""
         self.config.subtitle_settings = new_settings
         self.runtime_config.subtitle_settings = new_settings
         logger.info("Subtitle settings updated", extra={"settings": new_settings.model_dump()})
-
-    def get_config(self) -> ServiceConfig:
-        """Get current configuration."""
-        return self.config
-
     def update_runtime_config(self, new_runtime: RuntimeConfig) -> None:
         """Hot-reload runtime config and refresh clients."""
         self.runtime_config = new_runtime
@@ -1095,6 +1120,7 @@ class SubtitleService:
                 dest_dir,
             )
             has_vi_text = vi_path is not None
+            has_vi_on_plex = has_vi_text or bool(target_details.get("has_subtitle"))
 
             # --- Source subtitle (bất kỳ lang nào ≠ target, dùng cho sync/translate) ---
             # Ưu tiên: Plex trước (tất cả langs có sẵn, trừ target) → Subsource.
@@ -1154,8 +1180,8 @@ class SubtitleService:
             vi_details = target_details  # Already fetched above
 
             vi_status: dict[str, Any] = {
-                "available": has_vi_text,
-                "source": "plex" if has_vi_text else None,
+                "available": has_vi_on_plex,
+                "source": "plex" if has_vi_on_plex else None,
             }
             if vi_details["has_subtitle"] and not has_vi_text:
                 subs = vi_details["subtitle_info"]
@@ -1272,10 +1298,10 @@ class SubtitleService:
                             "Không tìm thấy sub nguồn trên Plex hoặc provider đã bật"
                         )
 
-            has_target_available = has_vi_text or len(vi_candidates) > 0
+            has_target_available = has_vi_on_plex or len(vi_candidates) > 0
 
             can_sync = has_source_available and has_target_available
-            can_translate = has_source_available and self.translation_client.enabled
+            can_translate = has_source_available and self.translation_client.enabled and not has_vi_on_plex
             can_improve = has_vi_text and self.translation_client.enabled
 
             return {
@@ -1285,7 +1311,9 @@ class SubtitleService:
                 "source_status": source_status,
                 "vi_status": vi_status,
                 "has_source_on_plex": source_status["source"] == "plex",
-                "has_vi_on_plex": has_vi_text,
+                "has_vi_on_plex": has_vi_on_plex,
+                "has_vi_text_on_plex": has_vi_text,
+                "has_vi_embedded_on_plex": bool(has_vi_on_plex and not has_vi_text),
                 "source_candidates": source_candidates,
                 "vi_candidates": vi_candidates,
                 "subtitle_providers": self.subtitle_provider_manager.provider_status(),
@@ -1670,6 +1698,7 @@ class SubtitleService:
         source_search_override: SubtitleSearchParams | None = None,
         pronoun_override: str | None = None,
     ) -> dict[str, Any]:
+
         """
         Chủ động dịch subtitle sang Vietnamese cho media item.
 
@@ -1681,6 +1710,9 @@ class SubtitleService:
         Returns:
             Dict với status và translation result
         """
+        if self.is_translation_skipped(rating_key):
+            return {"status": "skipped_translation", "message": "AI translation skipped for this media"}
+
         log = RequestContextLogger(logger, request_id or rating_key[:8])
 
         if not self.translation_client.enabled:
@@ -2663,36 +2695,35 @@ class SubtitleService:
         sort: str | None = None,
         use_cache: bool = True,
     ) -> dict:
-        """Fetch items in a Plex library section with subtitle filter and sort."""
-        return self.plex_client.get_section_items(
-            section_key=section_key,
-            query=query,
-            offset=offset,
-            limit=limit,
-            subtitle_filter=subtitle_filter,
-            sort=sort,
-            use_cache=use_cache,
+        data = self.plex_client.get_section_items(
+            section_key=section_key, query=query, offset=offset, limit=limit,
+            subtitle_filter=subtitle_filter, sort=sort, use_cache=use_cache,
         )
+        result = dict(data)
+        result["items"] = [self._apply_translation_skip_to_item(item) for item in data.get("items", [])]
+        if "stats" in result:
+            stats = dict(result["stats"])
+            stats["can_translate"] = sum(1 for item in result["items"] if item.get("can_translate"))
+            result["stats"] = stats
+        return result
 
     def get_show_tree(self, rating_key: str, use_cache: bool = True) -> dict:
-        """Fetch show hierarchy with subtitle status per episode."""
         target_lang = self.runtime_config.default_language or "vi"
-        return self.plex_client.get_show_tree(
-            rating_key=rating_key,
-            target_lang=target_lang,
-            source_lang="en",
-            use_cache=use_cache,
-        )
+        data = self.plex_client.get_show_tree(rating_key=rating_key, target_lang=target_lang, source_lang="en", use_cache=use_cache)
+        result = dict(data)
+        result["seasons"] = []
+        result["can_translate_count"] = 0
+        for season in data.get("seasons", []):
+            season_copy = dict(season)
+            season_copy["episodes"] = [self._apply_translation_skip_to_item(ep) for ep in season.get("episodes", [])]
+            result["can_translate_count"] += sum(1 for ep in season_copy["episodes"] if ep.get("can_translate"))
+            result["seasons"].append(season_copy)
+        return result
 
     def get_movie_details(self, rating_key: str, use_cache: bool = True) -> dict:
-        """Fetch movie details and subtitle status."""
         target_lang = self.runtime_config.default_language or "vi"
-        return self.plex_client.get_movie_details(
-            rating_key=rating_key,
-            target_lang=target_lang,
-            source_lang="en",
-            use_cache=use_cache,
-        )
+        data = self.plex_client.get_movie_details(rating_key=rating_key, target_lang=target_lang, source_lang="en", use_cache=use_cache)
+        return self._apply_translation_skip_to_item(data)
 
     async def batch_upload_target(
         self,

@@ -182,15 +182,6 @@
     </div>
 </div>
 
-<!-- Unified Subtitle Workspace Flow Note -->
-<div class="workspace-flow-note flex flex-wrap items-center gap-2 p-3 bg-bg-input border border-border-subtle rounded-lg text-xs text-text-secondary mb-4" role="note">
-    <strong class="text-text-primary font-semibold">Quy trình:</strong>
-    <span>Tìm subtitle (tự động hoặc thủ công)</span>
-    <span class="text-plex-gold font-bold">→</span>
-    <span>Chọn bản phù hợp</span>
-    <span class="text-plex-gold font-bold">→</span>
-    <span>Dịch AI hoặc Sync timing ngay bên dưới</span>
-</div>
 
 <!-- Main Subtitle Action Form -->
 <div class="bg-bg-surface border border-border-subtle rounded-xl p-5 mb-6 shadow-sm" id="subtitle-action-form">
@@ -212,10 +203,10 @@
             </label>
             <input type="text" id="manual-video-filename" class="input input-bordered input-sm md:input-md w-full bg-bg-input border-border-subtle focus:border-plex-gold text-sm" placeholder="Show.S01E02.1080p.WEB-DL.mkv">
         </div>
-        <div class="flex gap-2 shrink-0 pt-1 md:pt-0">
-            <button class="btn btn-primary btn-sm md:btn-md gap-2" onclick="previewSync()" id="btn-preview">Preview</button>
-            <button class="btn btn-secondary btn-sm md:btn-md gap-2" onclick="manualSearch()" id="btn-manual-search" title="Tìm lại từ provider, bỏ qua cache">
-                🔎 Tìm sub thủ công
+        <div class="flex flex-col sm:flex-row gap-2 shrink-0 pt-1 md:pt-0 w-full md:w-auto">
+            <button class="btn btn-primary btn-sm md:btn-md gap-2 whitespace-nowrap flex-1 sm:flex-none" onclick="previewSync()" id="btn-preview"><i class="fa-solid fa-eye"></i><span>Preview</span></button>
+            <button class="btn btn-secondary btn-sm md:btn-md gap-2 whitespace-nowrap flex-1 sm:flex-none" onclick="manualSearch()" id="btn-manual-search" title="Tìm lại từ provider, bỏ qua cache">
+                <i class="fa-solid fa-magnifying-glass"></i><span>Tìm sub thủ công</span>
             </button>
         </div>
     </div>
@@ -555,7 +546,7 @@
         if (data.has_vi_on_plex) {
             const viNote = data.can_sync
                 ? 'Plex (sẽ dùng làm tham chiếu sync)'
-                : 'Plex ✓ — nhưng cần source sub để thực hiện sync';
+                : 'Plex — nhưng cần source sub để thực hiện sync';
             subInfoHtml += `
                 <div class="flex items-center gap-2 p-2.5 px-3.5 bg-bg-input rounded-md text-xs text-text-secondary mb-2">
                     <span class="w-2.5 h-2.5 rounded-full bg-success shrink-0"></span>
@@ -630,7 +621,7 @@
         if (!hasAnyVi && data.can_translate) {
             actionsHtml += `
                 <button class="btn btn-info btn-sm md:btn-md flex-1" onclick="executeTranslation()" id="btn-translate">
-                    AI Translate (${srcLangLabel} &rarr; VI)
+                    AI Translate (${srcLangLabel} to VI)
                 </button>
             `;
         }
@@ -686,7 +677,7 @@
                 <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-border-subtle mb-4">
                     <div class="flex items-center gap-2">
                         <h3 class="text-base font-semibold text-text-primary">${data.title}</h3>
-                        ${isCached ? `<span class="badge badge-sm badge-ghost gap-1 cursor-pointer hover:badge-warning transition-colors" onclick="previewSync(true)" title="Bấm để tải lại từ server">⚡ Cached <span class="underline ml-0.5">Làm mới</span></span>` : ''}
+                        ${isCached ? `<span class="badge badge-sm badge-ghost gap-1 cursor-pointer hover:badge-warning transition-colors whitespace-nowrap" onclick="previewSync(true)" title="Bấm để tải lại từ server"><i class="fa-solid fa-bolt"></i> Cached <span class="underline ml-0.5">Làm mới</span></span>` : ''}
                     </div>
                     <div>${statusTag}</div>
                 </div>
@@ -786,7 +777,7 @@
             showAlert('Manual search failed: ' + e.message, 'error');
         } finally {
             btn.disabled = false;
-            btn.innerHTML = '🔎 Tìm sub thủ công';
+            btn.innerHTML = '<i class="fa-solid fa-magnifying-glass mr-1.5"></i><span>Tìm sub thủ công</span>';
         }
     }
 
@@ -962,7 +953,7 @@
     function finishProgress() {
         if (progressInterval) clearInterval(progressInterval);
         document.getElementById('progress-fill').style.width = '100%';
-        document.getElementById('progress-label').innerHTML = '<span class="text-success font-semibold">✓ Done!</span>';
+        document.getElementById('progress-label').innerHTML = '<span class="text-success font-semibold"><i class="fa-solid fa-check mr-1"></i>Done!</span>';
     }
 
     function hideProgress() {
@@ -993,7 +984,7 @@
         }
         if (!loading && btnTranslate) {
             const srcLangLabel = previewData?.source_lang ? previewData.source_lang.toUpperCase() : 'EN';
-            btnTranslate.textContent = `AI Translate (${srcLangLabel} → VI)`;
+            btnTranslate.innerHTML = `<i class="fa-solid fa-language mr-1.5"></i>AI Translate (${srcLangLabel} <span aria-hidden="true">-&gt;</span> VI)`;
         }
     }
 
@@ -1189,7 +1180,7 @@
                             </td>
                             <td>
                                 <span class="badge ${item.status === 'success' ? 'badge-success' : 'badge-error'} badge-sm font-semibold">
-                                    ${item.status === 'success' ? '✓' : '✗'} ${item.status}
+                                    ${item.status === 'success' ? '<i class="fa-solid fa-check text-success mr-1"></i>' : '<i class="fa-solid fa-xmark text-error mr-1"></i>'} ${item.status}
                                 </span>
                             </td>
                             <td>${item.status === 'success' ? item.anchors_found : '—'}</td>
@@ -1239,7 +1230,7 @@
         const offsetDir = (item.avg_offset_ms || 0) > 0 ? 'trễ' : 'sớm';
 
         const rows = [
-            ['Status', `<span class="badge ${item.status === 'success' ? 'badge-success' : 'badge-error'} badge-sm font-semibold">${item.status === 'success' ? '✓' : '✗'} ${item.status}</span>`],
+            ['Status', `<span class="badge ${item.status === 'success' ? 'badge-success' : 'badge-error'} badge-sm font-semibold">${item.status === 'success' ? '<i class="fa-solid fa-check mr-1"></i>' : '<i class="fa-solid fa-xmark mr-1"></i>'} ${item.status}</span>`],
             ['Source', item.source === 'auto' ? 'Auto (after download)' : 'Manual'],
             ['Anchors Found', item.status === 'success' ? item.anchors_found : '—'],
             ['Avg Offset', item.status === 'success' ? `${offsetSec.toFixed(1)}s ${offsetDir}` : '—'],

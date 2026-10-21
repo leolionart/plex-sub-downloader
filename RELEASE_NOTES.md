@@ -1,5 +1,14 @@
 # Release Notes
 
+## Unreleased - 2026-10-22
+
+- **Persistent Per-Media Translation Skip & Subtitle Usability Audit**:
+  - Added persistent `translation_skip_rating_keys` to SubtitleSettings via ConfigStore with full backend enforcement on direct and batch translation.
+  - Exposed GET/POST/DELETE `/api/library/translation-skip/{rating_key}` and integrated one-click skip toggles in movie detail and episode rows.
+  - Refined subtitle usability: embedded-only and image-based subtitles are excluded from downloadable source/target status, preventing false "Có thể dịch AI" or missing-target warnings.
+  - Replaced action/status emoji labels in workspace and library templates with FontAwesome icons, removed outdated flow notes block, and ensured mobile-safe non-wrapping action controls.
+  - Auto-closed task progress popup upon completion while preserving fallback actions when needed.
+
 ## Unreleased - 2026-10-21
 
 - **Subtitle Workspace and Library Navigation**:

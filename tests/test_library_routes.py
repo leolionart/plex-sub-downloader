@@ -337,3 +337,41 @@ async def test_library_cache_stats_and_clear_endpoints(mock_service):
         assert clear_res.status_code == 200
         assert clear_res.json() == {"ok": True, "cleared": "all"}
         mock_service.clear_plex_cache.assert_called_with(rating_key=None, section_key=None)
+
+
+@pytest.mark.asyncio
+async def test_translation_skip_endpoints_and_enforcement(mock_service):
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        mock_service.is_translation_skipped.return_value = False
+        mock_service.set_translation_skip.return_value = ["101"]
+
+        get_res = await client.get("/api/library/translation-skip/101")
+        assert get_res.status_code == 200
+        assert get_res.json() == {"rating_key": "101", "translation_skipped": False}
+
+        post_res = await client.post("/api/library/translation-skip/101")
+        assert post_res.status_code == 200
+        assert post_res.json()["translation_skipped"] is True
+        mock_service.set_translation_skip.assert_called_with("101", True)
+
+        mock_service.set_translation_skip.return_value = []
+        del_res = await client.delete("/api/library/translation-skip/101")
+        assert del_res.status_code == 200
+        assert del_res.json()["translation_skipped"] is False
+        mock_service.set_translation_skip.assert_called_with("101", False)
+
+
+@pytest.mark.asyncio
+async def test_library_ui_removes_old_flow_note_and_adds_skip_controls(mock_service):
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        sync_res = await client.get("/sync")
+        assert sync_res.status_code == 200
+        assert "Quy trình: Tìm subtitle" not in sync_res.text
+        assert "🔎 Tìm sub thủ công" not in sync_res.text
+
+        lib_res = await client.get("/library")
+        assert lib_res.status_code == 200
+        assert "toggleTranslationSkip" in lib_res.text
+        assert "closeTaskModal()" in lib_res.text

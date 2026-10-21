@@ -143,6 +143,13 @@ class SubtitleSettings(BaseModel):
     auto_translate_if_no_vi: bool = Field(
         default=False, description="Chủ động dịch Eng→Viet khi có Engsub nhưng không có Vietsub"
     )
+
+    # Per-media translation exclusions
+    translation_skip_rating_keys: list[str] = Field(
+        default_factory=list,
+        description="Plex ratingKeys excluded from AI translation; subtitle search/upload remains enabled",
+    )
+
     translation_batch_concurrency: int = Field(
         default=5,
         ge=1,
