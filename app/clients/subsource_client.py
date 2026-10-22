@@ -322,7 +322,7 @@ class SubsourceClient:
             response.raise_for_status()
             data = response.json()
 
-            movies = data.get("data", [])
+            movies = data.get("data", data.get("results", []))
             if movies:
                 scored_movies = [
                     (
@@ -642,10 +642,8 @@ class SubsourceClient:
                 name = str(item.get("name") or release_info or f"subtitle-{subtitle_id}")
                 parsed_season, parsed_episode = self._extract_season_episode(name)
 
-                production_type = (item.get("productionType") or "").lower()
+                production_type = (item.get("productionType") or item.get("quality_type") or "").lower()
                 quality_map = {"retail": "retail", "translated": "translated", "ai": "ai", "machine": "ai"}
-                quality_type = quality_map.get(production_type) or self._detect_quality_type(item)
-
                 rating_data = item.get("rating", {})
                 if isinstance(rating_data, dict):
                     good = rating_data.get("good", 0)

@@ -7,6 +7,44 @@
 
 {% block extra_styles %}
 <style>
+    .toolbar-header-row,
+    .toolbar-view-actions,
+    #layoutToggleGroup,
+    #filterPillsGroup {
+        min-width: 0;
+    }
+    #sectionsContainer {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+    #sectionsContainer::-webkit-scrollbar {
+        display: none;
+    }
+    .toolbar-view-actions,
+    #layoutToggleGroup,
+    #filterPillsGroup {
+        display: inline-flex !important;
+        flex-wrap: nowrap !important;
+    }
+    .toolbar-view-actions > *,
+    #layoutToggleGroup > *,
+    #filterPillsGroup > * {
+        flex-shrink: 0;
+    }
+    #librarySortSelect {
+        max-width: min(220px, 32vw);
+        white-space: nowrap;
+    }
+    #librarySearchInput {
+        padding-left: 2.25rem !important;
+    }
+    .sub-filter-btn.btn-primary .badge {
+        background: rgba(26, 26, 26, 0.22) !important;
+        color: #1a1a1a !important;
+        border-color: rgba(26, 26, 26, 0.3) !important;
+    }
     /* Scoped Library Styles: Media Grid, Cards, and Overlay */
     .library-grid.layout-grid {
         display: grid;
@@ -368,8 +406,8 @@
         <div class="toolbar-view-actions flex items-center gap-2.5 shrink-0 flex-wrap">
             <!-- Sort Dropdown -->
             <div class="flex items-center gap-1.5 shrink-0">
-                <span class="text-xs text-text-secondary font-medium hidden sm:inline">Sắp xếp:</span>
-                <select id="librarySortSelect" class="form-select text-xs py-1 px-2.5 rounded-lg bg-bg-input border border-border-subtle text-text-primary focus:border-plex-gold cursor-pointer" onchange="handleSortChange(this.value)" title="Sắp xếp phim và series">
+                <span class="text-xs text-text-secondary font-medium whitespace-nowrap shrink-0 hidden sm:inline">Sắp xếp:</span>
+                <select id="librarySortSelect" class="form-select text-xs py-1 px-2.5 rounded-lg bg-bg-input border border-border-subtle text-text-primary focus:border-plex-gold cursor-pointer whitespace-nowrap" onchange="handleSortChange(this.value)" title="Sắp xếp phim và series">
                     <option value="addedAt:desc" selected>Mới thêm gần đây</option>
                     <option value="addedAt:asc">Thêm cũ nhất</option>
                     <option value="originallyAvailableAt:desc">Ngày phát hành (Mới nhất)</option>
@@ -380,18 +418,18 @@
                 </select>
             </div>
 
-            <div class="join" id="layoutToggleGroup">
-                <button type="button" class="btn btn-sm join-item btn-primary" id="btnViewGrid" title="Chế độ Lưới" onclick="setLayoutMode('grid')">
+            <div class="join flex-nowrap whitespace-nowrap" id="layoutToggleGroup">
+                <button type="button" class="btn btn-sm join-item btn-primary whitespace-nowrap" id="btnViewGrid" title="Chế độ Lưới" onclick="setLayoutMode('grid')">
                     <i class="fa-solid fa-grip mr-1"></i>
                     <span>Lưới</span>
                 </button>
-                <button type="button" class="btn btn-sm join-item btn-ghost bg-bg-input" id="btnViewList" title="Chế độ Danh sách" onclick="setLayoutMode('list')">
+                <button type="button" class="btn btn-sm join-item btn-ghost bg-bg-input whitespace-nowrap" id="btnViewList" title="Chế độ Danh sách" onclick="setLayoutMode('list')">
                     <i class="fa-solid fa-list mr-1"></i>
                     <span>Danh sách</span>
                 </button>
             </div>
 
-            <button type="button" class="btn btn-sm btn-secondary gap-1.5" id="btnRefreshSection" onclick="refreshLibrary(true)" title="Làm mới danh sách (Xóa cache)">
+            <button type="button" class="btn btn-sm btn-secondary gap-1.5 whitespace-nowrap shrink-0" id="btnRefreshSection" onclick="refreshLibrary(true)" title="Làm mới danh sách (Xóa cache)">
                 <i class="fa-solid fa-rotate"></i>
                 <span>Làm mới / Refresh</span>
             </button>
