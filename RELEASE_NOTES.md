@@ -1,5 +1,11 @@
 # Release Notes
 
+## Unreleased - 2026-10-22 10:29 +07
+
+Generated before push from commits:
+
+- `af87548` fix: stabilize library toolbar UI and legacy subtitle parsing
+
 ## Unreleased - 2026-10-22
 
 - **Persistent Per-Media Translation Skip & Subtitle Usability Audit**:
