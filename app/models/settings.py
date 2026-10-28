@@ -224,7 +224,7 @@ class SubtitleSettings(BaseModel):
 
     def should_download_on_event(self, event: str) -> bool:
         """Check xem có nên download cho event này không."""
-        if event == "library.new" and self.auto_download_on_add:
+        if event in ("library.new", "library.on.deck") and self.auto_download_on_add:
             return True
         if event == "media.play" and self.auto_download_on_play:
             return True

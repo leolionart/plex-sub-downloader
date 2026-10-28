@@ -644,6 +644,7 @@ class SubsourceClient:
 
                 production_type = (item.get("productionType") or item.get("quality_type") or "").lower()
                 quality_map = {"retail": "retail", "translated": "translated", "ai": "ai", "machine": "ai"}
+                quality_type = quality_map.get(production_type) or self._detect_quality_type(item)
                 rating_data = item.get("rating", {})
                 if isinstance(rating_data, dict):
                     good = rating_data.get("good", 0)

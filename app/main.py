@@ -432,6 +432,13 @@ async def handle_webhook(
                 status_code=200,
                 content={"status": "ignored", "message": f"Event not processed: {event}"},
             )
+        # Check settings xem có nên process event này không
+        if runtime_config and not runtime_config.subtitle_settings.should_download_on_event(event):
+            logger.info(f"[{request_id}] Event {event} disabled in settings - skipping")
+            return JSONResponse(
+                status_code=200,
+                content={"status": "skipped", "message": f"Auto-download disabled for event: {event}"},
+            )
 
         # Process trong background để webhook return nhanh
         background_tasks.add_task(
@@ -561,6 +568,7 @@ async def _process_subtitle_task(rating_key: str, event: str, request_id: str) -
             return
         _processing_keys.add(rating_key)
 
+    should_cooldown = False
     try:
         # Delay cho library.new để Plex có đủ thời gian index metadata đầy đủ.
         # Ngay sau khi thêm media, Plex fire event cho Show → Season → Episode liên tiếp;
@@ -575,6 +583,9 @@ async def _process_subtitle_task(rating_key: str, event: str, request_id: str) -
 
         result = await subtitle_service.process_webhook(rating_key, event, request_id)
 
+        if result.get("status") not in ("skipped", "ignored"):
+            should_cooldown = True
+
         logger.info(
             f"[{request_id}] Task completed: {result['status']} — {result['message']}",
         )
@@ -584,12 +595,14 @@ async def _process_subtitle_task(rating_key: str, event: str, request_id: str) -
     except Exception as e:
         logger.error(f"[{request_id}] Unexpected error in task: {e}", exc_info=True)
     finally:
-        # Xóa khỏi set sau cooldown để cho phép retry
-        async def _remove_after_cooldown() -> None:
-            await asyncio.sleep(_DEDUP_COOLDOWN_SECONDS)
+        if should_cooldown:
+            # Xóa khỏi set sau cooldown để cho phép retry
+            async def _remove_after_cooldown() -> None:
+                await asyncio.sleep(_DEDUP_COOLDOWN_SECONDS)
+                _processing_keys.discard(rating_key)
+            asyncio.create_task(_remove_after_cooldown())
+        else:
             _processing_keys.discard(rating_key)
-        asyncio.create_task(_remove_after_cooldown())
-
 
 if __name__ == "__main__":
     import uvicorn

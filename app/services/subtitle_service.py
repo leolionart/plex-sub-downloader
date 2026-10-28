@@ -100,6 +100,10 @@ class SubtitleService:
         await self.match_validator_client.close()
         await self.sync_client.close()
 
+    def get_config(self) -> ServiceConfig:
+        """Return the current service configuration."""
+        return self.config
+
     def get_translation_skip_rating_keys(self) -> list[str]:
         """Return persisted media keys excluded from AI translation."""
         return list(self.config.subtitle_settings.translation_skip_rating_keys)
