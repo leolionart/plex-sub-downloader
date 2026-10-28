@@ -1,5 +1,11 @@
 # Release Notes
 
+## Unreleased - 2026-10-28 16:40 +07
+
+Generated before push from commits:
+
+- `66f9eba` fix: resolve webhook dedup lock, subsource quality_type parsing, and settings API
+
 ## Unreleased - 2026-10-22 10:29 +07
 
 Generated before push from commits:
