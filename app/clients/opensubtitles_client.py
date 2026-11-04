@@ -57,8 +57,8 @@ class OpenSubtitlesClient:
     def enabled(self) -> bool:
         return bool(self.api_key)
 
-    async def _ensure_token(self) -> str | None:
-        if self._token or not (self.username and self.password):
+    async def _ensure_token(self, force_refresh: bool = False) -> str | None:
+        if (self._token and not force_refresh) or not (self.username and self.password):
             return self._token
         response = await self._client.post(
             f"{self.base_url}/login",
@@ -176,6 +176,17 @@ class OpenSubtitlesClient:
                 json={"file_id": int(subtitle.id)},
                 headers=headers,
             )
+            if response.status_code == 401 and (self.username and self.password):
+                logger.info("OpenSubtitles token expired or invalid; re-authenticating...")
+                self._token = None
+                new_token = await self._ensure_token(force_refresh=True)
+                if new_token:
+                    headers["Authorization"] = f"Bearer {new_token}"
+                    response = await self._client.post(
+                        f"{self.base_url}/download",
+                        json={"file_id": int(subtitle.id)},
+                        headers=headers,
+                    )
             response.raise_for_status()
             link = response.json().get("link")
             if not link:

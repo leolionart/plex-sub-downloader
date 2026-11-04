@@ -9,8 +9,7 @@ from app.clients.opensubtitles_client import (
     OpenSubtitlesClientError,
 )
 from app.models.runtime_config import RuntimeConfig
-from app.models.subtitle import SubtitleSearchParams
-
+from app.models.subtitle import SubtitleResult, SubtitleSearchParams
 
 def test_opensubtitles_client_follows_redirects() -> None:
     client = OpenSubtitlesClient(RuntimeConfig(opensubtitles_api_key="test-key"))
@@ -60,3 +59,38 @@ async def test_opensubtitles_search_error_includes_response_body() -> None:
 
     with pytest.raises(OpenSubtitlesClientError, match="Invalid User-Agent"):
         await client.search_subtitles(SubtitleSearchParams(language="vi", title="Test"))
+
+@pytest.mark.asyncio
+async def test_opensubtitles_download_reauths_on_401(tmp_path) -> None:
+    client = OpenSubtitlesClient(
+        RuntimeConfig(
+            opensubtitles_api_key="test-key",
+            opensubtitles_username="user",
+            opensubtitles_password="pass",
+        )
+    )
+    client._token = "stale-token"
+
+    resp_401 = httpx.Response(401, request=httpx.Request("POST", "https://api.opensubtitles.com/api/v1/download"))
+    resp_login = httpx.Response(200, json={"token": "fresh-token"}, request=httpx.Request("POST", "https://api.opensubtitles.com/api/v1/login"))
+    resp_200 = httpx.Response(200, json={"link": "https://api.opensubtitles.com/download/file.srt"}, request=httpx.Request("POST", "https://api.opensubtitles.com/api/v1/download"))
+    resp_file = httpx.Response(200, content=b"1\n00:00:01,000 --> 00:00:02,000\nHello\n", request=httpx.Request("GET", "https://api.opensubtitles.com/download/file.srt"))
+
+    post_mock = AsyncMock(side_effect=[resp_401, resp_login, resp_200])
+    get_mock = AsyncMock(return_value=resp_file)
+
+    client._client.post = post_mock
+    client._client.get = get_mock
+
+    sub = SubtitleResult(
+        id="12345",
+        provider="opensubtitles",
+        name="test.srt",
+        language="en",
+        download_url="https://api.opensubtitles.com/download/12345",
+    )
+
+    saved_path = await client.download_subtitle(sub, dest_dir=tmp_path)
+    assert saved_path.exists()
+    assert client._token == "fresh-token"
+    assert post_mock.await_count == 3
