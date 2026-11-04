@@ -1,5 +1,11 @@
 # Release Notes
 
+## Unreleased - 2026-11-04 17:01 +07
+
+Generated before push from commits:
+
+- `b9a201f` fix: re-authenticate OpenSubtitles when cached token expires on download
+
 ## Unreleased - 2026-10-28 16:40 +07
 
 Generated before push from commits:
