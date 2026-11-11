@@ -53,14 +53,12 @@ Nhưng trong manual preview, service vẫn tiếp tục tìm candidate trên Sub
 | `Không tìm thấy sub nguồn` | Không có source lẫn target |
 
 ### Sync Timing
-- Dùng source sub (bất kỳ ngôn ngữ nào) làm timing reference
-- Điều chỉnh timing của target sub theo reference
-- Upload kết quả lên Plex
+- Căn phụ đề target trực tiếp với audio của Plex bằng phát hiện giọng nói; không coi phụ đề nguồn là chuẩn timing.
+- Chỉ áp dụng offset cố định trong khoảng ±60 giây khi các đoạn audio đồng thuận; kết quả yếu, mơ hồ hoặc có drift bị từ chối, không upload.
+- Cần ffmpeg và audio Plex truy cập được; hỗ trợ media một phần dài từ 30 giây đến 4 giờ. Không đảm bảo chính xác tuyệt đối.
+- Bản đã sync được upload thêm, không xóa phụ đề hiện có; chọn track mới trên Plex nếu cần.
 
-**Source sub detection:**
-1. Lấy tất cả subtitle langs trên Plex, bỏ target lang
-2. Thử download text-based sub (EN ưu tiên, còn lại alphabet)
-3. Nếu không có trên Plex → search Subsource
+Phụ đề nguồn vẫn được dùng cho dịch, không dùng để xác nhận sync.
 
 ### AI Translate
 - Dịch source sub (bất kỳ ngôn ngữ) sang target lang

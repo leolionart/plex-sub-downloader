@@ -6,23 +6,23 @@ FROM python:3.11-slim as builder
 WORKDIR /build
 
 # Install Poetry
-RUN pip install --no-cache-dir poetry==1.7.1
+RUN pip install --no-cache-dir poetry==2.1.4
 
 # Copy dependency files
-COPY pyproject.toml ./
+COPY pyproject.toml poetry.lock ./
 
 # Configure Poetry: không tạo virtual env trong Docker
 RUN poetry config virtualenvs.create false
 
 # Install dependencies vào system Python
-RUN poetry install --no-dev --no-root --no-interaction --no-ansi
+RUN poetry install --only main --no-root --no-interaction --no-ansi
 
 # Stage 2: Runtime
 FROM python:3.11-slim
 
-# Install gosu for entrypoint privilege drop
+# ffmpeg streams authenticated Plex media and extracts mono PCM for audio sync.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends gosu && \
+    apt-get install -y --no-install-recommends gosu ffmpeg && \
     rm -rf /var/lib/apt/lists/*
 
 # Create non-root user

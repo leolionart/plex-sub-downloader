@@ -14,6 +14,8 @@ services:
       # Change to match your host IP and port mapping
       - EXTERNAL_URL=http://172.16.0.101:8000
     volumes:
+      # Audio sync streams media from the configured Plex URL; no media mount
+      # is required. Allow this container to reach Plex (including its part URLs).
       - ./data:/app/data
     networks:
       - plex-network

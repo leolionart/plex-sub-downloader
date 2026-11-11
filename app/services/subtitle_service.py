@@ -18,7 +18,8 @@ from app.clients.telegram_client import TelegramClient
 from app.clients.cache_client import CacheClient
 from app.clients.openai_translation_client import OpenAITranslationClient, TranslationClientError
 from app.clients.subtitle_match_validator_client import SubtitleMatchValidatorClient
-from app.clients.sync_client import SubtitleSyncClient, SyncClientError
+from app.clients.sync_client import SyncClientError
+from app.clients.audio_sync_client import AudioSyncClient
 from app.clients.subsource_client import SubsourceClient
 from app.models.runtime_config import RuntimeConfig
 from app.services.stats_store import StatsStore
@@ -67,7 +68,7 @@ class SubtitleService:
         self.cache_client = CacheClient(runtime_config)
         self.translation_client = OpenAITranslationClient(runtime_config)
         self.match_validator_client = SubtitleMatchValidatorClient(runtime_config)
-        self.sync_client = SubtitleSyncClient(runtime_config)
+        self.audio_sync_client = AudioSyncClient(runtime_config)
 
         self.temp_dir = Path(runtime_config.temp_dir)
         self.temp_dir.mkdir(parents=True, exist_ok=True)
@@ -98,7 +99,6 @@ class SubtitleService:
         await self.cache_client.close()
         await self.translation_client.close()
         await self.match_validator_client.close()
-        await self.sync_client.close()
 
     def get_config(self) -> ServiceConfig:
         """Return the current service configuration."""
@@ -153,7 +153,7 @@ class SubtitleService:
         self.cache_client = CacheClient(new_runtime)
         self.translation_client = OpenAITranslationClient(new_runtime)
         self.match_validator_client = SubtitleMatchValidatorClient(new_runtime)
-        self.sync_client = SubtitleSyncClient(new_runtime)
+        self.audio_sync_client = AudioSyncClient(new_runtime)
 
         # Ensure temp dir exists
         self.temp_dir = Path(new_runtime.temp_dir)
@@ -368,20 +368,15 @@ class SubtitleService:
                     "message": "All subtitle download attempts failed",
                 }
 
-            # Step 7: Upload to Plex
-            log.info("[Step 7/7] Uploading subtitle to Plex")
-            await self._upload_to_plex(video, subtitle_path, log)
-            log.info("[Step 7/7] ✓ Uploaded successfully")
-
-            # Step 7b: Sync timing (if enabled and English reference available)
+            # Sync before any upload: unavailable or unreliable audio must not
+            # replace an existing subtitle with an unverified candidate.
             sync_result = None
             if self.config.subtitle_settings.auto_sync_timing:
-                sync_result = await self._try_sync_timing(
-                    video,
-                    metadata,
-                    subtitle_path,
-                    log,
-                )
+                sync_result = await self._try_sync_timing(video, metadata, subtitle_path, log)
+                if sync_result is None:
+                    return {"status": "sync_failed", "message": "Audio sync unavailable or unreliable; no subtitle uploaded"}
+            else:
+                await self._upload_to_plex(video, subtitle_path, log)
 
             # Update persistent stats
             self.stats.increment("total_downloads")
@@ -935,150 +930,49 @@ class SubtitleService:
 
     # ── Sync Timing Methods ──────────────────────────────────────────────
 
+    async def _upload_synced_subtitle(self, video: Video, path: Path, log: RequestContextLogger) -> None:
+        """Add a validated sync result without deleting any existing subtitle."""
+        success = await asyncio.to_thread(
+            self.plex_client.upload_subtitle, video, path, self.runtime_config.default_language
+        )
+        if not success:
+            raise SubtitleServiceError("Synced subtitle upload failed; existing subtitles preserved")
+        self._invalidate_media_cache(video)
+        log.info("[Sync] Uploaded audio-aligned subtitle; existing subtitles preserved")
+
     async def _try_sync_timing(
-        self,
-        video: Video,
-        metadata: MediaMetadata,
-        subtitle_path: Path,
+        self, video: Video, metadata: MediaMetadata, subtitle_path: Path,
         log: RequestContextLogger,
     ) -> dict | None:
-        """
-        Thử sync timing Vietsub dựa trên Engsub reference.
+        """Align the local candidate to audio before making any Plex changes."""
+        import tempfile
+        import shutil
 
-        Chạy sau khi upload Vietsub lên Plex.
-        Tìm Engsub trên Plex → sync timing → re-upload.
-
-        Returns:
-            Dict với sync stats hoặc None nếu không sync được
-        """
-        if not self.runtime_config.ai_available:
-            return None
-
-        log.info("[Sync] Checking for English reference subtitle on Plex...")
-
-        # Download English subtitle from Plex
-        dest_dir = self.temp_dir / f"{metadata.rating_key}_sync"
-        dest_dir.mkdir(parents=True, exist_ok=True)
-
-        en_path = await asyncio.to_thread(
-            self.plex_client.download_existing_subtitle,
-            video,
-            "en",
-            dest_dir,
-        )
-
-        if not en_path:
-            log.info("[Sync] No English subtitle on Plex — skipping sync")
-            return None
-
-        log.info(f"[Sync] Found English reference: {en_path.name}")
-
-        # Download the Vietnamese subtitle we just uploaded (from Plex)
-        vi_path = await asyncio.to_thread(
-            self.plex_client.download_existing_subtitle,
-            video,
-            self.runtime_config.default_language,
-            dest_dir,
-        )
-
-        if not vi_path:
-            # Use the subtitle file we already have
-            vi_path = subtitle_path
-            log.info(f"[Sync] Using local Vietsub file: {vi_path.name}")
-        else:
-            log.info(f"[Sync] Downloaded Vietsub from Plex: {vi_path.name}")
-
-        # Perform sync
+        dest_dir = Path(tempfile.mkdtemp(prefix="audio_sync_", dir=self.temp_dir))
         try:
             output_path = dest_dir / f"synced.{self.runtime_config.default_language}.srt"
-
-            await self.telegram_client.notify_sync_started(
-                title=str(metadata),
-            )
-
-            sync_stats = await self.sync_client.sync_subtitles(
-                reference_path=en_path,
-                target_path=vi_path,
-                output_path=output_path,
-            )
-
-            log.info(
-                f"[Sync] ✓ Timing synced: {sync_stats['anchors_found']} anchors, "
-                f"avg offset: {sync_stats['avg_offset_ms']}ms"
-            )
-
-            # Re-upload synced subtitle to Plex
-            await self._upload_to_plex(video, output_path, log)
-            log.info("[Sync] ✓ Synced subtitle re-uploaded to Plex")
-
-            # Update persistent stats
+            sync_stats = await self.audio_sync_client.sync_subtitles(video, subtitle_path, output_path)
+            await self._upload_synced_subtitle(video, output_path, log)
             self.stats.increment("total_syncs")
-
             self.add_sync_history_entry(
-                rating_key=metadata.rating_key,
-                title=str(metadata),
-                status="success",
-                source="auto",
-                anchors_found=sync_stats["anchors_found"],
-                avg_offset_ms=sync_stats["avg_offset_ms"],
-                ref_lang="en",
-                ref_source="plex",
-                model=self.runtime_config.openai_model,
+                rating_key=metadata.rating_key, title=str(metadata), status="success", source="auto",
+                anchors_found=sync_stats["anchors_found"], avg_offset_ms=sync_stats["avg_offset_ms"],
+                ref_lang="audio", ref_source="plex_audio", model="webrtcvad",
             )
-
             await self.telegram_client.notify_sync_completed(
-                title=str(metadata),
-                anchors=sync_stats["anchors_found"],
-                avg_offset_ms=sync_stats["avg_offset_ms"],
-                rating_key=metadata.rating_key,
+                title=str(metadata), anchors=sync_stats["anchors_found"],
+                avg_offset_ms=sync_stats["avg_offset_ms"], rating_key=metadata.rating_key,
             )
-
             return sync_stats
-
-        except SyncClientError as e:
-            log.warning(f"[Sync] Sync failed: {e}")
+        except Exception as exc:
+            log.warning(f"[Sync] Audio sync failed; no unverified upload: {exc}")
             self.add_sync_history_entry(
-                rating_key=metadata.rating_key,
-                title=str(metadata),
-                status="failed",
-                source="auto",
-                ref_lang="en",
-                ref_source="plex",
-                model=self.runtime_config.openai_model,
-                error=str(e),
-            )
-            await self.telegram_client.notify_error(
-                title=str(metadata),
-                error_message=f"Sync timing failed: {e}",
-                rating_key=metadata.rating_key,
-            )
-            return None
-        except Exception as e:
-            log.warning(f"[Sync] Unexpected sync error: {e}")
-            self.add_sync_history_entry(
-                rating_key=metadata.rating_key,
-                title=str(metadata),
-                status="failed",
-                source="auto",
-                ref_lang="en",
-                ref_source="plex",
-                model=self.runtime_config.openai_model,
-                error=str(e),
-            )
-            await self.telegram_client.notify_error(
-                title=str(metadata),
-                error_message=f"Sync timing failed: {e}",
-                rating_key=metadata.rating_key,
+                rating_key=metadata.rating_key, title=str(metadata), status="failed", source="auto",
+                ref_lang="audio", ref_source="plex_audio", model="webrtcvad", error=str(exc),
             )
             return None
         finally:
-            # Cleanup sync temp files
-            try:
-                import shutil
-
-                shutil.rmtree(dest_dir, ignore_errors=True)
-            except Exception:
-                pass
+            shutil.rmtree(dest_dir, ignore_errors=True)
 
     async def preview_sync_for_media(
         self,
@@ -1304,7 +1198,8 @@ class SubtitleService:
 
             has_target_available = has_vi_on_plex or len(vi_candidates) > 0
 
-            can_sync = has_source_available and has_target_available
+            audio_status = self.audio_sync_client.availability(video)
+            can_sync = audio_status["available"] and (has_vi_text or bool(vi_candidates))
             can_translate = has_source_available and self.translation_client.enabled and not has_vi_on_plex
             can_improve = has_vi_text and self.translation_client.enabled
 
@@ -1325,7 +1220,8 @@ class SubtitleService:
                 "can_translate": can_translate,
                 "can_improve": can_improve,
                 "source_lang": source_lang,
-                "sync_enabled": self.runtime_config.ai_available,
+                "sync_enabled": audio_status["available"],
+                "audio_status": audio_status,
             }
 
         finally:
@@ -1340,25 +1236,12 @@ class SubtitleService:
         request_id: str | None = None,
         source_lang: str = "en",
     ) -> dict[str, Any]:
-        """
-        Execute sync timing cho một media item cụ thể (từ Web UI / API).
+        """Align the selected target subtitle directly to Plex audio.
 
-        Dùng bất kỳ ngôn ngữ nào làm timing reference (source_lang).
-        Tìm reference sub theo thứ tự: Plex → Subsource (source_lang) → fallback langs.
-
-        Args:
-            rating_key: Plex ratingKey
-            subtitle_id: Subsource subtitle ID cụ thể cho VI sub (tuỳ chọn)
-            request_id: Request ID for logging
-            source_lang: Ngôn ngữ dùng làm timing reference (default: "en")
-
-        Returns:
-            Dict với status và sync stats
+        source_lang remains an API input for translation/workspace compatibility;
+        a subtitle reference is never accepted as evidence of audio timing.
         """
         log = RequestContextLogger(logger, request_id or rating_key[:8])
-
-        if not self.runtime_config.ai_available:
-            return {"status": "error", "message": "OpenAI API key required for sync timing"}
 
         log.info(
             f"[Sync] Manual sync requested for ratingKey: {rating_key} (source_lang={source_lang})"
@@ -1370,97 +1253,22 @@ class SubtitleService:
         log.info(f"[Sync] Media: {metadata}")
         video_filename = self._get_video_filename(video)
 
-        dest_dir = self.temp_dir / f"{rating_key}_sync"
-        dest_dir.mkdir(parents=True, exist_ok=True)
+        import tempfile
+
+        dest_dir = Path(tempfile.mkdtemp(prefix="audio_sync_", dir=self.temp_dir))
 
         try:
-            # Download reference subtitle: try source_lang on Plex first, then Subsource
-            # If source_lang fails, try all fallback languages
-            ref_path: Path | None = None
-            ref_source = "plex"
-            ref_lang_used = source_lang
-
-            # 1) Try source_lang on Plex
-            ref_path = await asyncio.to_thread(
-                self.plex_client.download_existing_subtitle,
-                video,
-                source_lang,
-                dest_dir,
-            )
-
-            # 2) Try source_lang on configured subtitle providers
-            if not ref_path:
-                log.info(
-                    f"[Sync] No text-based {source_lang.upper()} sub on Plex — "
-                    "searching subtitle providers..."
-                )
-                ref_results = await self._find_subtitles(
-                    metadata,
-                    log,
-                    language=source_lang,
-                    video_filename=video_filename,
-                )
-                if ref_results:
-                    downloaded = await self._download_first_available(
-                        ref_results,
-                        metadata,
-                        log,
-                        video_filename=video_filename,
-                    )
-                    if downloaded:
-                        subtitle, ref_path = downloaded
-                        ref_source = subtitle.provider
-                        log.info(
-                            f"[Sync] Downloaded {source_lang.upper()} sub from {subtitle.provider}: "
-                            f"{ref_path.name}"
-                        )
-
-            # 3) Fallback: try other languages (EN first if source_lang wasn't EN, then rest)
-            if not ref_path:
-                fallback_order = (["en"] if source_lang != "en" else []) + [
-                    fallback_lang
-                    for fallback_lang in _FALLBACK_SOURCE_LANGS
-                    if fallback_lang != source_lang and fallback_lang != "en"
-                ]
-                for fb_lang in fallback_order:
-                    fb_results = await self._find_subtitles(
-                        metadata,
-                        log,
-                        language=fb_lang,
-                        video_filename=video_filename,
-                    )
-                    if fb_results:
-                        downloaded = await self._download_first_available(
-                            fb_results,
-                            metadata,
-                            log,
-                            video_filename=video_filename,
-                        )
-                        if downloaded:
-                            subtitle, ref_path = downloaded
-                            ref_source = subtitle.provider
-                            ref_lang_used = fb_lang
-                            log.info(
-                                f"[Sync] Using fallback {fb_lang.upper()} sub from {subtitle.provider}"
-                            )
-                            break
-
-            if not ref_path:
-                return {
-                    "status": "error",
-                    "message": "Không tìm được subtitle nào làm timing reference trên Plex hoặc provider đã bật",
-                }
-
-            en_path = ref_path  # Alias for legacy variable used below
+            audio_status = self.audio_sync_client.availability(video)
+            if not audio_status["available"]:
+                raise SyncClientError(audio_status["detail"])
 
             # Download Vietnamese subtitle: Plex first, provider fallback
             lang = self.runtime_config.default_language
-            vi_path = await asyncio.to_thread(
-                self.plex_client.download_existing_subtitle,
-                video,
-                lang,
-                dest_dir,
-            )
+            vi_path = None
+            if not subtitle_id:
+                vi_path = await asyncio.to_thread(
+                    self.plex_client.download_existing_subtitle, video, lang, dest_dir,
+                )
             vi_source = "plex"
 
             if not vi_path:
@@ -1486,14 +1294,10 @@ class SubtitleService:
 
             # Perform sync
             output_path = dest_dir / f"synced.{lang}.srt"
-            sync_stats = await self.sync_client.sync_subtitles(
-                reference_path=en_path,
-                target_path=vi_path,
-                output_path=output_path,
-            )
+            sync_stats = await self.audio_sync_client.sync_subtitles(video, vi_path, output_path)
 
-            # Upload synced subtitle
-            await self._upload_to_plex(video, output_path, log)
+            # Sync never deletes pre-existing subtitles, even with replace enabled.
+            await self._upload_synced_subtitle(video, output_path, log)
 
             # Update persistent stats
             self.stats.increment("total_syncs")
@@ -1505,9 +1309,9 @@ class SubtitleService:
                 source="manual",
                 anchors_found=sync_stats["anchors_found"],
                 avg_offset_ms=sync_stats["avg_offset_ms"],
-                ref_lang=ref_lang_used,
-                ref_source=ref_source,
-                model=self.runtime_config.openai_model,
+                ref_lang="audio",
+                ref_source="plex_audio",
+                model="webrtcvad",
             )
 
             await self.telegram_client.notify_sync_completed(
@@ -1518,7 +1322,7 @@ class SubtitleService:
 
             return {
                 "status": "success",
-                "message": f"Timing synced ({sync_stats['anchors_found']} anchors, ref: {ref_lang_used.upper()} from {ref_source}, vi: {vi_source})",
+                "message": f"Timing aligned to Plex audio ({sync_stats['avg_offset_ms']}ms, target: {vi_source})",
                 "stats": sync_stats,
             }
 
@@ -1528,7 +1332,7 @@ class SubtitleService:
                 title=str(metadata),
                 status="failed",
                 source="manual",
-                model=self.runtime_config.openai_model,
+                model="webrtcvad",
                 error=str(e),
             )
             return {"status": "error", "message": str(e)}
@@ -1577,7 +1381,8 @@ class SubtitleService:
             if target:
                 results = [target]
             else:
-                log.warning(f"[Sync] Subtitle ID {subtitle_id} not found, using best match")
+                log.warning(f"[Sync] Requested subtitle ID {subtitle_id} not found")
+                return None
 
         downloaded = await self._download_first_available(
             results,

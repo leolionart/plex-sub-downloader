@@ -130,30 +130,22 @@ Nhận webhook (library.new / media.play)
    → Search Subsource cho target lang
 
 5. Return:
-   can_sync = has_source AND has_target
+   can_sync = audio_available AND text_target_available
    can_translate = has_source AND translation_enabled
    source_lang = ngôn ngữ tìm được (e.g. "ko")
 ```
 
-**Nguyên tắc:** nếu target sub đã có trên Plex dạng text-based → không chạy bất kỳ AI/search feature nào.
+Preview vẫn tìm candidate target để người dùng chọn bản khác; source subtitle dùng cho dịch.
 
 ## Execute Sync Flow
 
 `execute_sync_for_media(rating_key, subtitle_id, source_lang)`:
 
 ```
-1. Tìm reference (source) sub:
-   a. Download source_lang từ Plex
-   b. Nếu không có: search Subsource cho source_lang
-   c. Fallback: thử EN (nếu source_lang ≠ EN), rồi các langs khác
-
-2. Tìm target sub:
-   a. Download target lang từ Plex
-   b. Nếu không có: search Subsource (dùng subtitle_id nếu user chọn)
-
-3. sync_client.sync_subtitles(reference=source, target=vi_sub)
-
-4. Upload synced sub lên Plex
+1. Kiểm tra audio Plex và ffmpeg khả dụng.
+2. Lấy target sub được chọn, hoặc sub text trên Plex / provider.
+3. Trích audio Plex, tìm offset qua VAD và kiểm tra độ tin cậy trên ba đoạn.
+4. Chỉ upload khi kết quả đủ tin cậy; giữ nguyên các subtitle hiện có.
 ```
 
 ## Execute Translate Flow

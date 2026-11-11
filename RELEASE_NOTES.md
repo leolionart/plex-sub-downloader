@@ -1,5 +1,11 @@
 # Release Notes
 
+## Unreleased - 2026-11-11
+
+- Synchronize manual and automatic subtitles directly against accessible Plex audio without an AI key or a media mount.
+- Reject unavailable, weak, ambiguous or inconsistent audio alignments before upload; preserve existing subtitles even when replacement is configured.
+- Include ffmpeg in Docker and expose audio synchronization capability in preview responses.
+
 ## Unreleased - 2026-11-04 17:01 +07
 
 Generated before push from commits:

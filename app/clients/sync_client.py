@@ -278,7 +278,8 @@ class SubtitleSyncClient:
                     target_idx = match["target_idx"]
                     ref_idx = match["ref_idx"]
 
-                    if 0 <= target_idx < target_len and 0 <= ref_idx < ref_len:
+                    if (start_pos <= target_idx < end_pos
+                            and ref_start <= ref_idx < ref_end):
                         t_entry = target_entries[target_idx]
                         r_entry = ref_entries[ref_idx]
 
@@ -296,11 +297,11 @@ class SubtitleSyncClient:
                 logger.warning(f"Anchor group {group_idx + 1} failed: {e}")
                 continue
 
-        # Sort anchors by target position
-        anchors.sort(key=lambda a: a["target_start_ms"])
-
-        # Remove outliers (anchors with offset way off from neighbors)
+        # Overlapping samples and imperfect AI matches can repeat or cross.
+        # Retain the longest strictly increasing sequence in both timelines.
+        anchors.sort(key=lambda a: (a["target_start_ms"], a["ref_start_ms"]))
         anchors = self._remove_outlier_anchors(anchors)
+        anchors = self._monotonic_anchors(anchors)
 
         return anchors
 
@@ -340,7 +341,8 @@ class SubtitleSyncClient:
             f"English subtitles (with timing):\n{ref_text}\n\n"
             f"Vietnamese subtitles (timing may be wrong):\n{target_text}\n\n"
             f"Match each Vietnamese entry to its English equivalent. "
-            f"Return JSON array only."
+            f'Return a JSON object with a "matches" array of '
+            f'{{"vi": Vietnamese index, "en": English index}} objects.'
         )
 
         response = await self._client.post(
@@ -379,14 +381,22 @@ class SubtitleSyncClient:
                 matches_raw = []
 
             results = []
+            if not isinstance(matches_raw, list):
+                matches_raw = []
             for m in matches_raw:
-                vi_idx = m.get("vi")
-                en_idx = m.get("en")
-                if vi_idx is not None and en_idx is not None:
-                    results.append({
-                        "target_idx": int(vi_idx),
-                        "ref_idx": int(en_idx),
-                    })
+                if not isinstance(m, dict):
+                    continue
+                try:
+                    vi_idx, en_idx = m.get("vi"), m.get("en")
+                    # Reject booleans, fractional numbers and malformed indices.
+                    if isinstance(vi_idx, bool) or isinstance(en_idx, bool):
+                        continue
+                    vi_idx, en_idx = int(str(vi_idx)), int(str(en_idx))
+                except (ValueError, TypeError):
+                    continue
+                if (target_offset <= vi_idx < target_offset + len(target_sample)
+                        and ref_offset <= en_idx < ref_offset + len(ref_window)):
+                    results.append({"target_idx": vi_idx, "ref_idx": en_idx})
 
             logger.debug(f"AI matched {len(results)} entries")
             return results
@@ -425,6 +435,27 @@ class SubtitleSyncClient:
 
         return filtered
 
+    def _monotonic_anchors(self, anchors: list[dict]) -> list[dict]:
+        """Choose the largest consistent chain, excluding duplicate timestamps."""
+        if not anchors:
+            return []
+        lengths = [1] * len(anchors)
+        previous = [-1] * len(anchors)
+        for i, anchor in enumerate(anchors):
+            for j in range(i):
+                earlier = anchors[j]
+                if (earlier["target_start_ms"] < anchor["target_start_ms"]
+                        and earlier["ref_start_ms"] < anchor["ref_start_ms"]
+                        and lengths[j] + 1 > lengths[i]):
+                    lengths[i] = lengths[j] + 1
+                    previous[i] = j
+        index = max(range(len(anchors)), key=lengths.__getitem__)
+        chain = []
+        while index != -1:
+            chain.append(anchors[index])
+            index = previous[index]
+        return list(reversed(chain))
+
     def _build_time_mapping(
         self,
         anchors: list[dict],
@@ -433,7 +464,7 @@ class SubtitleSyncClient:
         Build piecewise-linear time mapping từ anchor points.
 
         Mỗi cặp anchor liền kề tạo thành một đoạn linear mapping.
-        Ngoài phạm vi anchors: extrapolate từ đoạn gần nhất.
+        Ngoài phạm vi anchors: giữ nguyên offset của anchor gần nhất.
         """
         # Sort by target time
         sorted_anchors = sorted(anchors, key=lambda a: a["target_start_ms"])
@@ -447,8 +478,8 @@ class SubtitleSyncClient:
         """Áp dụng time mapping cho toàn bộ target entries."""
         synced = []
         for entry in target_entries:
-            new_start = time_mapping.map_time(entry["start_ms"])
-            new_end = time_mapping.map_time(entry["end_ms"])
+            new_start = max(0, time_mapping.map_time(entry["start_ms"]))
+            new_end = max(0, time_mapping.map_time(entry["end_ms"]))
 
             # Ensure minimum duration (100ms)
             if new_end <= new_start:
@@ -491,7 +522,7 @@ class TimeMapping:
     Piecewise-linear time mapping dựa trên anchor points.
 
     Mỗi đoạn giữa 2 anchors có hệ số scale riêng.
-    Ngoài phạm vi: extrapolate từ đoạn gần nhất.
+    Ngoài phạm vi: giữ nguyên offset của anchor gần nhất.
     """
 
     def __init__(self, anchors: list[dict]) -> None:
@@ -529,15 +560,13 @@ class TimeMapping:
                 return target_ms + offset
             return target_ms
 
-        # Before first segment: extrapolate
-        if target_ms <= self.segments[0]["target_start"]:
-            seg = self.segments[0]
-            return int(seg["scale"] * target_ms + seg["offset"])
-
-        # After last segment: extrapolate
-        if target_ms >= self.segments[-1]["target_end"]:
-            seg = self.segments[-1]
-            return int(seg["scale"] * target_ms + seg["offset"])
+        # Do not extrapolate a local slope across the unsampled ends.
+        if target_ms <= self.anchors[0]["target_start_ms"]:
+            anchor = self.anchors[0]
+            return target_ms + anchor["ref_start_ms"] - anchor["target_start_ms"]
+        if target_ms >= self.anchors[-1]["target_start_ms"]:
+            anchor = self.anchors[-1]
+            return target_ms + anchor["ref_start_ms"] - anchor["target_start_ms"]
 
         # Find matching segment
         for seg in self.segments:

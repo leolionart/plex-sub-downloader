@@ -545,8 +545,8 @@
         // Vietnamese subtitle status
         if (data.has_vi_on_plex) {
             const viNote = data.can_sync
-                ? 'Plex (sẽ dùng làm tham chiếu sync)'
-                : 'Plex — nhưng cần source sub để thực hiện sync';
+                ? 'Plex (sẽ đồng bộ theo audio phim)'
+                : 'Plex — không thể đồng bộ theo audio phim';
             subInfoHtml += `
                 <div class="flex items-center gap-2 p-2.5 px-3.5 bg-bg-input rounded-md text-xs text-text-secondary mb-2">
                     <span class="w-2.5 h-2.5 rounded-full bg-success shrink-0"></span>
@@ -641,7 +641,7 @@
         } else if (hasViCandidates) {
             statusTag = '<span class="badge badge-info font-medium">Có Vietsub trên Subsource</span>';
         } else if (data.has_vi_on_plex) {
-            statusTag = '<span class="badge badge-warning font-medium">Thiếu source sub để sync</span>';
+            statusTag = '<span class="badge badge-warning font-medium">Không thể sync theo audio</span>';
         } else if (!src.available) {
             statusTag = '<span class="badge badge-error font-medium">Không tìm thấy sub nguồn</span>';
         } else {
