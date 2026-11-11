@@ -1,5 +1,11 @@
 # Release Notes
 
+## Unreleased - 2026-11-11 12:41 +07
+
+Generated before push from commits:
+
+- `bcfd4e4` Include lockfile for Docker builds
+
 ## Unreleased - 2026-11-11
 
 - Synchronize manual and automatic subtitles directly against accessible Plex audio without an AI key or a media mount.
