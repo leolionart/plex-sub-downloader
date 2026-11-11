@@ -57,6 +57,7 @@ Nhưng trong manual preview, service vẫn tiếp tục tìm candidate trên Sub
 - Chỉ áp dụng offset cố định trong khoảng ±60 giây khi các đoạn audio đồng thuận; kết quả yếu, mơ hồ hoặc có drift bị từ chối, không upload.
 - Cần ffmpeg và audio Plex truy cập được; hỗ trợ media một phần dài từ 30 giây đến 4 giờ. Không đảm bảo chính xác tuyệt đối.
 - Bản đã sync được upload thêm, không xóa phụ đề hiện có; chọn track mới trên Plex nếu cần.
+- Phân tích chia FFT thành các khối giới hạn bộ nhớ; xóa audio tạm và thu gom bộ nhớ sau mỗi lần xử lý, kể cả khi thất bại.
 
 Phụ đề nguồn vẫn được dùng cho dịch, không dùng để xác nhận sync.
 

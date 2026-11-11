@@ -124,6 +124,13 @@ docker build -t plex-subtitle-service .
 docker compose up -d
 ```
 
+The image uses Debian Bookworm and NumPy <2.3 to support x86-64 machines
+with SSE3 but without x86-64-v2. The build imports NumPy and WebRTC VAD and
+exercises NumPy FFT in the runtime image. For a compatibility check, build and
+run the image on the target VM (or an x86-64 emulator configured with the same
+CPU features); a build on a newer CPU cannot establish compatibility with an
+older CPU. Rebuild the image after changing the dependency lockfile.
+
 `docker-compose.yml`:
 ```yaml
 services:

@@ -1,6 +1,7 @@
 """Conservative, audio-grounded constant-offset subtitle synchronization."""
 
 import asyncio
+import gc
 import math
 import shutil
 import wave
@@ -96,7 +97,16 @@ class AudioSyncClient:
                 raise SyncClientError("Plex audio extraction timed out; subtitles unchanged") from exc
             if process.returncode:
                 raise SyncClientError("Cannot extract Plex audio; subtitles unchanged")
-            return await asyncio.to_thread(self._align, audio_path, target_path, output_path, duration)
+            analysis = asyncio.create_task(asyncio.to_thread(self._align, audio_path, target_path, output_path, duration))
+            try:
+                return await asyncio.shield(analysis)
+            except asyncio.CancelledError:
+                # The worker cannot be cancelled; keep its input alive until it exits.
+                try:
+                    await analysis
+                except Exception:
+                    pass
+                raise
         except (OSError, ValueError, wave.Error) as exc:
             raise SyncClientError("Audio synchronization could not start; subtitles unchanged") from exc
         finally:
@@ -111,9 +121,21 @@ class AudioSyncClient:
 
         n = len(audio)
         max_lag = min(max_lag, n // 4)
-        size = 1 << (2 * n - 1).bit_length()
-        correlation = np.fft.irfft(np.fft.rfft(audio, size) * np.fft.rfft(subtitles[::-1], size), size)
+        # Correlate bounded chunks with enough subtitle overlap for every lag.
+        # A full-length FFT can allocate hundreds of megabytes for long videos.
         lags = np.arange(-max_lag, max_lag + 1)
+        correlation = np.zeros(len(lags), dtype=np.float64)
+        for start in range(0, n, 16384):
+            end = min(n, start + 16384)
+            sub_start = max(0, start - max_lag)
+            sub_end = min(n, end + max_lag)
+            sub = subtitles[sub_start:sub_end]
+            size = 1 << (end - start + len(sub) - 2).bit_length()
+            chunk = np.fft.irfft(np.fft.rfft(audio[start:end], size) *
+                                 np.fft.rfft(sub[::-1], size), size)
+            indices = len(sub) - 1 + lags - start + sub_start
+            valid_indices = (indices >= 0) & (indices < end - start + len(sub) - 1)
+            correlation[valid_indices] += chunk[indices[valid_indices]]
         lower = np.maximum(0, lags)
         upper = np.minimum(n, n + lags)
         count = upper - lower
@@ -124,13 +146,20 @@ class AudioSyncClient:
         variance = asum * (1 - asum / count) * ssum * (1 - ssum / count)
         scores = np.full(len(lags), -1.0)
         valid = variance > 0
-        scores[valid] = (correlation[n - 1 + lags[valid]] - asum[valid] * ssum[valid] / count[valid]) / np.sqrt(variance[valid])
+        scores[valid] = (correlation[valid] - asum[valid] * ssum[valid] / count[valid]) / np.sqrt(variance[valid])
         best = int(np.argmax(scores))
         alternatives = scores[np.abs(lags - lags[best]) > 50]  # exclude the same one-second peak
         runner_up = float(np.max(alternatives)) if len(alternatives) else -1.0
         return int(lags[best]), float(scores[best]), float(scores[best]) - runner_up
 
     def _align(self, audio_path: Path, target_path: Path, output_path: Path, duration_ms: float) -> dict[str, Any]:
+        # Collect cyclic analysis objects after every job, including failures.
+        try:
+            return self._align_audio(audio_path, target_path, output_path, duration_ms)
+        finally:
+            gc.collect()
+
+    def _align_audio(self, audio_path: Path, target_path: Path, output_path: Path, duration_ms: float) -> dict[str, Any]:
         import numpy as np
         import webrtcvad
 
@@ -147,7 +176,7 @@ class AudioSyncClient:
             if abs(frames * self.FRAME_MS - duration_ms) > max(2000, duration_ms * 0.01):
                 raise SyncClientError("Plex audio is incomplete; subtitles unchanged")
             vad = webrtcvad.Vad(2)
-            audio = np.fromiter((vad.is_speech(wav.readframes(320), 16000) for _ in range(frames)), dtype=np.float64, count=frames)
+            audio = np.fromiter((vad.is_speech(wav.readframes(320), 16000) for _ in range(frames)), dtype=np.uint8, count=frames)
         return self._align_activity(audio, entries, target_path, output_path, duration_ms)
 
     def _align_activity(self, audio: Any, entries: list[dict[str, Any]], target_path: Path,
@@ -157,7 +186,7 @@ class AudioSyncClient:
         frames = len(audio)
         if len(entries) < 20 or frames < 1500:
             raise SyncClientError("Too few subtitle cues or audio frames for reliable audio sync")
-        subtitles = np.zeros(frames, dtype=np.float64)
+        subtitles = np.zeros(frames, dtype=np.uint8)
         previous = -1
         for entry in entries:
             start, end = entry["start_ms"], entry["end_ms"]

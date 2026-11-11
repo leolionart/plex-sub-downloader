@@ -26,6 +26,89 @@ def signal_fixture():
     return activity, entries
 
 
+def test_chunked_correlation_matches_full_fft_and_bounds_transform_size(monkeypatch):
+    rng = np.random.default_rng(73)
+    audio = rng.integers(0, 2, 70000, dtype=np.uint8)
+    subtitles = np.roll(audio, -175)
+    max_lag = 300
+    n = len(audio)
+    size = 1 << (2 * n - 1).bit_length()
+    correlation = np.fft.irfft(np.fft.rfft(audio, size) * np.fft.rfft(subtitles[::-1], size), size)
+    lags = np.arange(-max_lag, max_lag + 1)
+    lower, upper = np.maximum(0, lags), np.minimum(n, n + lags)
+    count = upper - lower
+    ap = np.concatenate(([0.0], np.cumsum(audio)))
+    sp = np.concatenate(([0.0], np.cumsum(subtitles)))
+    asum, ssum = ap[upper] - ap[lower], sp[upper - lags] - sp[lower - lags]
+    scores = (correlation[n - 1 + lags] - asum * ssum / count) / np.sqrt(
+        asum * (1 - asum / count) * ssum * (1 - ssum / count))
+    best = int(np.argmax(scores))
+    expected = (lags[best], scores[best], scores[best] - np.max(scores[np.abs(lags - lags[best]) > 50]))
+    sizes = []
+    original = np.fft.rfft
+
+    def recording_rfft(values, n):
+        sizes.append(n)
+        return original(values, n)
+
+    monkeypatch.setattr(np.fft, "rfft", recording_rfft)
+    assert AudioSyncClient._best_offset(audio, subtitles, max_lag) == pytest.approx(expected)
+    assert max(sizes) <= 65536
+    assert len(sizes) > 2
+
+
+@pytest.mark.parametrize("failure", [False, True])
+def test_alignment_collects_memory_after_each_job(monkeypatch, tmp_path, failure):
+    client = AudioSyncClient(SimpleNamespace())
+    collect = Mock()
+    monkeypatch.setattr("app.clients.audio_sync_client.gc.collect", collect)
+    result = {"ok": True}
+    align = Mock(side_effect=SyncClientError("failed") if failure else None, return_value=result)
+    monkeypatch.setattr(client, "_align_audio", align)
+    args = (tmp_path / "audio.wav", tmp_path / "source.srt", tmp_path / "out.srt", 30000)
+    if failure:
+        with pytest.raises(SyncClientError, match="failed"):
+            client._align(*args)
+    else:
+        assert client._align(*args) is result
+    collect.assert_called_once_with()
+
+@pytest.mark.asyncio
+async def test_cancelled_analysis_keeps_audio_until_worker_exits(tmp_path, monkeypatch):
+    import asyncio
+    import threading
+
+    client = AudioSyncClient(SimpleNamespace(plex_token="token"))
+    monkeypatch.setattr(client, "availability", lambda video: {"available": True})
+    monkeypatch.setattr(client, "_audio_source", lambda video: ("http://plex/file", 0))
+    process = SimpleNamespace(returncode=0, wait=AsyncMock())
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", AsyncMock(return_value=process))
+    started, release = threading.Event(), threading.Event()
+    output = tmp_path / "out.srt"
+    audio = output.with_suffix(".audio.wav")
+    audio.write_bytes(b"audio")
+
+    def align(audio_path, target_path, output_path, duration):
+        started.set()
+        release.wait(5)
+        assert audio_path.exists()
+        return {}
+
+    monkeypatch.setattr(client, "_align", align)
+    task = asyncio.create_task(client.sync_subtitles(SimpleNamespace(duration=30000), tmp_path / "in.srt", output))
+    try:
+        assert await asyncio.to_thread(started.wait, 5)
+        task.cancel()
+        await asyncio.sleep(0)
+        assert audio.exists()
+    finally:
+        release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert not audio.exists()
+
+
+
 @pytest.mark.parametrize("lag", [-175, 0, 225])
 def test_audio_signal_alignment_preserves_text(tmp_path, lag):
 

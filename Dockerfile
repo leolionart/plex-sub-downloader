@@ -1,7 +1,7 @@
 # Multi-stage Dockerfile để optimize image size
 
 # Stage 1: Builder
-FROM python:3.11-slim as builder
+FROM python:3.11-slim-bookworm AS builder
 
 WORKDIR /build
 
@@ -18,7 +18,7 @@ RUN poetry config virtualenvs.create false
 RUN poetry install --only main --no-root --no-interaction --no-ansi
 
 # Stage 2: Runtime
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
 
 # ffmpeg streams authenticated Plex media and extracts mono PCM for audio sync.
 RUN apt-get update && \
@@ -36,6 +36,9 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Copy application code
 COPY app/ /app/app/
+
+# Exercise the actual runtime's native audio dependencies, not just the builder.
+RUN python -c "import numpy as np, webrtcvad; assert np.fft.irfft(np.fft.rfft([1.0, 0.0])).tolist() == [1.0, 0.0]"
 
 # Copy entrypoint
 COPY entrypoint.sh /entrypoint.sh
