@@ -1,5 +1,11 @@
 # Release Notes
 
+## Unreleased - 2026-11-11 14:32 +07
+
+Generated before push from commits:
+
+- `372b2b0` Fix audio sync CPU compatibility and memory usage
+
 ## Unreleased - 2026-11-11 12:41 +07
 
 Generated before push from commits:
