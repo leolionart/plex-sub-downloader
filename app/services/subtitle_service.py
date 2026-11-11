@@ -957,7 +957,7 @@ class SubtitleService:
             self.add_sync_history_entry(
                 rating_key=metadata.rating_key, title=str(metadata), status="success", source="auto",
                 anchors_found=sync_stats["anchors_found"], avg_offset_ms=sync_stats["avg_offset_ms"],
-                ref_lang="audio", ref_source="plex_audio", model="webrtcvad",
+                ref_lang="audio", ref_source="plex_audio", model=self.runtime_config.openai_model,
             )
             await self.telegram_client.notify_sync_completed(
                 title=str(metadata), anchors=sync_stats["anchors_found"],
@@ -968,7 +968,7 @@ class SubtitleService:
             log.warning(f"[Sync] Audio sync failed; no unverified upload: {exc}")
             self.add_sync_history_entry(
                 rating_key=metadata.rating_key, title=str(metadata), status="failed", source="auto",
-                ref_lang="audio", ref_source="plex_audio", model="webrtcvad", error=str(exc),
+                ref_lang="audio", ref_source="plex_audio", model=self.runtime_config.openai_model, error=str(exc),
             )
             return None
         finally:
@@ -1311,7 +1311,7 @@ class SubtitleService:
                 avg_offset_ms=sync_stats["avg_offset_ms"],
                 ref_lang="audio",
                 ref_source="plex_audio",
-                model="webrtcvad",
+                model=self.runtime_config.openai_model,
             )
 
             await self.telegram_client.notify_sync_completed(
@@ -1332,7 +1332,7 @@ class SubtitleService:
                 title=str(metadata),
                 status="failed",
                 source="manual",
-                model="webrtcvad",
+                model=self.runtime_config.openai_model,
                 error=str(e),
             )
             return {"status": "error", "message": str(e)}

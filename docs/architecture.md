@@ -144,7 +144,7 @@ Preview vẫn tìm candidate target để người dùng chọn bản khác; sou
 ```
 1. Kiểm tra audio Plex và ffmpeg khả dụng.
 2. Lấy target sub được chọn, hoặc sub text trên Plex / provider.
-3. Trích audio Plex, tìm offset qua VAD và kiểm tra độ tin cậy trên ba đoạn.
+3. Trích các đoạn audio ngắn, gửi kèm subtitle đến model AI để tìm mốc hội thoại và kiểm tra sự đồng thuận.
 4. Chỉ upload khi kết quả đủ tin cậy; giữ nguyên các subtitle hiện có.
 ```
 

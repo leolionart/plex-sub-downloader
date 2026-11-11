@@ -56,19 +56,16 @@ Tất cả cấu hình được lưu tại `data/config.json` và có thể ch�
 
 Manual sync and `auto_sync_timing` use the selected audio track of the first Plex
 media version, streamed from the configured `plex_url` using `plex_token`.
-No local media mount or OpenAI key is needed. Docker includes `ffmpeg`; native
-installations must install it separately and install the Python dependencies.
-Plex must expose an accessible single-part media URL and a known duration from
-30 seconds to four hours. Extraction is limited to ten minutes of wall time.
+Audio samples are sent to the configured OpenAI-compatible endpoint and model;
+an API key and a model accepting chat `input_audio` WAV are required. Docker
+includes `ffmpeg`; native installations must install it separately. Plex must
+expose an accessible single-part media URL and a known duration from 30 seconds
+to four hours. Short clips and subtitle text are transmitted to the AI provider.
 
-Audio sync estimates a **constant offset**, not scene edits or frame-rate drift.
-It compares WebRTC voice activity to subtitle cue activity at 20 ms resolution,
-searching at most ±60 seconds. The normalized correlation must reach 0.15 with
-a 0.015 margin over competing peaks outside one second. Three independent thirds
-must each reach 0.10 correlation and agree within 600 ms (with 0.005 peak margin).
-Sparse dialogue, ambiguous matches, silence, wrong cuts and drift are rejected.
-These are conservative heuristic checks, not a calibrated probability or a
-guarantee of word-level alignment; cues may include signs/music or span pauses.
+Audio sync estimates a constant offset within ±60 seconds using AI dialogue
+matches in five-second windows near the start. It rejects uncertain, conflicting
+or ambiguous matches. It cannot detect later edits or drift, and model confidence
+is not a guarantee of accuracy. The tested model failed on a real movie.
 
 On failure no candidate is uploaded and existing subtitles remain untouched.
 Successful sync adds a subtitle without deleting existing tracks, even when

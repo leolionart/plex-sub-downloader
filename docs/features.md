@@ -53,11 +53,11 @@ Nhưng trong manual preview, service vẫn tiếp tục tìm candidate trên Sub
 | `Không tìm thấy sub nguồn` | Không có source lẫn target |
 
 ### Sync Timing
-- Căn phụ đề target trực tiếp với audio của Plex bằng phát hiện giọng nói; không coi phụ đề nguồn là chuẩn timing.
-- Chỉ áp dụng offset cố định trong khoảng ±60 giây khi các đoạn audio đồng thuận; kết quả yếu, mơ hồ hoặc có drift bị từ chối, không upload.
-- Cần ffmpeg và audio Plex truy cập được; hỗ trợ media một phần dài từ 30 giây đến 4 giờ. Không đảm bảo chính xác tuyệt đối.
+- Dùng AI đối chiếu hội thoại trong các đoạn audio ngắn với phụ đề target; yêu cầu model hỗ trợ audio input.
+- Chỉ áp dụng offset cố định trong khoảng ±60 giây khi các mốc đồng thuận; kết quả yếu hoặc mơ hồ bị từ chối, không upload.
+- Cần ffmpeg và audio Plex truy cập được; hỗ trợ media một phần dài từ 30 giây đến 4 giờ. Không phát hiện drift về sau và không đảm bảo chính xác tuyệt đối.
 - Bản đã sync được upload thêm, không xóa phụ đề hiện có; chọn track mới trên Plex nếu cần.
-- Phân tích chia FFT thành các khối giới hạn bộ nhớ; xóa audio tạm và thu gom bộ nhớ sau mỗi lần xử lý, kể cả khi thất bại.
+- Audio tạm được xóa sau mỗi lần xử lý; các đoạn audio và nội dung subtitle được gửi tới nhà cung cấp AI.
 
 Phụ đề nguồn vẫn được dùng cho dịch, không dùng để xác nhận sync.
 
