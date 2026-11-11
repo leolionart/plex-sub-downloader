@@ -1,5 +1,11 @@
 # Release Notes
 
+## Unreleased - 2026-11-11 16:01 +07
+
+Generated before push from commits:
+
+- `610da7d` Match subtitle timing against AI audio samples
+
 ## Unreleased - 2026-11-11 14:32 +07
 
 Generated before push from commits:
