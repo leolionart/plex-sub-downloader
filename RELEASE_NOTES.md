@@ -1,6 +1,6 @@
 # Release Notes
 
-## Unreleased - 2026-11-24
+## v0.5.0 - 2026-11-24
 
 - Chỉnh lại toàn bộ UI cho mobile và desktop: không còn nút tràn ngang; toolbar Thư viện gom vào 2-3 hàng gọn với nút sắp xếp/lưới/danh sách/làm mới chỉ còn icon; bulk bar thành một hàng; dòng tập phim trong drawer series có nút icon và nằm trên một hàng; form Xử lý phụ đề gọn lại, thêm tuỳ chọn thu gọn.
 - Sửa lỗi CSS fallback có `!important` đè lên class responsive của Tailwind (`sm:flex-row`, `sm:justify-end`...), nguyên nhân khiến nhiều layout desktop bị xếp dọc.
