@@ -221,7 +221,7 @@ class SubtitleService:
                 self.runtime_config.default_language,
             )
             should_download, reason = await self._should_download_subtitle(
-                video, metadata, sub_details, log
+                video, metadata, sub_details, log, event=event
             )
             if not should_download:
                 log.info(f"[Step 3/7] ⏭ Skipping: {reason}", title=metadata.title)
@@ -232,11 +232,19 @@ class SubtitleService:
                 }
             log.info(f"[Step 3/7] ✓ Download needed: {reason}")
 
-            # Notify: new media detected
-            await self.telegram_client.notify_processing_started(
-                title=str(metadata),
-                language=self.runtime_config.default_language,
+            # Upgrade check: đã có sub target, chỉ tìm bản tốt hơn để thay.
+            # Chạy im lặng — chỉ báo Telegram khi thực sự thay được sub mới.
+            is_upgrade_check = bool(
+                sub_details["has_subtitle"]
+                and self.config.subtitle_settings.skip_if_has_subtitle
             )
+
+            # Notify: new media detected (chỉ khi chưa có sub)
+            if not is_upgrade_check:
+                await self.telegram_client.notify_processing_started(
+                    title=str(metadata),
+                    language=self.runtime_config.default_language,
+                )
 
             # Step 4: Search subtitle
             log.info(f"[Step 4/7] Searching {self.runtime_config.default_language} subtitle")
@@ -246,6 +254,15 @@ class SubtitleService:
                 video_filename=self._get_video_filename(video),
             )
             if not subtitles:
+                if is_upgrade_check:
+                    log.info(
+                        f"[Step 4/7] ⏭ No replacement candidate found — keeping existing subtitle for: {metadata.title}"
+                    )
+                    return {
+                        "status": "skipped",
+                        "message": "No better subtitle found; existing subtitle kept",
+                    }
+
                 log.warning(
                     f"[Step 4/7] ✗ No {self.runtime_config.default_language} subtitle found for: {metadata.title}"
                 )
@@ -436,6 +453,7 @@ class SubtitleService:
         metadata: MediaMetadata,
         sub_details: dict,
         log: RequestContextLogger,
+        event: str = "library.new",
     ) -> tuple[bool, str]:
         """
         Quyết định có nên download subtitle không dựa trên settings và existing subs.
@@ -445,12 +463,26 @@ class SubtitleService:
         """
         runtime_settings = self.config.subtitle_settings
 
-        # Check 1: Đã có subtitle và setting là skip
+        # Check 1: Đã có subtitle và setting là skip.
+        # replace_existing chỉ cho phép "upgrade check" khi có khả năng tìm được
+        # bản tốt hơn — không search lại mỗi lần user bấm play.
         if sub_details["has_subtitle"] and runtime_settings.skip_if_has_subtitle:
+            count = sub_details["subtitle_count"]
             if not runtime_settings.replace_existing:
                 return (
                     False,
-                    f"Already has {sub_details['subtitle_count']} subtitle(s) and skip_if_has_subtitle=True",
+                    f"Already has {count} subtitle(s) and skip_if_has_subtitle=True",
+                )
+            if event != "library.new":
+                return (
+                    False,
+                    f"Already has {count} subtitle(s); replace check only runs on library.new (event={event})",
+                )
+            existing_quality = self._detect_existing_quality(sub_details["subtitle_info"])
+            if existing_quality == "retail":
+                return (
+                    False,
+                    f"Already has {count} subtitle(s) with best quality (retail)",
                 )
 
         # Check 2: Có forced subtitle và setting là skip forced

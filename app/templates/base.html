@@ -576,51 +576,138 @@
             background: var(--text-on-gold);
         }
 
-        /* ── Buttons (DaisyUI theme & custom mapping) ── */
+        /* ── Buttons (DaisyUI theme & Plex Component System) ── */
+        .btn, .button {
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            font-weight: 600 !important;
+            border-radius: var(--radius-md, 8px) !important;
+            transition: all 0.15s ease !important;
+            line-height: 1.25 !important;
+            min-height: 38px !important;
+            height: auto !important;
+            padding: 7px 14px !important;
+            font-size: 13px !important;
+            gap: 6px !important;
+            cursor: pointer !important;
+            text-decoration: none !important;
+            box-sizing: border-box !important;
+            border: 1px solid transparent !important;
+            user-select: none !important;
+        }
+
+        .btn-xs {
+            min-height: 28px !important;
+            height: auto !important;
+            padding: 3px 8px !important;
+            font-size: 11px !important;
+            line-height: 1.2 !important;
+            border-radius: 6px !important;
+            gap: 4px !important;
+        }
+
+        .btn-sm {
+            min-height: 34px !important;
+            height: auto !important;
+            padding: 5px 11px !important;
+            font-size: 12px !important;
+            line-height: 1.25 !important;
+            border-radius: 6px !important;
+            gap: 5px !important;
+        }
+
+        .btn-md {
+            min-height: 40px !important;
+            height: auto !important;
+            padding: 8px 16px !important;
+            font-size: 13px !important;
+        }
+
+        .btn-lg {
+            min-height: 46px !important;
+            height: auto !important;
+            padding: 10px 20px !important;
+            font-size: 15px !important;
+        }
+
+        .btn-icon {
+            min-height: 34px !important;
+            min-width: 34px !important;
+            width: 34px !important;
+            height: 34px !important;
+            padding: 0 !important;
+            border-radius: 8px !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }
+
+        .btn-nowrap, .whitespace-nowrap {
+            white-space: nowrap !important;
+        }
+
         .btn-primary {
             --btn-color: var(--plex-gold, #E5A00D);
-            background-color: var(--plex-gold, #E5A00D);
-            border-color: var(--plex-gold, #E5A00D);
-            color: var(--text-on-gold, #1A1A1A);
+            background-color: var(--plex-gold, #E5A00D) !important;
+            border-color: var(--plex-gold, #E5A00D) !important;
+            color: var(--text-on-gold, #1A1A1A) !important;
             font-weight: 600;
         }
 
         .btn-primary:hover {
-            background-color: var(--plex-gold-hover, #CC8B00);
-            border-color: var(--plex-gold-hover, #CC8B00);
-            color: var(--text-on-gold, #1A1A1A);
+            background-color: var(--plex-gold-hover, #CC8B00) !important;
+            border-color: var(--plex-gold-hover, #CC8B00) !important;
+            color: var(--text-on-gold, #1A1A1A) !important;
         }
 
         .btn-secondary {
-            background-color: var(--bg-elevated, #3D3D47);
-            border-color: var(--border-subtle, #3A3A44);
-            color: var(--text-primary, #EAEAEA);
+            background-color: var(--bg-elevated, #3D3D47) !important;
+            border: 1px solid var(--border-subtle, #3A3A44) !important;
+            color: var(--text-primary, #EAEAEA) !important;
         }
 
         .btn-secondary:hover {
-            background-color: var(--bg-surface-hover, #32323C);
-            border-color: var(--border-default, #44444E);
+            background-color: var(--bg-surface-hover, #32323C) !important;
+            border-color: var(--border-default, #44444E) !important;
         }
 
         .btn-ghost {
-            background-color: transparent;
-            border-color: var(--border-subtle, #3A3A44);
-            color: var(--text-secondary, #A0A0A0);
+            background-color: transparent !important;
+            border: 1px solid var(--border-subtle, #3A3A44) !important;
+            color: var(--text-secondary, #A0A0A0) !important;
         }
 
         .btn-ghost:hover {
-            background-color: var(--bg-surface-hover, #32323C);
-            color: var(--text-primary, #EAEAEA);
+            background-color: var(--bg-surface-hover, #32323C) !important;
+            color: var(--text-primary, #EAEAEA) !important;
         }
 
         .btn-danger {
-            background-color: var(--error, #F44336);
-            border-color: var(--error, #F44336);
-            color: white;
+            background-color: var(--error, #F44336) !important;
+            border-color: var(--error, #F44336) !important;
+            color: white !important;
         }
 
         .btn-danger:hover {
             filter: brightness(0.9);
+        }
+
+        .btn-warning {
+            background-color: var(--warning, #FF9800) !important;
+            border-color: var(--warning, #FF9800) !important;
+            color: #1A1A1A !important;
+        }
+
+        .btn-outline {
+            background-color: transparent !important;
+            border: 1px solid var(--border-default, #44444E) !important;
+            color: var(--text-primary, #EAEAEA) !important;
+        }
+
+        .btn-outline:hover {
+            background-color: var(--bg-surface-hover, #32323C) !important;
+            border-color: var(--plex-gold, #E5A00D) !important;
         }
 
         .btn-group {
@@ -817,36 +904,209 @@
             margin: 24px 0;
         }
 
-        /* ── Mobile Hamburger ── */
-        .mobile-toggle {
+        /* ── Mobile Top Bar & Bottom Navigation ── */
+        .mobile-top-bar {
+            display: none;
+            position: sticky;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 52px;
+            background: rgba(24, 24, 30, 0.94);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border-subtle);
+            z-index: 150;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 14px;
+        }
+
+        .mobile-toggle-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            padding: 8px;
+            margin-left: -6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: var(--radius-sm);
+        }
+
+        .mobile-top-brand {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .mobile-logo {
+            width: 26px;
+            height: 26px;
+            background: var(--plex-gold);
+            color: #111113;
+            font-weight: 800;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+        }
+
+        .mobile-brand-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: -0.2px;
+        }
+
+        .mobile-bottom-nav {
             display: none;
             position: fixed;
-            top: 16px;
-            left: 16px;
-            z-index: 200;
-            background: var(--bg-surface);
-            border: 1px solid var(--border-subtle);
-            border-radius: var(--radius-md);
-            padding: 8px;
-            color: var(--text-primary);
-            cursor: pointer;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 60px;
+            background: rgba(24, 24, 30, 0.96);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-top: 1px solid var(--border-subtle);
+            z-index: 150;
+            padding-bottom: env(safe-area-inset-bottom, 0px);
+            grid-template-columns: repeat(4, 1fr);
+            align-items: center;
         }
 
-        .mobile-toggle svg {
-            width: 24px;
-            height: 24px;
+        .mobile-nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 3px;
+            height: 100%;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 10px;
+            font-weight: 500;
+            transition: all 0.15s ease;
+            user-select: none;
+        }
+
+        .mob-nav-svg {
+            width: 20px;
+            height: 20px;
             fill: currentColor;
+            transition: transform 0.15s ease;
         }
 
-        .sidebar-overlay {
+        .mobile-nav-item:active .mob-nav-svg {
+            transform: scale(0.9);
+        }
+
+        .mobile-nav-item.active {
+            color: var(--plex-gold);
+            font-weight: 700;
+        }
+
+        .mobile-nav-item.active .mob-nav-svg {
+            fill: var(--plex-gold);
+            filter: drop-shadow(0 0 6px rgba(229, 160, 13, 0.4));
+        }
+
+        /* ── Floating Background Task Widget ── */
+        .floating-task-widget {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 1100;
+            background: rgba(33, 33, 40, 0.95);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--border-default);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(229, 160, 13, 0.2);
+            border-radius: 14px;
+            padding: 10px 14px 12px;
+            min-width: 260px;
+            max-width: 360px;
+            cursor: pointer;
+            transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease, opacity 0.2s ease;
+            animation: taskPillSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .floating-task-widget:hover {
+            transform: translateY(-2px);
+            border-color: var(--plex-gold);
+            box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(229, 160, 13, 0.4);
+        }
+
+        .floating-task-inner {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .floating-task-info {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .floating-task-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .floating-task-sub {
+            font-size: 11px;
+            color: var(--plex-gold);
+            font-weight: 500;
+        }
+
+        .floating-task-progress-track {
+            margin-top: 8px;
+            height: 4px;
+            background: var(--bg-input);
+            border-radius: 999px;
+            overflow: hidden;
+        }
+
+        .floating-task-progress-fill {
+            height: 100%;
+            background: var(--plex-gold);
+            border-radius: 999px;
+            transition: width 0.25s ease;
+        }
+
+        @keyframes taskPillSlideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        /* ── Unified Modal & Bottom Sheet System ── */
+        .modal-overlay {
             display: none;
             position: fixed;
             inset: 0;
-            background: rgba(0,0,0,0.6);
-            z-index: 99;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
         }
 
-        /* ── Responsive ── */
+        .modal-overlay.active {
+            display: flex !important;
+        }
+
+        /* ── Responsive Layout & Media Queries ── */
         @media (max-width: 768px) {
             .sidebar {
                 transform: translateX(-100%);
@@ -866,32 +1126,49 @@
                 max-width: 100vw;
                 min-width: 0;
                 overflow-x: hidden;
+                padding-bottom: 84px !important; /* Space for mobile bottom nav */
+            }
+
+            .mobile-top-bar {
+                display: flex;
+            }
+
+            .mobile-bottom-nav {
+                display: grid;
             }
 
             .mobile-toggle {
-                display: block;
+                display: none !important; /* Replaced by top bar */
+            }
+
+            .floating-task-widget {
+                bottom: 74px; /* Above mobile bottom nav */
+                right: 12px;
+                left: 12px;
+                max-width: none;
+                min-width: 0;
             }
 
             .page-header {
-                padding: 16px 16px 14px 64px;
+                padding: 14px 16px 12px;
                 max-width: 100vw;
                 min-width: 0;
                 overflow-x: hidden;
             }
 
             .page-header h1 {
-                font-size: 20px;
+                font-size: 18px;
                 line-height: 1.3;
                 word-break: break-word;
             }
 
             .page-header .page-description {
-                font-size: 13px;
+                font-size: 12px;
                 word-break: break-word;
             }
 
             .page-body {
-                padding: 12px 14px 40px;
+                padding: 10px 12px 30px;
                 max-width: 100vw;
                 min-width: 0;
                 overflow-x: hidden;
@@ -1102,14 +1379,31 @@
         .input:focus { border-color: var(--plex-gold, #E5A00D) !important; }
         .join { display: inline-flex !important; flex-wrap: wrap !important; gap: 4px !important; }
         .join-item { border-radius: 6px !important; }
-        .btn-sm, .btn-xs { min-height: 32px !important; height: 32px !important; padding: 4px 10px !important; font-size: 12px !important; }
+        .btn-sm { min-height: 34px !important; height: auto !important; padding: 5px 11px !important; font-size: 12px !important; line-height: 1.25 !important; }
+        .btn-xs { min-height: 28px !important; height: auto !important; padding: 3px 8px !important; font-size: 11px !important; line-height: 1.2 !important; }
         .btn-loading { opacity: 0.75; cursor: not-allowed !important; pointer-events: none; }
         .stat-card { background: var(--bg-surface, #282830); border: 1px solid var(--border-subtle, #3A3A44); border-radius: 12px; }
     </style>
     {% block extra_styles %}{% endblock %}
 </head>
 <body>
-    <!-- Mobile Toggle -->
+    <!-- Mobile Top Bar -->
+    <header class="mobile-top-bar" id="mobileTopBar">
+        <button class="mobile-toggle-btn" onclick="toggleSidebar()" aria-label="Menu" type="button">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
+        </button>
+        <div class="mobile-top-brand">
+            <div class="mobile-logo">P</div>
+            <span class="mobile-brand-title">Plex Subtitles</span>
+        </div>
+        <div class="mobile-top-actions flex items-center gap-2">
+            <span id="mobile-service-status" class="service-status checking" title="Service Status" style="padding: 2px 8px; font-size: 11px;">
+                <span class="pulse"></span>
+            </span>
+        </div>
+    </header>
+
+    <!-- Mobile Toggle (Fallback button if needed) -->
     <button class="mobile-toggle" onclick="toggleSidebar()" aria-label="Menu">
         <svg viewBox="0 0 24 24"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
     </button>
@@ -1197,6 +1491,43 @@
                 {% block content %}{% endblock %}
             </div>
         </main>
+    </div>
+
+    <!-- Mobile Bottom Navigation Bar -->
+    <nav class="mobile-bottom-nav" id="mobileBottomNav" aria-label="Mobile Navigation">
+        <a href="/library" class="mobile-nav-item" id="mob-nav-library" data-nav="library">
+            <svg viewBox="0 0 24 24" class="mob-nav-svg"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12zm-7-2h2v-4h4V8h-4V4h-2v4H9v2h4v4z"/></svg>
+            <span>Thư viện</span>
+        </a>
+        <a href="/workspace" class="mobile-nav-item" id="mob-nav-workspace" data-nav="workspace">
+            <svg viewBox="0 0 24 24" class="mob-nav-svg"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
+            <span>Đồng bộ</span>
+        </a>
+        <a href="/logs" class="mobile-nav-item" id="mob-nav-logs" data-nav="logs">
+            <svg viewBox="0 0 24 24" class="mob-nav-svg"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V8h16v10zm-2-1h-6v-2h6v2zm-8-4H6v-2h4v2zm0 4H6v-2h4v2zm2-4h6v-2h-6v2z"/></svg>
+            <span>Nhật ký</span>
+        </a>
+        <a href="/settings" class="mobile-nav-item" id="mob-nav-settings" data-nav="settings">
+            <svg viewBox="0 0 24 24" class="mob-nav-svg"><path d="M22 9V7h-2V5c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-2h2v-2h-2v-2h2v-2h-2V9h2zm-4 10H4V5h14v14zM6 13h5v4H6v-4zm6-6h4v3h-4V7zM6 7h5v5H6V7zm6 4h4v6h-4v-6z"/></svg>
+            <span>Cài đặt</span>
+        </a>
+    </nav>
+
+    <!-- Floating Background Task Indicator (Unified Component) -->
+    <div id="floatingTaskWidget" class="floating-task-widget" style="display: none;" onclick="window.reopenActiveTaskModal && window.reopenActiveTaskModal()">
+        <div class="floating-task-inner">
+            <span class="spinner spinner-sm shrink-0" id="floatingTaskSpinner"></span>
+            <div class="floating-task-info">
+                <span class="floating-task-label" id="floatingTaskLabel">Đang xử lý phụ đề...</span>
+                <span class="floating-task-sub" id="floatingTaskPercent">0%</span>
+            </div>
+            <button type="button" class="btn btn-xs btn-primary whitespace-nowrap ml-2" onclick="event.stopPropagation(); window.reopenActiveTaskModal && window.reopenActiveTaskModal()">
+                Mở lại
+            </button>
+        </div>
+        <div class="floating-task-progress-track">
+            <div class="floating-task-progress-fill" id="floatingTaskProgressBar" style="width: 0%;"></div>
+        </div>
     </div>
 
     <!-- Toast container (floating, fixed position) -->
@@ -1307,6 +1638,14 @@
                 const first = document.querySelector('.sidebar-nav .nav-item[href="/workspace"]');
                 if (first) first.classList.add('active');
             }
+
+            // Sync mobile bottom navigation active state
+            document.querySelectorAll('.mobile-bottom-nav .mobile-nav-item').forEach(item => {
+                const href = item.getAttribute('href');
+                if (path === href || (href === '/workspace' && path === '/sync') || (href === '/library' && path.startsWith('/library'))) {
+                    item.classList.add('active');
+                }
+            });
         })();
 
         // Sidebar toggle for mobile
@@ -1375,22 +1714,23 @@
         // Service status polling
         (function() {
             const el = document.getElementById('service-status');
-            if (!el) return;
-            const label = el.querySelector('.status-label');
+            const mobEl = document.getElementById('mobile-service-status');
+            if (!el && !mobEl) return;
+            const label = el ? el.querySelector('.status-label') : null;
 
             async function checkHealth() {
                 try {
                     const res = await fetch('/health', { signal: AbortSignal.timeout(5000) });
                     if (res.ok) {
-                        el.className = 'service-status running';
-                        label.textContent = 'Running';
+                        if (el) { el.className = 'service-status in-sidebar running'; if (label) label.textContent = 'Running'; }
+                        if (mobEl) { mobEl.className = 'service-status running'; }
                     } else {
-                        el.className = 'service-status stopped';
-                        label.textContent = 'Stopped';
+                        if (el) { el.className = 'service-status in-sidebar stopped'; if (label) label.textContent = 'Stopped'; }
+                        if (mobEl) { mobEl.className = 'service-status stopped'; }
                     }
                 } catch {
-                    el.className = 'service-status stopped';
-                    label.textContent = 'Stopped';
+                    if (el) { el.className = 'service-status in-sidebar stopped'; if (label) label.textContent = 'Stopped'; }
+                    if (mobEl) { mobEl.className = 'service-status stopped'; }
                 }
             }
 

@@ -66,7 +66,8 @@ Nhận webhook (library.new / media.play)
     ├─ Fetch video metadata từ Plex
     │
     ├─ Check điều kiện bỏ qua:
-    │   - skip_if_has_subtitle: đã có target lang sub?
+    │   - skip_if_has_subtitle: đã có target lang sub? (replace_existing chỉ upgrade
+    │     khi library.new + sub hiện tại chưa phải retail, chạy im lặng)
     │   - skip_forced_subtitles: là forced sub?
     │   - skip_if_embedded: là embedded?
     │   - min_quality_threshold: chất lượng sub hiện tại có đủ cao?

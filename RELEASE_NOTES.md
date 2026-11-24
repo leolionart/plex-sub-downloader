@@ -1,5 +1,14 @@
 # Release Notes
 
+## Unreleased - 2026-11-24
+
+- **Cải tổ toàn diện UI/UX Mobile & Flow thao tác**:
+  - **Hệ thống Component dùng chung chuẩn (Plex Design System)**: Chuẩn hóa hệ thống Button (`.btn`, `.btn-primary`, `.btn-secondary`, `.btn-ghost`, `.btn-danger`, `.btn-warning`, `.btn-xs`, `.btn-sm`, `.btn-md`), loại bỏ hoàn toàn thuộc tính cố định chiều cao `height: 32px !important` gây lỗi chữ nhảy dòng bị đè và đè chữ lên nhau.
+  - **Xử lý triệt để tình trạng Loading cản trở thao tác**: Bổ sung cơ chế chạy ngầm (Background Task Runner) với widget tiến trình nổi (`#floatingTaskWidget`). Người dùng có thể thu nhỏ hoặc đóng Modal tác vụ bất cứ lúc nào để tiếp tục duyệt phim, kiểm tra thư viện hoặc chuyển tab mà không bị khóa màn hình.
+  - **Thanh điều hướng Mobile (Bottom Navigation & Top Bar)**: Thêm Mobile Bottom Nav cố định với 4 tab chính (Thư viện, Đồng bộ, Nhật ký, Cài đặt) và Mobile Top Bar gọn gàng, loại bỏ khoảng trống thừa và tối ưu hóa thao tác bằng một tay trên điện thoại.
+  - **Giao diện lưới 2 cột và Modal dạng Bottom Sheet trên Mobile**: Thư viện hiển thị lưới 2 cột cân đối trên màn hình nhỏ thay vì 1 cột khổng lồ, các Modal tự động thích ứng thành Bottom Sheet trượt mượt mà với thanh cuộn độc lập. Danh sách tập phim trong Show được tái cấu trúc hiển thị theo hàng linh hoạt, chống tràn và đè nút.
+- Không còn gửi Telegram "đang tìm sub" khi media đã có sub target. Với `replace_existing`, upgrade check chỉ chạy khi `library.new`, bỏ qua `media.play` và sub retail, và chạy im lặng trừ khi thay sub thành công.
+
 ## Unreleased - 2026-11-11 16:01 +07
 
 Generated before push from commits:

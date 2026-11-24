@@ -29,12 +29,16 @@ Tất cả cấu hình được lưu tại `data/config.json` và có thể ch�
 | `auto_download_on_add` | Tự động tải khi có media mới (`library.new`) | `true` |
 | `auto_download_on_play` | Tự động tải khi bắt đầu play | `true` |
 | `skip_if_has_subtitle` | Bỏ qua nếu đã có target lang sub | `true` |
-| `replace_existing` | Thay sub hiện tại nếu tìm được bản tốt hơn | `false` |
+| `replace_existing` | Thay sub hiện tại nếu tìm được bản tốt hơn (chỉ chạy khi `library.new` và sub hiện tại chưa phải retail; chạy im lặng, chỉ báo Telegram khi thay thành công) | `false` |
 | `replace_only_if_better_quality` | Chỉ thay khi chất lượng cao hơn | `true` |
 | `min_quality_threshold` | Chất lượng tối thiểu: `ai` / `translated` / `retail` | `translated` |
 | `skip_forced_subtitles` | Bỏ qua forced subtitles | `true` |
 | `skip_if_embedded` | Bỏ qua nếu đã có embedded sub | `true` |
 | `new_media_delay_seconds` | Delay sau `library.new` trước khi xử lý (0-300s) | `30` |
+
+**Khi media đã có target lang sub** (với `skip_if_has_subtitle=true`):
+- `replace_existing=false` → bỏ qua hoàn toàn, không search, không gửi Telegram.
+- `replace_existing=true` → `media.play`/`library.on.deck` vẫn bỏ qua; sub hiện tại là retail cũng bỏ qua. Chỉ `library.new` mới chạy upgrade check, và check này **không** gửi thông báo "đang tìm" hay "không tìm thấy".
 
 **Lý do `new_media_delay_seconds`:** Plex fire event `library.new` cho Show → Season → Episode liên tiếp. Nếu xử lý ngay, metadata có thể chưa đầy đủ (trả về type `Show` thay vì `episode`). Delay 30s giúp Plex hoàn tất index.
 

@@ -48,9 +48,15 @@
     /* Scoped Library Styles: Media Grid, Cards, and Overlay */
     .library-grid.layout-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-        gap: 16px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
         margin-bottom: 30px;
+    }
+    @media (min-width: 480px) {
+        .library-grid.layout-grid {
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 16px;
+        }
     }
     @media (min-width: 640px) {
         .library-grid.layout-grid {
@@ -332,11 +338,26 @@
             flex-direction: column !important;
             gap: 8px !important;
             padding: 12px 14px !important;
-            bottom: 12px !important;
+            bottom: 74px !important; /* Positioned above mobile bottom nav */
         }
         #bulkActionBar .flex {
             width: 100% !important;
             justify-content: space-between !important;
+        }
+        #taskModal, #movieModal {
+            align-items: flex-end !important;
+            padding: 0 !important;
+        }
+        #taskModal > div, #movieModal > div {
+            margin: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            border-radius: 20px 20px 0 0 !important;
+            max-height: 88vh !important;
+        }
+        #showModal .drawer-content-box {
+            width: 100vw !important;
+            max-width: 100vw !important;
         }
     }
     @media (max-width: 768px) {
@@ -557,10 +578,21 @@
 <!-- Modal: Task Runner Progress -->
 <div class="modal-overlay" id="taskModal">
     <div class="bg-bg-surface border border-border-subtle rounded-2xl w-full max-w-xl shadow-2xl flex flex-col overflow-hidden m-4">
-        <div class="px-6 py-4 border-b border-border-subtle flex items-center justify-between bg-bg-surface">
-            <h3 class="text-base font-bold text-text-primary m-0" id="taskModalTitle">Tiến trình xử lý phụ đề</h3>
+        <div class="px-5 py-3.5 border-b border-border-subtle flex items-center justify-between bg-bg-surface">
+            <div class="flex items-center gap-2.5 overflow-hidden">
+                <span class="w-2.5 h-2.5 rounded-full bg-warning animate-pulse shrink-0" id="taskStatusDot"></span>
+                <h3 class="text-base font-bold text-text-primary m-0 truncate" id="taskModalTitle">Tiến trình xử lý phụ đề</h3>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+                <button type="button" class="btn btn-ghost btn-xs text-text-muted hover:text-text-primary px-2" onclick="minimizeTaskModal()" title="Thu nhỏ / Chạy nền" aria-label="Thu nhỏ">
+                    <i class="fa-solid fa-minus text-xs"></i>
+                </button>
+                <button type="button" class="btn btn-ghost btn-xs text-text-muted hover:text-text-primary px-2" onclick="closeTaskModal()" title="Đóng" aria-label="Đóng">
+                    &times;
+                </button>
+            </div>
         </div>
-        <div class="p-6 flex flex-col gap-4">
+        <div class="p-5 flex flex-col gap-4">
             <div class="flex flex-col gap-3">
                 <div class="flex justify-between items-center text-sm">
                     <span id="taskStatusLabel" class="font-medium text-text-primary">Đang xử lý...</span>
@@ -579,8 +611,14 @@
                 </div>
             </div>
         </div>
-        <div class="px-6 py-3 border-t border-border-subtle flex justify-end gap-3 bg-bg-surface">
-            <button class="btn btn-secondary btn-sm" id="taskCloseBtn" onclick="closeTaskModal()">Đóng</button>
+        <div class="px-5 py-3 border-t border-border-subtle flex items-center justify-between gap-3 bg-bg-surface">
+            <span class="text-xs text-text-muted" id="taskRunningHint">Có thể thu nhỏ để tiếp tục thao tác khác</span>
+            <div class="flex items-center gap-2">
+                <button type="button" class="btn btn-ghost btn-sm" id="taskMinimizeBtn" onclick="minimizeTaskModal()">
+                    <i class="fa-solid fa-down-left-and-up-right-to-center text-xs mr-1"></i> Thu nhỏ
+                </button>
+                <button class="btn btn-secondary btn-sm" id="taskCloseBtn" onclick="closeTaskModal()">Đóng</button>
+            </div>
         </div>
     </div>
 </div>
@@ -1142,8 +1180,8 @@
                     <div class="shrink-0 flex items-center gap-2">
                         <div class="media-actions flex gap-2">
                             ${isShow 
-                                 ? `<button class="btn btn-sm btn-primary gap-1.5" onclick="event.stopPropagation(); openShowTree('${item.rating_key}')">${ICONS.tv} Quản lý Series</button>`
-                                 : `<button class="btn btn-sm btn-primary gap-1.5" onclick="event.stopPropagation(); startBatchAction(['${item.rating_key}'], 'upload_target', this)">${ICONS.search} Tìm sub</button>`
+                                 ? `<button class="btn btn-sm btn-primary gap-1.5 whitespace-nowrap" onclick="event.stopPropagation(); openShowTree('${item.rating_key}')">${ICONS.tv} <span class="hidden sm:inline">Quản lý Series</span><span class="sm:hidden">Series</span></button>`
+                                 : `<button class="btn btn-sm btn-primary gap-1.5 whitespace-nowrap" onclick="event.stopPropagation(); startBatchAction(['${item.rating_key}'], 'upload_target', this)">${ICONS.search} <span class="hidden sm:inline">Tìm sub</span><span class="sm:hidden">Tìm</span></button>`
                             }
                         </div>
                     </div>
@@ -1172,8 +1210,8 @@
                         </div>
                         <div class="media-actions mt-auto flex gap-1">
                             ${isShow 
-                                ? `<button class="btn btn-sm btn-primary flex-1 gap-1.5" onclick="event.stopPropagation(); openShowTree('${item.rating_key}')">${ICONS.tv} Quản lý Series</button>`
-                                : `<button class="btn btn-sm btn-primary flex-1 gap-1.5" onclick="event.stopPropagation(); startBatchAction(['${item.rating_key}'], 'upload_target', this)">${ICONS.search} Tìm sub</button>`
+                                ? `<button class="btn btn-xs sm:btn-sm btn-primary flex-1 gap-1.5 whitespace-nowrap" onclick="event.stopPropagation(); openShowTree('${item.rating_key}')">${ICONS.tv} <span class="truncate">Quản lý Series</span></button>`
+                                : `<button class="btn btn-xs sm:btn-sm btn-primary flex-1 gap-1.5 whitespace-nowrap" onclick="event.stopPropagation(); startBatchAction(['${item.rating_key}'], 'upload_target', this)">${ICONS.search} <span class="truncate">Tìm sub</span></button>`
                             }
                         </div>
                     </div>
@@ -1578,19 +1616,20 @@
                     }
 
                     html += `
-                        <div class="px-4 py-3 flex items-center justify-between gap-3 hover:bg-bg-surface-hover transition-colors">
-                            <div class="flex-1 min-w-0 pr-3">
+                        <div class="px-3.5 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 hover:bg-bg-surface-hover transition-colors">
+                            <div class="flex items-center justify-between gap-2 min-w-0 flex-1">
                                 <div class="text-sm font-medium text-text-primary truncate" title="Tập ${ep.episode_number}: ${escapeHtml(ep.title)}">
                                     <span class="text-text-muted font-normal mr-1.5">Tập ${ep.episode_number}:</span>
                                     <span>${escapeHtml(ep.title)}</span>
                                 </div>
+                                <div class="shrink-0 sm:hidden">${badge}</div>
                             </div>
-                            <div class="shrink-0 flex flex-wrap items-center justify-end gap-2">
-                                <div class="shrink-0">${badge}</div>
-                                <div class="shrink-0 flex flex-wrap items-center justify-end gap-1.5">
-                                    <button class="btn btn-xs sm:btn-sm btn-secondary gap-1.5 whitespace-nowrap" onclick="quickUploadTarget('${ep.rating_key}', this)">${ICONS.search} Tìm sub</button>
-                                    <button class="btn btn-xs sm:btn-sm ${ep.translation_skipped ? 'btn-warning' : 'btn-ghost border border-border-subtle'} gap-1.5 whitespace-nowrap" onclick="toggleTranslationSkip('${ep.rating_key}', this)">${ep.translation_skipped ? ICONS.check + ' Bật dịch' : ICONS.skip + ' Bỏ qua dịch'}</button>
-                                    ${ep.can_translate && !ep.translation_skipped ? `<button class="btn btn-xs sm:btn-sm btn-primary gap-1.5 whitespace-nowrap" onclick="quickTranslate('${ep.rating_key}', this)">${ICONS.translate} Dịch AI</button>` : ''}
+                            <div class="flex items-center justify-between sm:justify-end gap-2 flex-wrap sm:flex-nowrap">
+                                <div class="shrink-0 hidden sm:block">${badge}</div>
+                                <div class="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
+                                    <button class="btn btn-xs sm:btn-sm btn-secondary gap-1 whitespace-nowrap text-xs" onclick="quickUploadTarget('${ep.rating_key}', this)">${ICONS.search} <span>Tìm sub</span></button>
+                                    <button class="btn btn-xs sm:btn-sm ${ep.translation_skipped ? 'btn-warning' : 'btn-ghost border border-border-subtle'} gap-1 whitespace-nowrap text-xs" onclick="toggleTranslationSkip('${ep.rating_key}', this)">${ep.translation_skipped ? ICONS.check + ' Bật' : ICONS.skip + ' Bỏ qua'}</button>
+                                    ${ep.can_translate && !ep.translation_skipped ? `<button class="btn btn-xs sm:btn-sm btn-primary gap-1 whitespace-nowrap text-xs" onclick="quickTranslate('${ep.rating_key}', this)">${ICONS.translate} <span>Dịch AI</span></button>` : ''}
                                 </div>
                             </div>
                         </div>
@@ -1843,14 +1882,21 @@
         currentTaskType = taskType;
         const modal = document.getElementById("taskModal");
         const btn = document.getElementById("taskCloseBtn");
+        const minimizeBtn = document.getElementById("taskMinimizeBtn");
         const logBox = document.getElementById("taskLogsContainer");
         const progressBar = document.getElementById("taskProgressBar");
         const percent = document.getElementById("taskProgressPercent");
         const statusLabel = document.getElementById("taskStatusLabel");
         const fallbackContainer = document.getElementById("instantFallbackContainer");
+        const floatingWidget = document.getElementById("floatingTaskWidget");
 
+        if (floatingWidget) floatingWidget.style.display = "none";
         if (fallbackContainer) fallbackContainer.style.display = "none";
-        btn.disabled = true;
+        if (btn) {
+            btn.disabled = false;
+            btn.innerText = "Đóng";
+        }
+        if (minimizeBtn) minimizeBtn.style.display = "inline-flex";
         logBox.innerText = "Đang kết nối...";
         progressBar.value = 0;
         percent.innerText = "0%";
@@ -1862,6 +1908,26 @@
         pollTaskStatus();
     }
 
+    function minimizeTaskModal() {
+        const modal = document.getElementById("taskModal");
+        if (modal) modal.classList.remove("active");
+        if (activeTaskId) {
+            const floatingWidget = document.getElementById("floatingTaskWidget");
+            if (floatingWidget) {
+                floatingWidget.style.display = "block";
+            }
+        }
+    }
+
+    window.reopenActiveTaskModal = function() {
+        const modal = document.getElementById("taskModal");
+        if (modal && activeTaskId) {
+            modal.classList.add("active");
+            const floatingWidget = document.getElementById("floatingTaskWidget");
+            if (floatingWidget) floatingWidget.style.display = "none";
+        }
+    };
+
     async function pollTaskStatus() {
         if (!activeTaskId) return;
         try {
@@ -1870,9 +1936,18 @@
             const task = await res.json();
 
             const pct = task.total > 0 ? Math.round((task.current / task.total) * 100) : 0;
+            const pctStr = `${pct}% (${task.current}/${task.total})`;
             document.getElementById("taskProgressBar").value = pct;
-            document.getElementById("taskProgressPercent").innerText = `${pct}% (${task.current}/${task.total})`;
+            document.getElementById("taskProgressPercent").innerText = pctStr;
             document.getElementById("taskCurrentItem").innerText = task.current_item ? `Đang xử lý: ${task.current_item}` : '';
+
+            // Update floating background widget
+            const floatingLabel = document.getElementById("floatingTaskLabel");
+            const floatingPct = document.getElementById("floatingTaskPercent");
+            const floatingBar = document.getElementById("floatingTaskProgressBar");
+            if (floatingLabel) floatingLabel.innerText = task.current_item ? `Đang xử lý: ${task.current_item}` : 'Đang xử lý phụ đề...';
+            if (floatingPct) floatingPct.innerText = pctStr;
+            if (floatingBar) floatingBar.style.width = pct + '%';
 
             const logs = (task.logs || []).join("\n");
             const logBox = document.getElementById("taskLogsContainer");
@@ -1914,13 +1989,21 @@
                     return;
                 }
 
-
+                const floatingWidget = document.getElementById("floatingTaskWidget");
                 if (task.status === "failed") {
                     showToast("Tác vụ xử lý phụ đề thất bại. Xem log để biết chi tiết.", "error");
                     document.getElementById("taskCloseBtn").disabled = false;
+                    if (floatingWidget) {
+                        if (floatingLabel) floatingLabel.innerText = "Xử lý phụ đề thất bại!";
+                        setTimeout(() => { if (floatingWidget) floatingWidget.style.display = "none"; }, 4000);
+                    }
                     return;
                 }
                 showToast("Tác vụ xử lý phụ đề đã hoàn tất!", "success");
+                if (floatingWidget) {
+                    if (floatingLabel) floatingLabel.innerText = "Đã hoàn tất phụ đề!";
+                    setTimeout(() => { if (floatingWidget) floatingWidget.style.display = "none"; }, 3500);
+                }
                 closeTaskModal();
             }
         } catch (err) {
@@ -1943,6 +2026,8 @@
         document.getElementById("taskModal").classList.remove("active");
         const fallbackContainer = document.getElementById("instantFallbackContainer");
         if (fallbackContainer) fallbackContainer.style.display = "none";
+        const floatingWidget = document.getElementById("floatingTaskWidget");
+        if (floatingWidget) floatingWidget.style.display = "none";
         activeTaskId = null;
         lastNotFoundRatingKeys = [];
         resetActiveSearchButton();
@@ -2023,6 +2108,12 @@
         if (movieModal) {
             movieModal.addEventListener("click", (e) => {
                 if (e.target === movieModal) closeMovieModal();
+            });
+        }
+        const taskModal = document.getElementById("taskModal");
+        if (taskModal) {
+            taskModal.addEventListener("click", (e) => {
+                if (e.target === taskModal) minimizeTaskModal();
             });
         }
     });
