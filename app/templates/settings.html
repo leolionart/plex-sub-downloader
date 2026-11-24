@@ -638,6 +638,17 @@
                     </div>
                 </label>
 
+                <label class="setting-row" for="skip_native_language">
+                    <div class="setting-info">
+                        <div class="setting-title">Bỏ qua phim nói sẵn ngôn ngữ chính</div>
+                        <div class="setting-desc">VD: phim Việt hoặc bản lồng tiếng Việt khi ngôn ngữ chính là tiếng Việt. Không tìm sub và ẩn khỏi danh sách "Thiếu" (cần audio track có gắn ngôn ngữ)</div>
+                    </div>
+                    <div class="toggle-switch">
+                        <input type="checkbox" id="skip_native_language" name="skip_native_language" checked>
+                        <span class="toggle-slider"></span>
+                    </div>
+                </label>
+
                 <label class="setting-row" for="skip_forced_subtitles">
                     <div class="setting-info">
                         <div class="setting-title">Bỏ qua nếu có forced sub</div>
@@ -924,6 +935,7 @@
             document.getElementById('replace_existing').checked = settings.replace_existing;
             document.getElementById('skip_forced_subtitles').checked = settings.skip_forced_subtitles;
             document.getElementById('skip_if_embedded').checked = settings.skip_if_embedded;
+            document.getElementById('skip_native_language').checked = settings.skip_native_language ?? true;
             document.getElementById('min_quality_threshold').value = settings.min_quality_threshold;
             document.getElementById('auto_sync_timing').checked = settings.auto_sync_timing ?? true;
             document.getElementById('translation_enabled').checked = (settings.translation_enabled || settings.auto_translate_if_no_vi) ?? false;
@@ -988,6 +1000,7 @@
             replace_existing: formData.get('replace_existing') === 'on',
             skip_forced_subtitles: formData.get('skip_forced_subtitles') === 'on',
             skip_if_embedded: formData.get('skip_if_embedded') === 'on',
+            skip_native_language: formData.get('skip_native_language') === 'on',
             min_quality_threshold: formData.get('min_quality_threshold'),
             auto_sync_timing: formData.get('auto_sync_timing') === 'on',
             translation_enabled: formData.get('translation_enabled') === 'on',

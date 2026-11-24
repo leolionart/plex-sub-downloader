@@ -560,6 +560,22 @@ class PlexClient:
             logger.warning(f"Error checking existing subtitles: {e}")
             return []
 
+    def has_audio_language(self, video: Video, language: str) -> bool:
+        """True nếu media có ít nhất một audio track thuộc ngôn ngữ cho trước.
+
+        Dùng để bỏ qua phim nói sẵn ngôn ngữ đích (phim Việt, bản lồng tiếng...).
+        Track không gắn ngôn ngữ ("und"/trống) không được tính là khớp.
+        """
+        try:
+            for media in getattr(video, "media", None) or []:
+                for part in getattr(media, "parts", None) or []:
+                    for stream in getattr(part, "streams", None) or []:
+                        if getattr(stream, "streamType", None) == 2 and self._stream_matches_language(stream, language):
+                            return True
+        except Exception as e:
+            logger.debug(f"Could not inspect audio streams: {e}")
+        return False
+
     def get_subtitle_details(self, video: Video, language: str = "vi") -> dict:
         """
         Lấy thông tin chi tiết về subtitles đã có.
@@ -1041,6 +1057,21 @@ class PlexClient:
         return vi_keys, en_keys
 
 
+    def _get_section_native_keys(self, section: Any, section_key: str, language: str, use_cache: bool = True) -> set[str] | None:
+        """ratingKeys có audio cùng ngôn ngữ đích. None nếu Plex không hỗ trợ filter audioLanguage."""
+        cache_key = f"native:{section_key}:{language}"
+        if use_cache:
+            cached = self._section_subtitles_cache.get(cache_key)
+            if cached is not None:
+                return cached.get("keys")
+        try:
+            keys: set[str] | None = {str(getattr(i, "ratingKey", i)) for i in section.search(filters={"audioLanguage": language})}
+        except Exception as e:
+            logger.warning(f"audioLanguage filter unavailable for section {section_key}: {e}")
+            keys = None
+        self._section_subtitles_cache.set(cache_key, {"keys": keys})
+        return keys
+
     def get_section_items(
         self,
         section_key: str,
@@ -1050,8 +1081,13 @@ class PlexClient:
         subtitle_filter: str = "missing_vi",
         sort: str | None = None,
         use_cache: bool = True,
+        exclude_audio_language: str | None = None,
     ) -> dict:
-        """Fetch items in a library section with optional search, subtitle filter, sort, and pagination."""
+        """Fetch items in a library section with optional search, subtitle filter, sort, and pagination.
+
+        exclude_audio_language: nếu đặt (VD "vi"), các bộ lọc "thiếu sub" sẽ loại media có audio
+        cùng ngôn ngữ này ngay phía Plex server, nên phân trang vẫn chính xác.
+        """
         cache_key = (
             str(section_key),
             query.strip() if query and query.strip() else None,
@@ -1059,6 +1095,7 @@ class PlexClient:
             sort,
             offset,
             limit,
+            exclude_audio_language,
         )
         if use_cache:
             cached = self._section_items_cache.get(cache_key)
@@ -1118,15 +1155,37 @@ class PlexClient:
 
             title_query = query.strip() if query and query.strip() else None
 
-            paged = section.search(
-                title=title_query,
-                filters=filters or None,
-                sort=sort or None,
-                container_start=offset,
-                maxresults=limit,
-            )
+            native_keys: set[str] | None = None
+            if exclude_audio_language:
+                native_keys = self._get_section_native_keys(section, str(section_key), exclude_audio_language, use_cache)
+                if native_keys is not None and subtitle_filter in ("missing_vi", "can_translate"):
+                    filters["audioLanguage!"] = exclude_audio_language
+
+            try:
+                paged = section.search(
+                    title=title_query,
+                    filters=filters or None,
+                    sort=sort or None,
+                    container_start=offset,
+                    maxresults=limit,
+                )
+            except Exception as e:
+                if "audioLanguage!" not in filters:
+                    raise
+                # Server không chấp nhận filter audio → vẫn trả danh sách, chỉ không loại phim bản ngữ
+                logger.warning(f"Retrying section search without audioLanguage filter: {e}")
+                filters.pop("audioLanguage!", None)
+                native_keys = None
+                paged = section.search(
+                    title=title_query,
+                    filters=filters or None,
+                    sort=sort or None,
+                    container_start=offset,
+                    maxresults=limit,
+                )
             total = getattr(paged, "totalSize", len(paged))
             vi_keys, en_keys = self._get_section_subtitle_keys(section, str(section_key))
+            native_only = (native_keys - vi_keys) if native_keys else set()
 
             items = []
             for item in paged:
@@ -1167,8 +1226,9 @@ class PlexClient:
                 "stats": {
                     "total": total_in_section,
                     "has_vi": len(vi_keys),
-                    "missing_vi": max(0, total_in_section - len(vi_keys)),
-                    "can_translate": len(en_keys - vi_keys),
+                    "missing_vi": max(0, total_in_section - len(vi_keys) - len(native_only)),
+                    "can_translate": len(en_keys - vi_keys - native_only),
+                    "native_language": len(native_only),
                 },
                 "items": items,
             }

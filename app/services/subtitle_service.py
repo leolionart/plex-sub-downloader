@@ -134,6 +134,59 @@ class SubtitleService:
             item["can_translate"] = False
         return item
 
+    # ── Bỏ qua tìm sub chủ động ─────────────────────────────
+    @staticmethod
+    def _media_lineage_keys(video: Any) -> set[str]:
+        """ratingKey của media + season/show cha (để bỏ qua show/season áp dụng cho mọi tập)."""
+        keys = set()
+        for attr in ("ratingKey", "parentRatingKey", "grandparentRatingKey"):
+            value = getattr(video, attr, None)
+            if value not in (None, ""):
+                keys.add(str(value))
+        return keys
+
+    def get_ignored_media(self) -> dict[str, dict[str, Any]]:
+        return dict(self.config.subtitle_settings.ignored_media)
+
+    def is_media_ignored(self, rating_key: str | None = None, video: Any = None) -> bool:
+        ignored = self.config.subtitle_settings.ignored_media
+        if not ignored:
+            return False
+        keys = self._media_lineage_keys(video) if video is not None else set()
+        if rating_key is not None:
+            keys.add(str(rating_key))
+        return any(k in ignored for k in keys)
+
+    def set_media_ignored(self, items: list[dict[str, Any]], ignored: bool) -> dict[str, dict[str, Any]]:
+        """Thêm/bỏ media khỏi danh sách bỏ qua. items: [{rating_key, title?, type?, year?, section_key?}]."""
+        current = dict(self.config.subtitle_settings.ignored_media)
+        for item in items:
+            rk = str(item.get("rating_key") or "").strip()
+            if not rk:
+                continue
+            if ignored:
+                current[rk] = {
+                    "title": str(item.get("title") or "")[:300],
+                    "type": str(item.get("type") or "")[:20],
+                    "year": item.get("year") if isinstance(item.get("year"), int) else None,
+                    "section_key": str(item.get("section_key") or "") or None,
+                }
+            else:
+                current.pop(rk, None)
+        updated = self.config.subtitle_settings.model_copy(update={"ignored_media": current})
+        self.update_settings(updated)
+        self.plex_client.clear_all_caches()
+        return dict(current)
+
+    def _native_language_skip_reason(self, video: Any) -> str | None:
+        """Lý do bỏ qua nếu media đã có audio cùng ngôn ngữ đích (phim bản ngữ / lồng tiếng)."""
+        if not self.config.subtitle_settings.skip_native_language:
+            return None
+        lang = self.runtime_config.default_language or "vi"
+        if self.plex_client.has_audio_language(video, lang):
+            return f"Audio already in target language ({lang}) and skip_native_language=True"
+        return None
+
     def update_settings(self, new_settings: SubtitleSettings) -> None:
         """Update subtitle settings from the Web UI or persistent skip controls."""
         self.config.subtitle_settings = new_settings
@@ -462,6 +515,13 @@ class SubtitleService:
             (should_download: bool, reason: str)
         """
         runtime_settings = self.config.subtitle_settings
+
+        # Check 0: người dùng chủ động bỏ qua, hoặc phim nói sẵn ngôn ngữ đích
+        if self.is_media_ignored(video=video):
+            return False, "Media is in the ignore list (bỏ qua tìm sub)"
+        native_reason = self._native_language_skip_reason(video)
+        if native_reason:
+            return False, native_reason
 
         # Check 1: Đã có subtitle và setting là skip.
         # replace_existing chỉ cho phép "upgrade check" khi có khả năng tìm được
@@ -1551,7 +1611,7 @@ class SubtitleService:
         Returns:
             Dict với status và translation result
         """
-        if self.is_translation_skipped(rating_key):
+        if self.is_translation_skipped(rating_key) or self.is_media_ignored(rating_key):
             return {"status": "skipped_translation", "message": "AI translation skipped for this media"}
 
         log = RequestContextLogger(logger, request_id or rating_key[:8])
@@ -2536,22 +2596,79 @@ class SubtitleService:
         sort: str | None = None,
         use_cache: bool = True,
     ) -> dict:
+        ignored = self.config.subtitle_settings.ignored_media
+        sk = str(section_key)
+
+        if subtitle_filter == "ignored":
+            # Liệt kê từ metadata đã lưu — không cần gọi Plex
+            rows = [
+                {
+                    "rating_key": rk,
+                    "title": meta.get("title") or f"#{rk}",
+                    "year": meta.get("year"),
+                    "type": meta.get("type") or "movie",
+                    "thumb": True,
+                    "summary": "",
+                    "genres": [],
+                    "has_vi": False,
+                    "can_translate": False,
+                    "ignored": True,
+                }
+                for rk, meta in ignored.items()
+                if (meta or {}).get("section_key") == sk
+            ]
+            q = (query or "").strip().lower()
+            if q:
+                rows = [r for r in rows if q in r["title"].lower()]
+            rows.sort(key=lambda r: r["title"].lower())
+            base = self.plex_client.get_section_items(
+                section_key=section_key, offset=0, limit=1, subtitle_filter="all", use_cache=True,
+                exclude_audio_language=self._native_exclude_language(),
+            )
+            stats = dict(base.get("stats") or {})
+            stats["ignored"] = len([1 for m in ignored.values() if (m or {}).get("section_key") == sk])
+            if isinstance(stats.get("missing_vi"), int):
+                stats["missing_vi"] = max(0, stats["missing_vi"] - stats["ignored"])
+            return {**{k: v for k, v in base.items() if k not in ("items", "stats")},
+                    "total_size": len(rows), "offset": 0, "limit": len(rows), "items": rows, "stats": stats}
+
         data = self.plex_client.get_section_items(
             section_key=section_key, query=query, offset=offset, limit=limit,
             subtitle_filter=subtitle_filter, sort=sort, use_cache=use_cache,
+            exclude_audio_language=self._native_exclude_language(),
         )
         result = dict(data)
-        result["items"] = [self._apply_translation_skip_to_item(item) for item in data.get("items", [])]
+        items = []
+        for item in data.get("items", []):
+            item = self._apply_translation_skip_to_item(item)
+            item["ignored"] = str(item.get("rating_key")) in ignored
+            if item["ignored"]:
+                item["can_translate"] = False
+                # Các bộ lọc "cần xử lý" không hiện media đã bỏ qua
+                if subtitle_filter in ("missing_vi", "can_translate"):
+                    continue
+            items.append(item)
+        result["items"] = items
         if "stats" in result:
             stats = dict(result["stats"])
-            stats["can_translate"] = sum(1 for item in result["items"] if item.get("can_translate"))
+            stats["can_translate"] = sum(1 for item in items if item.get("can_translate"))
+            section_ignored = sum(1 for m in ignored.values() if (m or {}).get("section_key") == sk)
+            stats["ignored"] = section_ignored
+            if isinstance(stats.get("missing_vi"), int):
+                stats["missing_vi"] = max(0, stats["missing_vi"] - section_ignored)
             result["stats"] = stats
         return result
+
+    def _native_exclude_language(self) -> str | None:
+        if not self.config.subtitle_settings.skip_native_language:
+            return None
+        return self.runtime_config.default_language or "vi"
 
     def get_show_tree(self, rating_key: str, use_cache: bool = True) -> dict:
         target_lang = self.runtime_config.default_language or "vi"
         data = self.plex_client.get_show_tree(rating_key=rating_key, target_lang=target_lang, source_lang="en", use_cache=use_cache)
         result = dict(data)
+        result["ignored"] = self.is_media_ignored(rating_key)
         result["seasons"] = []
         result["can_translate_count"] = 0
         for season in data.get("seasons", []):
@@ -2564,7 +2681,11 @@ class SubtitleService:
     def get_movie_details(self, rating_key: str, use_cache: bool = True) -> dict:
         target_lang = self.runtime_config.default_language or "vi"
         data = self.plex_client.get_movie_details(rating_key=rating_key, target_lang=target_lang, source_lang="en", use_cache=use_cache)
-        return self._apply_translation_skip_to_item(data)
+        result = self._apply_translation_skip_to_item(data)
+        result["ignored"] = self.is_media_ignored(rating_key)
+        if result["ignored"]:
+            result["can_translate"] = False
+        return result
 
     async def batch_upload_target(
         self,

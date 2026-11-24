@@ -22,6 +22,18 @@ class BatchActionRequest(BaseModel):
     use_cache: bool = True
     pronoun_override: str | None = None
 
+
+class IgnoreItem(BaseModel):
+    rating_key: str
+    title: str | None = None
+    type: str | None = None
+    year: int | None = None
+
+
+class IgnoreRequest(BaseModel):
+    items: list[IgnoreItem]
+    section_key: str | None = None
+
 class TaskTracker:
     """In-memory task tracker for batch operations."""
 
@@ -195,6 +207,36 @@ def _persist_translation_skip(service: Any, rating_key: str, skipped: bool) -> d
     return {"rating_key": str(rating_key), "translation_skipped": skipped, "translation_skip_rating_keys": keys}
 
 
+def _persist_ignored(service: Any, items: list[dict[str, Any]], ignored: bool) -> dict[str, Any]:
+    import app.main as main_app
+
+    current = service.set_media_ignored(items, ignored)
+    if main_app.config_store and main_app.runtime_config:
+        main_app.config_store.save(main_app.runtime_config)
+    return {"ignored": ignored, "count": len(items), "total_ignored": len(current)}
+
+
+@router.get("/ignored")
+async def list_ignored():
+    """Danh sách media đang bị bỏ qua tìm sub."""
+    service = get_subtitle_service()
+    return {"items": [{"rating_key": rk, **(meta or {})} for rk, meta in service.get_ignored_media().items()]}
+
+
+@router.post("/ignored")
+async def add_ignored(request: IgnoreRequest):
+    """Đánh dấu bỏ qua tìm sub (webhook, tìm/dịch hàng loạt, tự dịch) cho một hoặc nhiều media."""
+    if not request.items:
+        raise HTTPException(status_code=400, detail="items cannot be empty")
+    items = [{**item.model_dump(), "section_key": request.section_key} for item in request.items]
+    return _persist_ignored(get_subtitle_service(), items, True)
+
+
+@router.delete("/ignored/{rating_key}")
+async def remove_ignored(rating_key: str):
+    return _persist_ignored(get_subtitle_service(), [{"rating_key": rating_key}], False)
+
+
 @router.get("/translation-skip/{rating_key}")
 async def get_translation_skip(rating_key: str):
     service = get_subtitle_service()
@@ -363,18 +405,25 @@ async def _run_batch_translate_task(
     task_tracker.finish_task(task_id, "completed")
 
 def _expand_rating_keys_to_videos(service: Any, rating_keys: list[str]) -> list[str]:
-    """Expand any show/season rating keys into individual episode rating keys."""
+    """Expand any show/season rating keys into individual episode rating keys.
+
+    Media trong danh sách bỏ qua (hoặc tập thuộc show/season bị bỏ qua) bị loại khỏi kết quả.
+    """
     expanded: list[str] = []
     seen: set[str] = set()
 
     for rk in rating_keys:
+        if service.is_media_ignored(rk):
+            continue
         try:
             item = service.plex_client.get_item(rk)
+            if service.is_media_ignored(video=item):
+                continue
             item_type = getattr(item, "type", None)
             if item_type in ("show", "season") and hasattr(item, "episodes"):
                 for ep in item.episodes():
                     ep_rk = str(getattr(ep, "ratingKey", ep))
-                    if ep_rk not in seen:
+                    if ep_rk not in seen and not service.is_media_ignored(video=ep):
                         seen.add(ep_rk)
                         expanded.append(ep_rk)
             else:
@@ -401,7 +450,7 @@ async def batch_upload_target(request: BatchActionRequest, background_tasks: Bac
     service = get_subtitle_service()
     expanded_keys = await asyncio.to_thread(_expand_rating_keys_to_videos, service, request.rating_keys)
     if not expanded_keys:
-        expanded_keys = request.rating_keys
+        raise HTTPException(status_code=400, detail="Tất cả media đã chọn đang được đánh dấu bỏ qua tìm sub")
 
     task_id = task_tracker.create_task("upload_target", len(expanded_keys))
     background_tasks.add_task(
@@ -421,12 +470,11 @@ async def batch_translate(request: BatchActionRequest, background_tasks: Backgro
 
     service = get_subtitle_service()
     expanded_keys = await asyncio.to_thread(_expand_rating_keys_to_videos, service, request.rating_keys)
-    if not expanded_keys:
-        expanded_keys = request.rating_keys
     expanded_keys = [rk for rk in expanded_keys if not service.is_translation_skipped(rk)]
     if not expanded_keys:
-        raise HTTPException(status_code=400, detail="All selected media are excluded from AI translation")
+        raise HTTPException(status_code=400, detail="Tất cả media đã chọn đang bị bỏ qua tìm sub hoặc bỏ qua dịch AI")
 
+    task_id = task_tracker.create_task("translate", len(expanded_keys))
     background_tasks.add_task(
         _run_batch_translate_task,
         task_id=task_id,

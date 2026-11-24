@@ -89,6 +89,23 @@ Khi không tìm được target lang sub, service dịch từ source lang.
 
 ---
 
+## 3b. Bỏ qua tìm sub
+
+Một số media gần như không thể có sub (phim Việt, phim quá cũ...). Có hai cách để service không tốn công tìm:
+
+**Tự động: phim nói sẵn ngôn ngữ chính** (`skip_native_language`, mặc định bật)
+- Nếu media có audio track gắn ngôn ngữ trùng ngôn ngữ chính (VD `vie` khi ngôn ngữ chính là tiếng Việt), webhook bỏ qua, không gửi Telegram.
+- Thư viện loại các media này khỏi bộ lọc "Thiếu Vietsub" / "Dịch AI" ngay phía Plex (filter `audioLanguage`), nên phân trang và số đếm vẫn đúng.
+- Cần file có gắn ngôn ngữ cho audio track. Track `und`/không gắn ngôn ngữ không được nhận diện → dùng cách thủ công bên dưới.
+
+**Thủ công: danh sách bỏ qua**
+- Thư viện: chọn nhiều media → nút 👁‍🗨 **Bỏ qua** trên thanh thao tác; hoặc nút 👁‍🗨 trong chi tiết phim / drawer series.
+- Bỏ qua series áp dụng cho mọi tập (kể cả tập mới thêm sau này).
+- Media bị bỏ qua: webhook không xử lý, tìm/dịch hàng loạt bỏ qua, không tự dịch AI, ẩn khỏi "Thiếu Vietsub".
+- Tab 👁‍🗨 **Bỏ qua** liệt kê các media đã bỏ qua trong thư viện hiện tại, có nút **Khôi phục**.
+
+---
+
 ## 4. Translation Approval (`/translation`)
 
 Khi `translation_requires_approval = true`:

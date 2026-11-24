@@ -354,8 +354,10 @@ async def update_settings(request: Request) -> dict[str, str]:
     # Extract default_language (nếu có)
     new_lang = body.pop("default_language", None)
 
-    # Parse SubtitleSettings từ remaining fields
-    settings_update = SubtitleSettings(**body)
+    # Merge vào settings hiện tại: form chỉ gửi một phần field, các field khác
+    # (ignored_media, translation_skip_rating_keys, translation_context_*...) phải được giữ nguyên.
+    current = subtitle_service.get_config().subtitle_settings.model_dump()
+    settings_update = SubtitleSettings(**{**current, **body})
     subtitle_service.update_settings(settings_update)
 
     # Persist to disk so settings survive restart

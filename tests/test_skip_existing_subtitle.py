@@ -12,6 +12,8 @@ def _service(**settings) -> SubtitleService:
     svc = SubtitleService.__new__(SubtitleService)
     svc.config = SimpleNamespace(subtitle_settings=SubtitleSettings(**settings))
     svc.runtime_config = SimpleNamespace(default_language="vi")
+    svc.plex_client = MagicMock()
+    svc.plex_client.has_audio_language.return_value = False
     return svc
 
 
@@ -61,7 +63,6 @@ async def test_no_sub_downloads_on_play() -> None:
 @pytest.mark.asyncio
 async def test_upgrade_check_is_silent_when_nothing_found(monkeypatch) -> None:
     svc = _service(skip_if_has_subtitle=True, replace_existing=True, skip_if_embedded=True, skip_forced_subtitles=True)
-    svc.plex_client = MagicMock()
     svc.plex_client.get_subtitle_details.return_value = _details(EXTERNAL_SRT)
     svc.plex_client.extract_metadata.return_value = SimpleNamespace(title="Movie", __str__=lambda self: "Movie")
     svc.telegram_client = MagicMock(

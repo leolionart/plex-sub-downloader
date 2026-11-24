@@ -91,7 +91,7 @@
         .search-filter-row { flex-wrap: wrap; }
         .search-box { max-width: none; flex-basis: 120px; }
         .filter-pills-group .rounded-full { display: none; }
-        #countAll { display: none !important; }
+        #countAll, #countHasVi, #countIgnored { display: none !important; }
         /* Filter pills xuống hàng riêng, chia đều bề ngang */
         .filter-pills-group { order: 5; flex: 1 1 100%; }
         .filter-pills-group > .btn { flex: 1 0 auto; gap: 4px !important; padding-left: 6px !important; padding-right: 6px !important; }
@@ -274,6 +274,9 @@
         background: rgba(239, 68, 68, 0.85);
         color: #fff;
     }
+    .sub-indicator.ignored { background: rgba(60, 60, 70, 0.9); color: #ccc; }
+    .media-card.is-ignored .media-poster img,
+    .media-card.is-ignored .media-poster-placeholder { opacity: 0.45; filter: grayscale(0.7); }
     .sub-indicator-dot {
         width: 6px;
         height: 6px;
@@ -337,6 +340,7 @@
     .ep-btn i { margin: 0 !important; }
     @media (max-width: 640px) { .ep-btn { width: 34px !important; padding: 0 !important; } }
     .tree-filter { overflow-x: auto; scrollbar-width: none; }
+    .tree-ignored .tree-actions { display: none !important; }
     .card-select-box::after { content: ''; position: absolute; inset: -8px; }
 
     /* Modal / Drawer Overlay */
@@ -519,6 +523,11 @@
                 <span>Tất cả</span>
                 <span class="badge badge-xs badge-neutral font-mono hidden" id="countAll">0</span>
             </button>
+            <button type="button" class="btn btn-sm sub-filter-btn filter-pill btn-ghost bg-bg-input" id="filterIgnored" data-filter="ignored" onclick="setSubtitleFilter('ignored')" title="Đã bỏ qua tìm sub" aria-label="Đã bỏ qua tìm sub">
+                <i class="fa-solid fa-eye-slash"></i>
+                <span class="hidden lg:inline">Bỏ qua</span>
+                <span class="badge badge-xs badge-neutral font-mono hidden" id="countIgnored">0</span>
+            </button>
         </div>
 
         <!-- Auto-Fallback Translation Toggle -->
@@ -556,6 +565,7 @@
                     <span class="label-text text-xs text-text-secondary">Tự động dịch</span>
                     <input type="checkbox" class="toggle toggle-warning toggle-xs auto-fallback-toggle-input" onchange="toggleAutoFallback(this.checked)">
                 </label>
+                <button class="btn btn-sm btn-icon btn-ghost" id="showIgnoreBtn" onclick="toggleIgnoreCurrentShow()" title="Bỏ qua tìm sub cho cả series" aria-label="Bỏ qua tìm sub cho cả series"><i class="fa-solid fa-eye-slash"></i></button>
                 <button class="btn btn-sm btn-icon btn-ghost" onclick="closeShowModal()" title="Đóng" aria-label="Đóng"><i class="fa-solid fa-xmark"></i></button>
             </div>
         </div>
@@ -652,15 +662,19 @@
         </span>
     </label>
     <div class="flex items-center gap-1.5 ml-auto">
-        <button type="button" class="btn btn-sm btn-secondary" onclick="triggerBatchUploadSelected()" title="Tìm sub cho các mục đã chọn">
+        <button type="button" class="btn btn-sm btn-secondary bulk-work-btn" onclick="triggerBatchUploadSelected()" title="Tìm sub cho các mục đã chọn">
             <i class="fa-solid fa-magnifying-glass"></i>
             <span>Tìm sub</span>
             <span id="bulkUploadCount" class="hidden">0</span>
         </button>
-        <button type="button" class="btn btn-sm btn-primary" onclick="triggerBatchTranslateSelected()" title="Dịch AI các mục đã chọn">
+        <button type="button" class="btn btn-sm btn-primary bulk-work-btn" onclick="triggerBatchTranslateSelected()" title="Dịch AI các mục đã chọn">
             <i class="fa-solid fa-language"></i>
             <span>Dịch AI</span>
             <span id="bulkTranslateCount" class="hidden">0</span>
+        </button>
+        <button type="button" class="btn btn-sm btn-ghost bulk-ignore-btn" id="bulkIgnoreBtn" onclick="toggleIgnoreSelected()" title="Bỏ qua tìm sub cho các mục đã chọn" aria-label="Bỏ qua tìm sub cho các mục đã chọn">
+            <i class="fa-solid fa-eye-slash"></i>
+            <span class="hidden sm:inline" id="bulkIgnoreLabel">Bỏ qua</span>
         </button>
         <button type="button" class="btn btn-sm btn-icon btn-ghost" onclick="clearSelection()" title="Bỏ chọn" aria-label="Bỏ chọn tất cả">
             <i class="fa-solid fa-xmark"></i>
@@ -708,6 +722,11 @@
         if (countAll && stats.total !== undefined) {
             countAll.textContent = stats.total;
             countAll.classList.remove("hidden");
+        }
+        const countIgnored = document.getElementById("countIgnored");
+        if (countIgnored && stats.ignored !== undefined) {
+            countIgnored.textContent = stats.ignored;
+            countIgnored.classList.toggle("hidden", !stats.ignored);
         }
     }
 
@@ -849,6 +868,15 @@
         const pageCountEl = document.getElementById("selectPageCount");
 
         if (pageCountEl) pageCountEl.textContent = (cachedItems ? cachedItems.length : 0);
+        const restoring = currentSubtitleFilter === "ignored";
+        const ignoreLabel = document.getElementById("bulkIgnoreLabel");
+        const ignoreBtn = document.getElementById("bulkIgnoreBtn");
+        if (ignoreLabel) ignoreLabel.textContent = restoring ? "Khôi phục" : "Bỏ qua";
+        if (ignoreBtn) {
+            ignoreBtn.querySelector("i").className = restoring ? "fa-solid fa-rotate-left" : "fa-solid fa-eye-slash";
+            ignoreBtn.title = restoring ? "Khôi phục tìm sub cho các mục đã chọn" : "Bỏ qua tìm sub cho các mục đã chọn";
+        }
+        document.querySelectorAll("#bulkActionBar .bulk-work-btn").forEach(b => b.classList.toggle("hidden", restoring));
         if (countBadge) countBadge.textContent = count;
         if (uploadCount) uploadCount.textContent = count;
         if (translateCount) translateCount.textContent = count;
@@ -882,6 +910,55 @@
         }
         const keys = Array.from(selectedRatingKeys);
         startBatchAction(keys, 'upload_target');
+    }
+
+    // ── Bỏ qua tìm sub chủ động ──
+    async function setIgnored(items, ignored) {
+        try {
+            if (ignored) {
+                const res = await fetch("/api/library/ignored", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ section_key: activeSectionKey, items }),
+                });
+                if (!res.ok) throw new Error((await res.json()).detail || "Không thể bỏ qua");
+            } else {
+                for (const it of items) {
+                    const res = await fetch(`/api/library/ignored/${encodeURIComponent(it.rating_key)}`, { method: "DELETE" });
+                    if (!res.ok) throw new Error((await res.json()).detail || "Không thể khôi phục");
+                }
+            }
+        } catch (err) {
+            showToast(`Lỗi: ${err.message}`, "error");
+            return false;
+        }
+        SessionCache.clear("sec_");
+        items.forEach(it => { SessionCache.remove("movie_detail_" + it.rating_key); SessionCache.remove("show_tree_" + it.rating_key); });
+        showToast(ignored
+            ? `Đã bỏ qua ${items.length} mục — không tự tìm sub/dịch nữa.`
+            : `Đã khôi phục ${items.length} mục.`, "success");
+        return true;
+    }
+
+    function ignoreItemPayload(item) {
+        return { rating_key: String(item.rating_key), title: item.title || "", type: item.type || "", year: Number.isInteger(item.year) ? item.year : null };
+    }
+
+    async function toggleIgnoreSelected() {
+        if (selectedRatingKeys.size === 0) return;
+        const restoring = currentSubtitleFilter === "ignored";
+        const items = cachedItems.filter(i => selectedRatingKeys.has(String(i.rating_key))).map(ignoreItemPayload);
+        if (await setIgnored(items, !restoring)) {
+            clearSelection();
+            refreshLibrary(false);
+        }
+    }
+
+    async function toggleIgnoreSingle(item, ignored) {
+        if (await setIgnored([ignoreItemPayload(item)], ignored)) {
+            closeMovieModal(); closeShowModal();
+            refreshLibrary(false);
+        }
     }
 
     function triggerBatchTranslateSelected() {
@@ -1091,6 +1168,11 @@
     }
 
     function renderSubtitleIndicator(item, inline = false) {
+        if (item.ignored) {
+            return inline
+                ? `<span class="badge badge-neutral badge-sm gap-1 font-medium" title="Đã bỏ qua tìm sub"><i class="fa-solid fa-eye-slash"></i><span>Bỏ qua</span></span>`
+                : `<span class="sub-indicator ignored" title="Đã bỏ qua tìm sub"><i class="fa-solid fa-eye-slash" style="font-size:10px"></i></span>`;
+        }
         if (inline) {
             if (item.has_vi) {
                 return `
@@ -1151,7 +1233,7 @@
 
         items.forEach(item => {
             const card = document.createElement("div");
-            card.className = "media-card";
+            card.className = "media-card" + (item.ignored ? " is-ignored" : "");
             const rk = String(item.rating_key);
             card.dataset.rk = rk;
             const isSelected = selectedRatingKeys.has(rk);
@@ -1196,7 +1278,9 @@
                         <p class="list-summary text-xs text-text-muted line-clamp-2 m-0">${summaryText}</p>
                     </div>
                     <div class="media-actions shrink-0">
-                        ${isShow
+                        ${item.ignored
+                             ? `<button class="btn btn-sm btn-secondary list-action-btn" onclick="event.stopPropagation(); toggleIgnoreSingle(cachedItems.find(i => String(i.rating_key) === '${rk}'), false)" title="Khôi phục tìm sub" aria-label="Khôi phục tìm sub"><i class="fa-solid fa-rotate-left"></i><span class="hidden sm:inline">Khôi phục</span></button>`
+                             : isShow
                              ? `<button class="btn btn-sm btn-primary list-action-btn" onclick="event.stopPropagation(); openShowTree('${item.rating_key}')" title="Quản lý Series" aria-label="Quản lý Series"><i class="fa-solid fa-tv"></i><span class="hidden sm:inline">Quản lý</span></button>`
                              : `<button class="btn btn-sm btn-primary list-action-btn" onclick="event.stopPropagation(); startBatchAction(['${item.rating_key}'], 'upload_target', this)" title="Tìm sub" aria-label="Tìm sub"><i class="fa-solid fa-magnifying-glass"></i><span class="hidden sm:inline">Tìm sub</span></button>`
                         }
@@ -1225,7 +1309,9 @@
                             ${item.genres && item.genres.length ? `<span class="truncate text-text-muted">${escapeHtml(item.genres[0])}</span>` : ''}
                         </div>
                         <div class="media-actions mt-auto flex gap-1">
-                            ${isShow 
+                            ${item.ignored
+                                ? `<button class="btn btn-xs sm:btn-sm btn-secondary flex-1 whitespace-nowrap" onclick="event.stopPropagation(); toggleIgnoreSingle(cachedItems.find(i => String(i.rating_key) === '${rk}'), false)" title="Khôi phục tìm sub"><i class="fa-solid fa-rotate-left"></i><span class="truncate">Khôi phục</span></button>`
+                                : isShow 
                                 ? `<button class="btn btn-xs sm:btn-sm btn-primary flex-1 gap-1.5 whitespace-nowrap" onclick="event.stopPropagation(); openShowTree('${item.rating_key}')">${ICONS.tv} <span class="truncate">Quản lý</span></button>`
                                 : `<button class="btn btn-xs sm:btn-sm btn-primary flex-1 gap-1.5 whitespace-nowrap" onclick="event.stopPropagation(); startBatchAction(['${item.rating_key}'], 'upload_target', this)">${ICONS.search} <span class="truncate">Tìm sub</span></button>`
                             }
@@ -1512,6 +1598,7 @@
         const body = document.getElementById("showModalBody");
         const ratingKey = currentShowRatingKey;
 
+        updateShowIgnoreButton();
         const allHaveVi = (data.missing_vi_count === 0);
         const hasHiddenVi = (data.vi_count > 0 && showTreeFilter === 'missing_vi');
 
@@ -1531,14 +1618,19 @@
                 <span>${label}</span><span class="font-mono opacity-70">${count}</span>
             </button>`;
 
-        let html = `
+        let html = data.ignored ? `
+            <div class="alert bg-bg-input border-border-subtle text-text-secondary text-xs py-2 px-3 rounded-lg flex items-center gap-2 mb-3">
+                <i class="fa-solid fa-eye-slash"></i>
+                <span>Series này đang được <strong>bỏ qua tìm sub</strong>: webhook và tác vụ hàng loạt sẽ không xử lý.</span>
+            </div>` : '';
+        html += `
             <div class="flex flex-col sm:flex-row sm:items-center gap-2 mb-3">
                 <div class="seg-group tree-filter" id="showTreeFilterGroup" role="group" aria-label="Lọc tập">
                     ${treeFilterBtn('missing_vi', 'Thiếu', 'bg-error', data.missing_vi_count)}
                     ${treeFilterBtn('can_translate', 'Dịch AI', 'bg-warning', data.can_translate_count)}
                     ${treeFilterBtn('all', 'Tất cả', '', data.total_episodes)}
                 </div>
-                <div class="flex items-center gap-1.5 sm:ml-auto">
+                <div class="tree-actions flex items-center gap-1.5 sm:ml-auto">
                     <button class="btn btn-sm btn-secondary flex-1 sm:flex-none" onclick="startBatchActionForShow('${ratingKey}', 'upload_target', this)" title="Tìm sub cho toàn bộ series">
                         ${ICONS.search}<span>Tìm sub cả show</span>
                     </button>
@@ -1566,7 +1658,7 @@
                 <div class="border border-border-subtle rounded-xl overflow-hidden bg-bg-surface mb-4">
                     <div class="bg-bg-input pl-4 pr-2 py-2 flex items-center justify-between gap-2 border-b border-border-subtle">
                         <h4 class="font-semibold text-text-primary text-sm m-0 truncate">${escapeHtml(season.title)} <span class="text-text-muted font-normal">· ${visibleEpisodes.length}/${season.episodes.length} tập</span></h4>
-                        <div class="flex items-center gap-1.5 shrink-0">
+                        <div class="tree-actions flex items-center gap-1.5 shrink-0">
                             <button type="button" class="btn btn-sm btn-secondary ep-btn" onclick="startBatchActionForSeason('${season.rating_key}', 'upload_target', this)" title="Tìm sub cả mùa" aria-label="Tìm sub cả mùa">
                                 <i class="fa-solid fa-magnifying-glass"></i><span class="hidden sm:inline">Tìm sub mùa</span>
                             </button>
@@ -1603,7 +1695,7 @@
                             <div class="min-w-0 flex-1 text-sm text-text-primary truncate" title="Tập ${ep.episode_number}: ${epTitle}">
                                 <span class="text-text-muted font-mono text-xs mr-1">E${String(ep.episode_number).padStart(2, '0')}</span>${epTitle}
                             </div>
-                            <div class="flex items-center gap-1 shrink-0">
+                            <div class="tree-actions flex items-center gap-1 shrink-0">
                                 <button class="btn btn-sm btn-icon btn-secondary" onclick="quickUploadTarget('${ep.rating_key}', this)" title="Tìm sub" aria-label="Tìm sub tập ${ep.episode_number}"><i class="fa-solid fa-magnifying-glass"></i></button>
                                 <button class="btn btn-sm btn-icon ${skipped ? 'btn-warning' : 'btn-ghost'}" data-skipped="${skipped ? 1 : 0}" aria-pressed="${skipped}" onclick="toggleTranslationSkip('${ep.rating_key}', this)" title="${skipped ? 'Đang bỏ qua dịch AI — bấm để bật lại' : 'Bỏ qua dịch AI'}" aria-label="${skipped ? 'Bật lại dịch AI' : 'Bỏ qua dịch AI'}"><i class="fa-solid ${skipped ? 'fa-rotate-left' : 'fa-ban'}"></i></button>
                                 ${ep.can_translate && !skipped
@@ -1622,6 +1714,28 @@
         });
 
         body.innerHTML = html;
+        body.classList.toggle("tree-ignored", !!data.ignored);
+    }
+
+    function updateShowIgnoreButton() {
+        const btn = document.getElementById("showIgnoreBtn");
+        if (!btn || !currentShowTreeData) return;
+        const ignored = !!currentShowTreeData.ignored;
+        btn.classList.toggle("btn-warning", ignored);
+        btn.classList.toggle("btn-ghost", !ignored);
+        btn.setAttribute("aria-pressed", String(ignored));
+        btn.title = ignored ? "Series đang bị bỏ qua — bấm để khôi phục" : "Bỏ qua tìm sub cho cả series";
+        btn.querySelector("i").className = ignored ? "fa-solid fa-rotate-left" : "fa-solid fa-eye-slash";
+    }
+
+    function toggleIgnoreCurrentShow() {
+        if (!currentShowTreeData || !currentShowRatingKey) return;
+        toggleIgnoreSingle({
+            rating_key: currentShowRatingKey,
+            title: currentShowTreeData.title,
+            type: "show",
+            year: currentShowTreeData.year,
+        }, !currentShowTreeData.ignored);
     }
 
     function closeShowModal(updateUrl = true) {
@@ -1694,15 +1808,18 @@
         body.innerHTML = `
             <div class="flex flex-col gap-4">
                 <div class="flex items-center justify-between gap-3">
-                    ${badge}
+                    ${data.ignored ? `<span class="badge badge-neutral badge-sm gap-1"><i class="fa-solid fa-eye-slash"></i> Đã bỏ qua tìm sub</span>` : badge}
+                    <div class="flex items-center gap-1.5">
+                    <button type="button" class="btn btn-sm btn-icon ${data.ignored ? 'btn-warning' : 'btn-ghost'}" aria-pressed="${!!data.ignored}" onclick="toggleIgnoreSingle({rating_key: '${data.rating_key}', title: ${escapeHtml(JSON.stringify(data.title || ''))}, type: 'movie', year: ${Number.isInteger(data.year) ? data.year : 'null'}}, ${!data.ignored})" title="${data.ignored ? 'Khôi phục tìm sub cho phim này' : 'Bỏ qua tìm sub cho phim này (không tự tìm/dịch nữa)'}" aria-label="${data.ignored ? 'Khôi phục tìm sub' : 'Bỏ qua tìm sub'}"><i class="fa-solid ${data.ignored ? 'fa-rotate-left' : 'fa-eye-slash'}"></i></button>
                     <button type="button" class="btn btn-sm ${skipped ? 'btn-warning' : 'btn-ghost'}" data-skipped="${skipped ? 1 : 0}" aria-pressed="${skipped}" onclick="toggleTranslationSkip('${data.rating_key}', this)" title="${skipped ? 'Bật lại dịch AI cho phim này' : 'Không tự dịch AI phim này'}">
                         <i class="fa-solid ${skipped ? 'fa-rotate-left' : 'fa-ban'}"></i><span>${skipped ? 'Bật lại dịch' : 'Bỏ qua dịch'}</span>
                     </button>
+                    </div>
                 </div>
                 <p class="text-xs text-text-secondary leading-relaxed bg-bg-app/50 p-3 rounded-xl border border-border-subtle">
                     ${data.summary ? escapeHtml(data.summary) : '<span class="italic text-text-muted">Không có mô tả tóm tắt cho phim này.</span>'}
                 </p>
-                <div class="flex gap-2">
+                <div class="flex gap-2 ${data.ignored ? 'hidden' : ''}">
                     <button class="btn btn-secondary flex-1 whitespace-nowrap" id="movieSearchSubBtn" onclick="quickUploadTarget('${data.rating_key}', this)">${ICONS.search} Tìm sub</button>
                     ${data.can_translate && !skipped ? `<button class="btn btn-primary flex-1 whitespace-nowrap" onclick="quickTranslate('${data.rating_key}', this)">${ICONS.translate} Dịch AI</button>` : ''}
                 </div>

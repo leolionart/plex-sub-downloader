@@ -1,5 +1,12 @@
 # Release Notes
 
+## v0.5.1 - 2026-11-24
+
+- Bỏ qua tìm sub chủ động: đánh dấu phim/series (chọn nhiều được) để không tự tìm sub, không dịch AI, ẩn khỏi danh sách "Thiếu Vietsub"; tab "Bỏ qua" để xem và khôi phục. Bỏ qua series áp dụng cho mọi tập.
+- Tuỳ chọn mới "Bỏ qua phim nói sẵn ngôn ngữ chính" (mặc định bật): media có audio cùng ngôn ngữ đích (phim Việt, bản lồng tiếng) không được tìm sub và được loại khỏi danh sách "Thiếu" ngay phía Plex.
+- Sửa lỗi lưu Cài đặt reset các field không có trên form (danh sách bỏ qua dịch AI, ngữ cảnh dịch, kiểm tra kết quả bằng AI...) về mặc định.
+- Sửa lỗi "Dịch AI hàng loạt" trong Thư viện không chạy được (biến `task_id` chưa được tạo).
+
 ## v0.5.0 - 2026-11-24
 
 - Chỉnh lại toàn bộ UI cho mobile và desktop: không còn nút tràn ngang; toolbar Thư viện gom vào 2-3 hàng gọn với nút sắp xếp/lưới/danh sách/làm mới chỉ còn icon; bulk bar thành một hàng; dòng tập phim trong drawer series có nút icon và nằm trên một hàng; form Xử lý phụ đề gọn lại, thêm tuỳ chọn thu gọn.

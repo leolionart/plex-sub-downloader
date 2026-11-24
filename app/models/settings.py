@@ -2,7 +2,7 @@
 Service settings model cho Web UI configuration.
 """
 
-from typing import Literal
+from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
@@ -142,6 +142,22 @@ class SubtitleSettings(BaseModel):
     )
     auto_translate_if_no_vi: bool = Field(
         default=False, description="Chủ động dịch Eng→Viet khi có Engsub nhưng không có Vietsub"
+    )
+
+    # Bỏ qua tìm sub chủ động
+    skip_native_language: bool = Field(
+        default=True,
+        description=(
+            "Bỏ qua media có audio cùng ngôn ngữ đích (VD: phim Việt khi ngôn ngữ đích là tiếng Việt, "
+            "hoặc phim có bản lồng tiếng). Áp dụng cho webhook và danh sách Thư viện."
+        ),
+    )
+    ignored_media: dict[str, dict[str, Any]] = Field(
+        default_factory=dict,
+        description=(
+            "Media người dùng chủ động bỏ qua tìm sub, key = Plex ratingKey (movie/show/season/episode). "
+            "Value lưu metadata hiển thị (title, type, year, section_key). Bỏ qua show/season áp dụng cho mọi tập."
+        ),
     )
 
     # Per-media translation exclusions

@@ -374,7 +374,26 @@ Thống kê translation.
 Lấy cấu hình hiện tại.
 
 ### `POST /api/settings`
-Cập nhật cấu hình. Body là object với bất kỳ field nào trong `SubtitleSettings`.
+Cập nhật cấu hình. Body là object với bất kỳ field nào trong `SubtitleSettings`; field không gửi lên được **giữ nguyên** (merge với cấu hình hiện tại).
+
+---
+
+## Library — bỏ qua tìm sub
+
+### `GET /api/library/ignored`
+Danh sách media đang bị bỏ qua: `{"items": [{"rating_key", "title", "type", "year", "section_key"}]}`.
+
+### `POST /api/library/ignored`
+Đánh dấu bỏ qua một hoặc nhiều media (movie/show/season/episode). Bỏ qua show/season áp dụng cho mọi tập.
+
+```json
+{"section_key": "1", "items": [{"rating_key": "12345", "title": "Bố Già", "type": "movie", "year": 2021}]}
+```
+
+### `DELETE /api/library/ignored/{rating_key}`
+Khôi phục tìm sub cho media.
+
+Media bị bỏ qua sẽ không được xử lý bởi webhook, `POST /api/library/batch/upload-target`, `POST /api/library/batch/translate` (trả `400` nếu mọi media được chọn đều bị bỏ qua) và tự dịch AI.
 
 ---
 

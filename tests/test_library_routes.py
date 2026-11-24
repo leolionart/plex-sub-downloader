@@ -14,6 +14,8 @@ from app.routes.library import task_tracker
 def mock_service(monkeypatch):
     """Mock SubtitleService instance in app.main."""
     service = MagicMock()
+    service.is_media_ignored.return_value = False
+    service.is_translation_skipped.return_value = False
     service.get_library_sections.return_value = [
         {"key": "1", "title": "Movies", "type": "movie"},
         {"key": "2", "title": "TV Shows", "type": "show"},

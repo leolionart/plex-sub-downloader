@@ -34,6 +34,8 @@ Tất cả cấu hình được lưu tại `data/config.json` và có thể ch�
 | `min_quality_threshold` | Chất lượng tối thiểu: `ai` / `translated` / `retail` | `translated` |
 | `skip_forced_subtitles` | Bỏ qua forced subtitles | `true` |
 | `skip_if_embedded` | Bỏ qua nếu đã có embedded sub | `true` |
+| `skip_native_language` | Bỏ qua media có audio track cùng ngôn ngữ chính (phim Việt, bản lồng tiếng Việt...): webhook không tìm sub, Thư viện ẩn khỏi "Thiếu"/"Dịch AI" | `true` |
+| `ignored_media` | Media chủ động bỏ qua tìm sub (quản lý ở Thư viện → nút 👁‍🗨 / tab "Bỏ qua") | `{}` |
 | `new_media_delay_seconds` | Delay sau `library.new` trước khi xử lý (0-300s) | `30` |
 
 **Khi media đã có target lang sub** (với `skip_if_has_subtitle=true`):
