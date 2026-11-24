@@ -1,0 +1,13 @@
+{
+  "name": "plex-subtitle-service-ui",
+  "private": true,
+  "description": "Build CSS cho web UI (Tailwind + DaisyUI). Output được commit vào app/static/css nên Docker không cần Node.",
+  "scripts": {
+    "build:css": "tailwindcss -c tailwind.config.js -i app/static/src/tailwind.css -o app/static/css/tailwind.css --minify",
+    "watch:css": "tailwindcss -c tailwind.config.js -i app/static/src/tailwind.css -o app/static/css/tailwind.css --watch",
+    "vendor:daisyui": "curl -fsSL https://cdn.jsdelivr.net/npm/daisyui@4.12.23/dist/full.min.css -o app/static/css/daisyui.min.css"
+  },
+  "devDependencies": {
+    "tailwindcss": "3.4.17"
+  }
+}

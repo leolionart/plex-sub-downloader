@@ -81,3 +81,6 @@ data/*
 .gemini/
 *.skill
 gh-release-workflow/
+
+# Node (chỉ dùng để build CSS)
+node_modules/

@@ -24,12 +24,14 @@ Tự động tải subtitle khi Plex/Tautulli gửi webhook.
 
 ---
 
-## 2. Manual Sync UI (`/sync`)
+## 2. Xử lý phụ đề thủ công (`/workspace`)
 
 Giao diện web để sync timing và dịch subtitle thủ công cho bất kỳ media nào đang phát.
+Form chỉ gồm ô rating key/link, nút **Kiểm tra** và nút **Tìm thủ công** (bỏ qua cache).
+Tên file video và ghi đè xưng hô AI nằm trong mục "Tuỳ chọn" thu gọn. Khối "Đang phát" chỉ hiện khi Plex có phiên đang phát.
 
-### Preview
-Bấm Preview (hoặc chọn video đang play) → service kiểm tra:
+### Kiểm tra (Preview)
+Bấm **Kiểm tra** (hoặc chọn video đang play) → service kiểm tra:
 - Sub nào đang có trên Plex (tất cả languages)
 - Sub nào có thể tải từ Subsource
 - Trạng thái: Ready to Sync / Translate Only / Đã có Vietsub...

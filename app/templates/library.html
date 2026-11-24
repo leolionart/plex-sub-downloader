@@ -2,48 +2,125 @@
 
 {% block title %}Plex Library Manager - Plex Subtitle Service{% endblock %}
 {% block nav_library %}active{% endblock %}
-{% block page_title %}Plex Library Manager{% endblock %}
+{% block page_title %}Thư viện Plex{% endblock %}
 {% block page_description %}Chủ động quản lý, tìm kiếm và dịch phụ đề cho toàn bộ Series và Movies trên Plex{% endblock %}
 
 {% block extra_styles %}
 <style>
+    /* ── Toolbar: desktop 2 hàng inline; mobile tabs + actions + filter mỗi thứ 1 hàng, không tràn ngang ── */
     .toolbar-header-row,
-    .toolbar-view-actions,
-    #layoutToggleGroup,
-    #filterPillsGroup {
+    .search-filter-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
         min-width: 0;
     }
     #sectionsContainer {
         flex: 1 1 auto;
         min-width: 0;
+        flex-wrap: nowrap;
         overflow-x: auto;
         scrollbar-width: none;
     }
-    #sectionsContainer::-webkit-scrollbar {
-        display: none;
-    }
-    .toolbar-view-actions,
-    #layoutToggleGroup,
-    #filterPillsGroup {
-        display: inline-flex !important;
-        flex-wrap: nowrap !important;
-    }
-    .toolbar-view-actions > *,
-    #layoutToggleGroup > *,
-    #filterPillsGroup > * {
+    #sectionsContainer::-webkit-scrollbar,
+    .filter-pills-group::-webkit-scrollbar { display: none; }
+    .section-btn { white-space: nowrap; flex-shrink: 0; }
+    .toolbar-view-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
         flex-shrink: 0;
     }
     #librarySortSelect {
-        max-width: min(220px, 32vw);
+        height: 34px;
+        padding: 0 28px 0 10px;
+        min-width: 0;
+        max-width: 200px;
+    }
+    .seg-group {
+        display: inline-flex;
+        flex-wrap: nowrap;
+        gap: 2px;
+        padding: 2px;
+        border-radius: 8px;
+        background: var(--bg-input);
+        border: 1px solid var(--border-subtle);
+        flex-shrink: 0;
+    }
+    .seg-group > .btn {
+        min-height: 30px !important;
+        border-color: transparent !important;
         white-space: nowrap;
+        flex-shrink: 0;
     }
-    #librarySearchInput {
-        padding-left: 2.25rem !important;
+    .seg-group > .btn.btn-icon { width: 30px !important; height: 30px !important; min-width: 30px !important; }
+    .seg-group > .btn-ghost { background: transparent !important; }
+    .btn-icon i { margin: 0 !important; }
+    .search-box { flex: 1 1 200px; min-width: 0; max-width: 360px; }
+    #librarySearchInput { padding-left: 2.25rem !important; height: 34px; }
+    .filter-pills-group {
+        overflow-x: auto;
+        scrollbar-width: none;
+        max-width: 100%;
     }
+    .sub-filter-btn .badge { margin-left: 2px; }
     .sub-filter-btn.btn-primary .badge {
         background: rgba(26, 26, 26, 0.22) !important;
         color: #1a1a1a !important;
         border-color: rgba(26, 26, 26, 0.3) !important;
+    }
+    .auto-fallback-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        height: 34px;
+        padding: 0 10px;
+        margin-left: auto;
+        border-radius: 8px;
+        background: var(--bg-input);
+        border: 1px solid var(--border-subtle);
+        cursor: pointer;
+        flex-shrink: 0;
+    }
+    .auto-fallback-chip:hover { border-color: var(--border-default); }
+    @media (max-width: 768px) {
+        .toolbar-header-row { flex-wrap: wrap; }
+        #sectionsContainer { flex-basis: 100%; }
+        .toolbar-view-actions { flex: 1 1 100%; }
+        #librarySortSelect { flex: 1 1 auto; max-width: none; }
+        .search-filter-row { flex-wrap: wrap; }
+        .search-box { max-width: none; flex-basis: 120px; }
+        .filter-pills-group .rounded-full { display: none; }
+        #countAll { display: none !important; }
+        /* Filter pills xuống hàng riêng, chia đều bề ngang */
+        .filter-pills-group { order: 5; flex: 1 1 100%; }
+        .filter-pills-group > .btn { flex: 1 0 auto; gap: 4px !important; padding-left: 6px !important; padding-right: 6px !important; }
+    }
+
+    /* ── Floating bulk action bar ── */
+    .bulk-bar {
+        position: fixed;
+        bottom: 24px;
+        left: 50%;
+        z-index: 40;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        width: max-content;
+        max-width: calc(100vw - 24px);
+        padding: 8px 8px 8px 14px;
+        border-radius: 14px;
+        background: rgba(40, 40, 48, 0.96);
+        backdrop-filter: blur(12px);
+        border: 1px solid var(--border-default);
+        box-shadow: 0 16px 36px rgba(0, 0, 0, 0.5);
+        transition: transform 0.3s ease, opacity 0.3s ease;
+    }
+    @media (max-width: 768px) {
+        .bulk-bar {
+            width: calc(100vw - 24px);
+            bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+        }
     }
     /* Scoped Library Styles: Media Grid, Cards, and Overlay */
     .library-grid.layout-grid {
@@ -82,11 +159,11 @@
         transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
         cursor: pointer;
     }
-    .media-card:hover {
+    @media (hover: hover) { .media-card:hover {
         transform: translateY(-4px);
         border-color: var(--border-default);
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-    }
+    } }
     .media-card.is-selected {
         outline: 2px solid var(--plex-gold);
         border-color: var(--plex-gold) !important;
@@ -126,9 +203,8 @@
         opacity: 0;
         transition: opacity 0.2s ease;
     }
-    .media-card:hover .media-poster-overlay {
-        opacity: 1;
-    }
+    @media (hover: hover) { .media-card:hover .media-poster-overlay { opacity: 1; } }
+    @media (hover: none) { .media-poster-overlay { display: none; } }
     .poster-quick-btn {
         display: flex;
         flex-direction: column;
@@ -230,9 +306,8 @@
         padding: 12px 18px;
         gap: 16px;
     }
-    .library-grid.layout-list .media-card:hover {
-        transform: translateX(4px);
-    }
+    @media (hover: hover) { .library-grid.layout-list .media-card:hover { transform: translateX(4px); } }
+    @media (max-width: 640px) { .list-action-btn { width: 36px !important; padding: 0 !important; } .list-action-btn i { margin: 0 !important; } }
     .library-grid.layout-list .media-poster {
         width: 60px;
         height: 90px;
@@ -247,6 +322,22 @@
     .library-grid.layout-list .media-poster .media-badge-type {
         display: none;
     }
+
+    /* Episode rows trong drawer */
+    .ep-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 8px 8px 12px;
+    }
+    .ep-status { flex-shrink: 0; gap: 4px !important; }
+    .ep-status i { font-size: 10px; }
+    @media (max-width: 640px) { .ep-status { width: 22px; padding: 0 !important; } }
+    .ep-btn-placeholder { display: inline-block; width: 34px; }
+    .ep-btn i { margin: 0 !important; }
+    @media (max-width: 640px) { .ep-btn { width: 34px !important; padding: 0 !important; } }
+    .tree-filter { overflow-x: auto; scrollbar-width: none; }
+    .card-select-box::after { content: ''; position: absolute; inset: -8px; }
 
     /* Modal / Drawer Overlay */
     .modal-overlay {
@@ -331,19 +422,6 @@
         background: var(--bg-surface-hover);
     }
     @media (max-width: 640px) {
-        #bulkActionBar {
-            width: calc(100vw - 24px) !important;
-            left: 12px !important;
-            transform: translate(0, 0) !important;
-            flex-direction: column !important;
-            gap: 8px !important;
-            padding: 12px 14px !important;
-            bottom: 74px !important; /* Positioned above mobile bottom nav */
-        }
-        #bulkActionBar .flex {
-            width: 100% !important;
-            justify-content: space-between !important;
-        }
         #taskModal, #movieModal {
             align-items: flex-end !important;
             padding: 0 !important;
@@ -354,153 +432,101 @@
             max-width: 100% !important;
             border-radius: 20px 20px 0 0 !important;
             max-height: 88vh !important;
+            padding-bottom: env(safe-area-inset-bottom, 0px);
         }
         #showModal .drawer-content-box {
             width: 100vw !important;
             max-width: 100vw !important;
         }
-    }
-    @media (max-width: 768px) {
-        .filter-pills-group {
-            display: flex !important;
-            flex-wrap: nowrap !important;
-            overflow-x: auto !important;
-            -webkit-overflow-scrolling: touch !important;
-            padding-bottom: 4px !important;
-            max-width: 100% !important;
-            scrollbar-width: none !important;
-        }
-        .filter-pills-group::-webkit-scrollbar {
-            display: none !important;
-        }
-        .filter-pill {
-            white-space: nowrap !important;
-            flex-shrink: 0 !important;
-        }
-        #sectionsContainer {
-            display: flex !important;
-            flex-wrap: nowrap !important;
-            overflow-x: auto !important;
-            -webkit-overflow-scrolling: touch !important;
-            padding-bottom: 4px !important;
-            max-width: 100% !important;
-            scrollbar-width: none !important;
-        }
-        #sectionsContainer::-webkit-scrollbar {
-            display: none !important;
-        }
-        .section-btn {
-            white-space: nowrap !important;
-            flex-shrink: 0 !important;
-        }
-        .search-filter-row {
-            flex-direction: column !important;
-            align-items: stretch !important;
-            gap: 10px !important;
-        }
-        .toolbar-header-row {
-            flex-direction: column !important;
-            align-items: stretch !important;
-            gap: 10px !important;
-        }
-        .toolbar-view-actions {
-            width: 100% !important;
-            justify-content: space-between !important;
-        }
+        /* List mode trên mobile: gọn 1 hàng, bỏ summary */
+        .library-grid.layout-list .media-card { padding: 10px 12px; gap: 10px; }
+        .library-grid.layout-list .media-poster { width: 44px; height: 66px; min-width: 44px; max-width: 44px; }
+        .library-grid.layout-list .list-summary { display: none !important; }
     }
 </style>
 {% endblock %}
 
 {% block content %}
 <!-- Section selector header & Toolbar -->
-<div class="library-toolbar bg-bg-surface border border-border-subtle rounded-2xl p-5 mb-6 flex flex-col gap-3.5 shadow-sm">
-    <!-- Top Row: Library Navigation (Left) + View Mode / Actions (Right) -->
-    <div class="toolbar-header-row flex items-center justify-between gap-4 flex-wrap">
-        <div class="flex flex-wrap items-center gap-2 min-h-[38px]" id="sectionsContainer">
-            <span class="text-xs font-semibold text-text-secondary uppercase tracking-wider mr-1">Thư viện:</span>
+<div class="library-toolbar bg-bg-surface border border-border-subtle rounded-2xl p-3 sm:p-4 mb-5 flex flex-col gap-3 shadow-sm">
+    <!-- Row 1: Library tabs (scroll ngang) + sort / layout / refresh -->
+    <div class="toolbar-header-row">
+        <div class="flex items-center gap-2" id="sectionsContainer">
             <span class="text-text-muted text-xs flex items-center gap-2" id="loadingSectionsText">
                 <span class="loading loading-spinner loading-xs text-primary"></span>
-                <span>Đang tải danh sách thư viện Plex...</span>
+                <span>Đang tải thư viện Plex...</span>
             </span>
         </div>
 
-        <div class="toolbar-view-actions flex items-center gap-2.5 shrink-0 flex-wrap">
-            <!-- Sort Dropdown -->
-            <div class="flex items-center gap-1.5 shrink-0">
-                <span class="text-xs text-text-secondary font-medium whitespace-nowrap shrink-0 hidden sm:inline">Sắp xếp:</span>
-                <select id="librarySortSelect" class="form-select text-xs py-1 px-2.5 rounded-lg bg-bg-input border border-border-subtle text-text-primary focus:border-plex-gold cursor-pointer whitespace-nowrap" onchange="handleSortChange(this.value)" title="Sắp xếp phim và series">
-                    <option value="addedAt:desc" selected>Mới thêm gần đây</option>
-                    <option value="addedAt:asc">Thêm cũ nhất</option>
-                    <option value="originallyAvailableAt:desc">Ngày phát hành (Mới nhất)</option>
-                    <option value="originallyAvailableAt:asc">Ngày phát hành (Cũ nhất)</option>
-                    <option value="titleSort:asc">Tên (A - Z)</option>
-                    <option value="titleSort:desc">Tên (Z - A)</option>
-                    <option value="rating:desc">Đánh giá cao nhất</option>
-                </select>
-            </div>
+        <div class="toolbar-view-actions">
+            <select id="librarySortSelect" class="form-select text-xs rounded-lg bg-bg-input border border-border-subtle text-text-primary focus:border-plex-gold cursor-pointer" onchange="handleSortChange(this.value)" title="Sắp xếp" aria-label="Sắp xếp">
+                <option value="addedAt:desc" selected>Mới thêm</option>
+                <option value="addedAt:asc">Thêm cũ nhất</option>
+                <option value="originallyAvailableAt:desc">Phát hành mới nhất</option>
+                <option value="originallyAvailableAt:asc">Phát hành cũ nhất</option>
+                <option value="titleSort:asc">Tên A → Z</option>
+                <option value="titleSort:desc">Tên Z → A</option>
+                <option value="rating:desc">Đánh giá cao</option>
+            </select>
 
-            <div class="join flex-nowrap whitespace-nowrap" id="layoutToggleGroup">
-                <button type="button" class="btn btn-sm join-item btn-primary whitespace-nowrap" id="btnViewGrid" title="Chế độ Lưới" onclick="setLayoutMode('grid')">
-                    <i class="fa-solid fa-grip mr-1"></i>
-                    <span>Lưới</span>
+            <div class="seg-group" id="layoutToggleGroup" role="group" aria-label="Kiểu hiển thị">
+                <button type="button" class="btn btn-sm btn-icon btn-primary" id="btnViewGrid" title="Lưới" aria-label="Hiển thị dạng lưới" onclick="setLayoutMode('grid')">
+                    <i class="fa-solid fa-grip"></i>
                 </button>
-                <button type="button" class="btn btn-sm join-item btn-ghost bg-bg-input whitespace-nowrap" id="btnViewList" title="Chế độ Danh sách" onclick="setLayoutMode('list')">
-                    <i class="fa-solid fa-list mr-1"></i>
-                    <span>Danh sách</span>
+                <button type="button" class="btn btn-sm btn-icon btn-ghost bg-bg-input" id="btnViewList" title="Danh sách" aria-label="Hiển thị dạng danh sách" onclick="setLayoutMode('list')">
+                    <i class="fa-solid fa-list"></i>
                 </button>
             </div>
 
-            <button type="button" class="btn btn-sm btn-secondary gap-1.5 whitespace-nowrap shrink-0" id="btnRefreshSection" onclick="refreshLibrary(true)" title="Làm mới danh sách (Xóa cache)">
+            <button type="button" class="btn btn-sm btn-icon btn-secondary" id="btnRefreshSection" onclick="refreshLibrary(true)" title="Làm mới (xóa cache)" aria-label="Làm mới danh sách">
                 <i class="fa-solid fa-rotate"></i>
-                <span>Làm mới / Refresh</span>
             </button>
         </div>
     </div>
 
-    <!-- Bottom Row: Search Box + Filter Pills Group + Auto-Fallback Translation Toggle -->
-    <div class="search-filter-row flex items-center gap-3 flex-wrap">
-        <button type="button" class="btn btn-sm btn-ghost bg-bg-input border border-border-subtle gap-2 shrink-0 select-all-btn" id="btnSelectAllPage" onclick="toggleSelectAllPage()" title="Chọn hoặc bỏ chọn tất cả mục trong trang này">
-            <input type="checkbox" id="selectAllCheckbox" class="card-checkbox pointer-events-none">
-            <span class="text-xs font-semibold">Chọn tất cả (<span id="selectPageCount">0</span>)</span>
+    <!-- Row 2: chọn tất cả + search + filter pills + auto-translate (mobile: pills xuống hàng riêng) -->
+    <div class="search-filter-row">
+        <button type="button" class="btn btn-sm btn-ghost bg-bg-input select-all-btn" id="btnSelectAllPage" onclick="toggleSelectAllPage()" title="Chọn / bỏ chọn tất cả trong trang" aria-label="Chọn tất cả trong trang">
+            <input type="checkbox" id="selectAllCheckbox" class="card-checkbox pointer-events-none" tabindex="-1" aria-hidden="true">
+            <span class="text-xs font-semibold font-mono" id="selectPageCount">0</span>
         </button>
 
-        <div class="relative flex-1 min-w-[200px] max-w-sm shrink-0">
+        <div class="search-box relative">
             <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-text-muted">
                 <i class="fa-solid fa-magnifying-glass"></i>
             </span>
-            <input type="text" id="librarySearchInput" class="input input-sm input-bordered w-full pl-9 bg-bg-input border-border-subtle text-text-primary focus:border-primary focus:outline-none" placeholder="Tìm kiếm phim, series..." onkeydown="handleSearchKey(event)">
+            <input type="search" id="librarySearchInput" class="input input-sm input-bordered w-full pl-9 bg-bg-input border-border-subtle text-text-primary focus:border-primary focus:outline-none" placeholder="Tìm phim, series..." enterkeyhint="search" aria-label="Tìm kiếm" onkeydown="handleSearchKey(event)">
         </div>
 
-        <!-- Subtitle status filter bar -->
-        <div class="join shrink-0 filter-pills-group" id="filterPillsGroup">
-            <button type="button" class="btn btn-sm join-item sub-filter-btn filter-pill btn-primary active" id="filterMissingVi" data-filter="missing_vi" onclick="setSubtitleFilter('missing_vi')">
+        <!-- Subtitle status filter (segmented) -->
+        <div class="seg-group filter-pills-group" id="filterPillsGroup" role="group" aria-label="Lọc theo phụ đề">
+            <button type="button" class="btn btn-sm sub-filter-btn filter-pill btn-primary active" id="filterMissingVi" data-filter="missing_vi" onclick="setSubtitleFilter('missing_vi')" title="Thiếu Vietsub">
                 <span class="w-2 h-2 rounded-full bg-error inline-block"></span>
-                <span>Thiếu Vietsub</span>
-                <span class="badge badge-xs badge-error ml-1 font-mono hidden" id="countMissingVi">0</span>
+                <span class="hidden sm:inline">Thiếu Vietsub</span><span class="sm:hidden">Thiếu</span>
+                <span class="badge badge-xs badge-error font-mono hidden" id="countMissingVi">0</span>
             </button>
-            <button type="button" class="btn btn-sm join-item sub-filter-btn filter-pill btn-ghost bg-bg-input" id="filterHasVi" data-filter="has_vi" onclick="setSubtitleFilter('has_vi')">
+            <button type="button" class="btn btn-sm sub-filter-btn filter-pill btn-ghost bg-bg-input" id="filterHasVi" data-filter="has_vi" onclick="setSubtitleFilter('has_vi')" title="Đã có Vietsub">
                 <span class="w-2 h-2 rounded-full bg-success inline-block"></span>
-                <span>Đã có Vietsub</span>
-                <span class="badge badge-xs badge-success ml-1 font-mono hidden" id="countHasVi">0</span>
+                <span class="hidden sm:inline">Đã có Vietsub</span><span class="sm:hidden">Có sub</span>
+                <span class="badge badge-xs badge-success font-mono hidden" id="countHasVi">0</span>
             </button>
-            <button type="button" class="btn btn-sm join-item sub-filter-btn filter-pill btn-ghost bg-bg-input" id="filterCanTranslate" data-filter="can_translate" onclick="setSubtitleFilter('can_translate')">
+            <button type="button" class="btn btn-sm sub-filter-btn filter-pill btn-ghost bg-bg-input" id="filterCanTranslate" data-filter="can_translate" onclick="setSubtitleFilter('can_translate')" title="Có thể dịch AI từ Engsub">
                 <span class="w-2 h-2 rounded-full bg-warning inline-block"></span>
-                <span>Có thể dịch AI</span>
-                <span class="badge badge-xs badge-warning ml-1 font-mono hidden" id="countCanTranslate">0</span>
+                <span>Dịch AI</span>
+                <span class="badge badge-xs badge-warning font-mono hidden" id="countCanTranslate">0</span>
             </button>
-            <button type="button" class="btn btn-sm join-item sub-filter-btn filter-pill btn-ghost bg-bg-input" id="filterAll" data-filter="all" onclick="setSubtitleFilter('all')">
+            <button type="button" class="btn btn-sm sub-filter-btn filter-pill btn-ghost bg-bg-input" id="filterAll" data-filter="all" onclick="setSubtitleFilter('all')" title="Tất cả">
                 <span>Tất cả</span>
-                <span class="badge badge-xs badge-neutral ml-1 font-mono hidden" id="countAll">0</span>
+                <span class="badge badge-xs badge-neutral font-mono hidden" id="countAll">0</span>
             </button>
         </div>
 
         <!-- Auto-Fallback Translation Toggle -->
-        <div class="flex items-center ml-auto">
-            <label class="label cursor-pointer gap-2.5 py-1 px-3 rounded-lg bg-bg-input border border-border-subtle hover:border-border-default transition-all shadow-sm" title="Tự động dịch sang tiếng Việt nếu tìm kiếm sub không có kết quả">
-                <span class="label-text text-xs text-text-secondary font-medium">Tự động dịch nếu không tìm thấy sub</span>
-                <input type="checkbox" id="autoFallbackTranslateToggle" class="toggle toggle-warning toggle-sm auto-fallback-toggle-input" onchange="toggleAutoFallback(this.checked)">
-            </label>
-        </div>
+        <label class="auto-fallback-chip" title="Tự động dịch sang tiếng Việt nếu không tìm thấy sub">
+            <i class="fa-solid fa-language text-warning"></i>
+            <span class="hidden md:inline text-xs text-text-secondary font-medium whitespace-nowrap">Tự dịch khi thiếu sub</span>
+            <input type="checkbox" id="autoFallbackTranslateToggle" class="toggle toggle-warning toggle-sm auto-fallback-toggle-input" aria-label="Tự động dịch khi không tìm thấy sub" onchange="toggleAutoFallback(this.checked)">
+        </label>
     </div>
 </div>
 
@@ -520,7 +546,7 @@
 <!-- Modal: Show Details & Tree (Drawer) -->
 <div class="modal-overlay" id="showModal">
     <div class="drawer-content-box bg-bg-surface border-l border-border-subtle w-full max-w-3xl h-screen flex flex-col shadow-2xl overflow-hidden ml-auto">
-        <div class="px-6 py-4 border-b border-border-subtle flex items-center justify-between bg-bg-surface sticky top-0 z-20">
+        <div class="px-4 sm:px-6 py-3 border-b border-border-subtle flex items-center justify-between gap-2 bg-bg-surface sticky top-0 z-20">
             <div class="flex items-center gap-3 overflow-hidden">
                 <i class="fa-solid fa-tv text-primary text-xl"></i>
                 <h3 class="text-lg font-bold text-text-primary truncate m-0" id="showModalTitle">Chi tiết Series</h3>
@@ -530,25 +556,22 @@
                     <span class="label-text text-xs text-text-secondary">Tự động dịch</span>
                     <input type="checkbox" class="toggle toggle-warning toggle-xs auto-fallback-toggle-input" onchange="toggleAutoFallback(this.checked)">
                 </label>
-                <button class="btn btn-sm btn-circle btn-ghost text-text-muted hover:text-text-primary text-lg" onclick="closeShowModal()" aria-label="Đóng">&times;</button>
+                <button class="btn btn-sm btn-icon btn-ghost" onclick="closeShowModal()" title="Đóng" aria-label="Đóng"><i class="fa-solid fa-xmark"></i></button>
             </div>
         </div>
         <!-- Series Character & Pronoun Override Input -->
-        <div class="px-6 py-2.5 bg-bg-surface border-b border-border-subtle flex items-center gap-3">
+        <div class="px-4 sm:px-6 py-2 bg-bg-surface border-b border-border-subtle flex items-center gap-3">
             <span class="text-xs text-text-secondary font-medium shrink-0 flex items-center gap-1.5">
                 <i class="fa-solid fa-user-group text-warning text-xs"></i>
-                <span>Xưng hô AI:</span>
+                <span class="hidden sm:inline">Xưng hô AI:</span>
             </span>
-            <input type="text" id="seriesPronounOverrideInput" class="input input-xs bg-bg-input border-border-subtle text-text-primary text-xs flex-1 focus:border-warning" placeholder="Ghi đè xưng hô (tuỳ chọn, ví dụ: Agatha - Rio: tôi - cô; Billy: cháu - cô)" title="Ghi đè đại từ xưng hô cho toàn bộ series này khi dịch AI">
+            <input type="text" id="seriesPronounOverrideInput" class="input input-xs bg-bg-input border-border-subtle text-text-primary text-xs flex-1 focus:border-warning" placeholder="Xưng hô AI (VD: Agatha - Rio: tôi - cô)" title="Ghi đè đại từ xưng hô cho toàn bộ series này khi dịch AI">
         </div>
-        <div class="p-6 overflow-y-auto flex-1 flex flex-col gap-4 bg-bg-app/40" id="showModalBody">
+        <div class="p-3 sm:p-5 overflow-y-auto flex-1 flex flex-col bg-bg-app/40" id="showModalBody" style="padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));">
             <div class="flex flex-col items-center justify-center py-16 gap-3 text-text-muted">
                 <span class="loading loading-spinner loading-lg text-primary"></span>
                 <span class="text-sm">Đang tải cấu trúc Series...</span>
             </div>
-        </div>
-        <div class="px-6 py-3 border-t border-border-subtle flex justify-end gap-3 bg-bg-surface sticky bottom-0 z-20">
-            <button class="btn btn-secondary btn-sm" onclick="closeShowModal()">Đóng</button>
         </div>
     </div>
 </div>
@@ -561,16 +584,13 @@
                 <i class="fa-solid fa-film text-primary text-xl"></i>
                 <h3 class="text-lg font-bold text-text-primary truncate m-0" id="movieModalTitle">Chi tiết Phim</h3>
             </div>
-            <button class="btn btn-sm btn-circle btn-ghost text-text-muted hover:text-text-primary text-lg" onclick="closeMovieModal()" aria-label="Đóng">&times;</button>
+            <button class="btn btn-sm btn-icon btn-ghost" onclick="closeMovieModal()" title="Đóng" aria-label="Đóng"><i class="fa-solid fa-xmark"></i></button>
         </div>
         <div class="p-6 flex flex-col gap-4" id="movieModalBody">
             <div class="flex flex-col items-center justify-center py-12 gap-3 text-text-muted">
                 <span class="loading loading-spinner loading-md text-primary"></span>
                 <span class="text-sm">Đang tải...</span>
             </div>
-        </div>
-        <div class="px-6 py-3 border-t border-border-subtle flex justify-end gap-3 bg-bg-surface">
-            <button class="btn btn-secondary btn-sm" onclick="closeMovieModal()">Đóng</button>
         </div>
     </div>
 </div>
@@ -624,25 +644,26 @@
 </div>
 
 <!-- Floating Bulk Action Bar -->
-<div id="bulkActionBar" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-bg-surface/95 backdrop-blur-md border border-border-default shadow-2xl rounded-2xl px-5 py-3 flex items-center gap-4 transition-all duration-300" style="display: none; transform: translate(-50%, 80px); opacity: 0;">
-    <div class="flex items-center gap-2">
-        <input type="checkbox" id="bulkBarSelectAllCheckbox" class="checkbox checkbox-warning checkbox-sm cursor-pointer" onchange="toggleSelectAllPage(this.checked)" title="Chọn/bỏ chọn tất cả">
+<div id="bulkActionBar" class="bulk-bar" role="toolbar" aria-label="Thao tác hàng loạt" style="display: none; transform: translate(-50%, 80px); opacity: 0;">
+    <label class="flex items-center gap-2 cursor-pointer min-w-0" title="Chọn / bỏ chọn tất cả trong trang">
+        <input type="checkbox" id="bulkBarSelectAllCheckbox" class="checkbox checkbox-warning checkbox-sm" onchange="toggleSelectAllPage(this.checked)" aria-label="Chọn tất cả trong trang">
         <span class="text-xs font-semibold text-text-primary whitespace-nowrap">
-            Đã chọn <span id="bulkSelectedCountBadge" class="badge badge-warning badge-sm font-bold mx-1">0</span> mục
+            <span id="bulkSelectedCountBadge" class="font-mono text-plex-gold">0</span> đã chọn
         </span>
-    </div>
-    <div class="h-5 w-px bg-border-subtle"></div>
-    <div class="flex items-center gap-2 flex-wrap">
-        <button type="button" class="btn btn-sm btn-secondary gap-1.5 shadow font-semibold" onclick="triggerBatchUploadSelected()">
+    </label>
+    <div class="flex items-center gap-1.5 ml-auto">
+        <button type="button" class="btn btn-sm btn-secondary" onclick="triggerBatchUploadSelected()" title="Tìm sub cho các mục đã chọn">
             <i class="fa-solid fa-magnifying-glass"></i>
-            <span>Tìm sub đã chọn (<span id="bulkUploadCount">0</span>)</span>
+            <span>Tìm sub</span>
+            <span id="bulkUploadCount" class="hidden">0</span>
         </button>
-        <button type="button" class="btn btn-sm btn-primary gap-1.5 shadow font-semibold" onclick="triggerBatchTranslateSelected()">
+        <button type="button" class="btn btn-sm btn-primary" onclick="triggerBatchTranslateSelected()" title="Dịch AI các mục đã chọn">
             <i class="fa-solid fa-language"></i>
-            <span>Dịch AI đã chọn (<span id="bulkTranslateCount">0</span>)</span>
+            <span>Dịch AI</span>
+            <span id="bulkTranslateCount" class="hidden">0</span>
         </button>
-        <button type="button" class="btn btn-sm btn-ghost text-text-muted hover:text-text-primary px-2" onclick="clearSelection()" title="Bỏ chọn tất cả">
-            <svg viewBox="0 0 24 24" class="w-4 h-4 fill-current"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        <button type="button" class="btn btn-sm btn-icon btn-ghost" onclick="clearSelection()" title="Bỏ chọn" aria-label="Bỏ chọn tất cả">
+            <i class="fa-solid fa-xmark"></i>
         </button>
     </div>
 </div>
@@ -1165,25 +1186,20 @@
                     <div class="media-poster">
                         ${thumbUrl ? `<img src="${thumbUrl}" alt="${safeTitle}" loading="lazy">` : `<span class="media-poster-placeholder flex items-center justify-center">${isShow ? ICONS.tvLarge : ICONS.movieLarge}</span>`}
                     </div>
-                    <div class="p-0 flex flex-col flex-1 min-w-0">
-                        <h4 class="text-sm font-semibold text-text-primary truncate m-0 mb-1" title="${safeTitle}">${safeTitle}</h4>
-                        <div class="text-xs text-text-secondary flex items-center gap-2 flex-wrap mb-2">
-                            <span class="badge badge-neutral badge-sm">${isShow ? 'Series' : 'Phim lẻ'}</span>
-                            <span>•</span>
-                            <span>${item.year || 'N/A'}</span>
-                            <span>•</span>
+                    <div class="flex flex-col flex-1 min-w-0 gap-1">
+                        <h4 class="text-sm font-semibold text-text-primary truncate m-0" title="${safeTitle}">${safeTitle}</h4>
+                        <div class="text-xs text-text-secondary flex items-center gap-x-2 gap-y-1 flex-wrap">
                             ${subIndicatorInline}
-                            ${item.genres && item.genres.length ? `<span>•</span><span class="truncate">${escapeHtml(item.genres.slice(0, 2).join(', '))}</span>` : ''}
+                            <span>${isShow ? 'Series' : 'Phim'} · ${item.year || 'N/A'}</span>
+                            ${item.genres && item.genres.length ? `<span class="truncate text-text-muted hidden sm:inline">${escapeHtml(item.genres.slice(0, 2).join(', '))}</span>` : ''}
                         </div>
-                        <p class="text-xs text-text-muted line-clamp-2 m-0">${summaryText}</p>
+                        <p class="list-summary text-xs text-text-muted line-clamp-2 m-0">${summaryText}</p>
                     </div>
-                    <div class="shrink-0 flex items-center gap-2">
-                        <div class="media-actions flex gap-2">
-                            ${isShow 
-                                 ? `<button class="btn btn-sm btn-primary gap-1.5 whitespace-nowrap" onclick="event.stopPropagation(); openShowTree('${item.rating_key}')">${ICONS.tv} <span class="hidden sm:inline">Quản lý Series</span><span class="sm:hidden">Series</span></button>`
-                                 : `<button class="btn btn-sm btn-primary gap-1.5 whitespace-nowrap" onclick="event.stopPropagation(); startBatchAction(['${item.rating_key}'], 'upload_target', this)">${ICONS.search} <span class="hidden sm:inline">Tìm sub</span><span class="sm:hidden">Tìm</span></button>`
-                            }
-                        </div>
+                    <div class="media-actions shrink-0">
+                        ${isShow
+                             ? `<button class="btn btn-sm btn-primary list-action-btn" onclick="event.stopPropagation(); openShowTree('${item.rating_key}')" title="Quản lý Series" aria-label="Quản lý Series"><i class="fa-solid fa-tv"></i><span class="hidden sm:inline">Quản lý</span></button>`
+                             : `<button class="btn btn-sm btn-primary list-action-btn" onclick="event.stopPropagation(); startBatchAction(['${item.rating_key}'], 'upload_target', this)" title="Tìm sub" aria-label="Tìm sub"><i class="fa-solid fa-magnifying-glass"></i><span class="hidden sm:inline">Tìm sub</span></button>`
+                        }
                     </div>
                 `;
             } else {
@@ -1210,7 +1226,7 @@
                         </div>
                         <div class="media-actions mt-auto flex gap-1">
                             ${isShow 
-                                ? `<button class="btn btn-xs sm:btn-sm btn-primary flex-1 gap-1.5 whitespace-nowrap" onclick="event.stopPropagation(); openShowTree('${item.rating_key}')">${ICONS.tv} <span class="truncate">Quản lý Series</span></button>`
+                                ? `<button class="btn btn-xs sm:btn-sm btn-primary flex-1 gap-1.5 whitespace-nowrap" onclick="event.stopPropagation(); openShowTree('${item.rating_key}')">${ICONS.tv} <span class="truncate">Quản lý</span></button>`
                                 : `<button class="btn btn-xs sm:btn-sm btn-primary flex-1 gap-1.5 whitespace-nowrap" onclick="event.stopPropagation(); startBatchAction(['${item.rating_key}'], 'upload_target', this)">${ICONS.search} <span class="truncate">Tìm sub</span></button>`
                             }
                         </div>
@@ -1250,7 +1266,7 @@
             return;
         }
 
-        container.innerHTML = `<span class="text-xs font-semibold text-text-secondary uppercase tracking-wider mr-1">Thư viện:</span>`;
+        container.innerHTML = "";
         sections.forEach((sec, idx) => {
             const btn = document.createElement("button");
             btn.className = `btn btn-sm ${idx === 0 ? "btn-primary" : "btn-ghost bg-bg-input border-border-subtle"} gap-1.5 section-btn`;
@@ -1500,72 +1516,36 @@
         const hasHiddenVi = (data.vi_count > 0 && showTreeFilter === 'missing_vi');
 
         let noticeHtml = '';
-        if (allHaveVi) {
+        if (allHaveVi && showTreeFilter === 'missing_vi') {
             noticeHtml = `
-                <div class="alert alert-success bg-success/15 border-success/30 text-success text-xs py-2 px-3 rounded-lg flex items-center gap-2 cursor-pointer mb-3" onclick="toggleShowTreeFilterAll()">
-                    <svg class="w-4 h-4 shrink-0 fill-current" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
-                    <span><strong>Tất cả các tập đã có Vietsub</strong> ${showTreeFilter === 'missing_vi' ? `(Đang ẩn ${data.total_episodes} tập - Bấm để xem toàn bộ)` : `(Đang hiển thị toàn bộ ${data.total_episodes} tập)`}</span>
-                </div>
-            `;
-        } else if (hasHiddenVi) {
-            noticeHtml = `
-                <div class="alert alert-info bg-info/10 border-info/20 text-info text-xs py-2 px-3 rounded-lg flex items-center gap-2 cursor-pointer mb-3" onclick="toggleShowTreeFilterAll()" title="Bấm để hiển thị tất cả các tập">
-                    <svg class="w-4 h-4 shrink-0 fill-current" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
-                    <span>Đang ẩn các tập đã có Vietsub - <strong>Bấm để hiện tất cả</strong></span>
-                </div>
-            `;
-        } else if (showTreeFilter === 'all' && data.vi_count > 0) {
-            noticeHtml = `
-                <div class="alert bg-bg-input border-border-subtle text-text-secondary text-xs py-2 px-3 rounded-lg flex items-center gap-2 cursor-pointer mb-3" onclick="toggleShowTreeFilterAll()" title="Bấm để chỉ hiển thị các tập thiếu Vietsub">
-                    <svg class="w-4 h-4 shrink-0 fill-current" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
-                    <span>Đang hiển thị toàn bộ <strong>${data.total_episodes}</strong> tập (${data.vi_count} đã có Vietsub, ${data.missing_vi_count} thiếu) - <strong>Chỉ hiện tập thiếu Vietsub</strong></span>
-                </div>
+                <button type="button" class="w-full text-left alert alert-success bg-success/15 border-success/30 text-success text-xs py-2 px-3 rounded-lg flex items-center gap-2 mb-3" onclick="setShowTreeFilter('all')">
+                    <i class="fa-solid fa-circle-check"></i>
+                    <span><strong>Tất cả ${data.total_episodes} tập đã có Vietsub.</strong> Bấm để xem toàn bộ.</span>
+                </button>
             `;
         }
 
+        const treeFilterBtn = (key, label, dot, count) => `
+            <button type="button" class="btn btn-xs ${showTreeFilter === key ? 'btn-primary' : 'btn-ghost'}" onclick="setShowTreeFilter('${key}')" aria-pressed="${showTreeFilter === key}">
+                ${dot ? `<span class="w-1.5 h-1.5 rounded-full ${dot} inline-block"></span>` : ''}
+                <span>${label}</span><span class="font-mono opacity-70">${count}</span>
+            </button>`;
+
         let html = `
-            <div class="bg-bg-input/80 border border-border-subtle p-4 rounded-xl mb-4 flex flex-wrap justify-between items-center gap-3">
-                <div>
-                    <div class="text-xs font-semibold text-text-primary mb-1">Tổng quan phụ đề:</div>
-                    <div class="flex flex-wrap gap-2 items-center">
-                        <span class="badge badge-info badge-sm">Tổng: ${data.total_episodes}</span>
-                        <span class="badge badge-success badge-sm">Đã có Vietsub: ${data.vi_count}</span>
-                        <span class="badge badge-warning badge-sm">Có thể dịch: ${data.can_translate_count}</span>
-                        <span class="badge badge-error badge-sm">Thiếu: ${data.missing_vi_count}</span>
-                    </div>
+            <div class="flex flex-col sm:flex-row sm:items-center gap-2 mb-3">
+                <div class="seg-group tree-filter" id="showTreeFilterGroup" role="group" aria-label="Lọc tập">
+                    ${treeFilterBtn('missing_vi', 'Thiếu', 'bg-error', data.missing_vi_count)}
+                    ${treeFilterBtn('can_translate', 'Dịch AI', 'bg-warning', data.can_translate_count)}
+                    ${treeFilterBtn('all', 'Tất cả', '', data.total_episodes)}
                 </div>
-                <div class="flex items-center gap-2 flex-wrap">
-                    <button class="btn btn-sm btn-secondary gap-1.5" onclick="startBatchActionForShow('${ratingKey}', 'upload_target', this)">
-                        ${ICONS.search} Tìm sub cả Show
+                <div class="flex items-center gap-1.5 sm:ml-auto">
+                    <button class="btn btn-sm btn-secondary flex-1 sm:flex-none" onclick="startBatchActionForShow('${ratingKey}', 'upload_target', this)" title="Tìm sub cho toàn bộ series">
+                        ${ICONS.search}<span>Tìm sub cả show</span>
                     </button>
-                    <button class="btn btn-sm btn-primary gap-1.5" onclick="startBatchActionForShow('${ratingKey}', 'translate', this)">
-                        ${ICONS.translate} Dịch tập thiếu cả Show
+                    <button class="btn btn-sm btn-primary flex-1 sm:flex-none" onclick="startBatchActionForShow('${ratingKey}', 'translate', this)" title="Dịch AI các tập thiếu của toàn bộ series">
+                        ${ICONS.translate}<span>Dịch tập thiếu</span>
                     </button>
                 </div>
-            </div>
-
-            <!-- Show Tree Episode Filter Bar -->
-            <div class="show-tree-filter-bar flex flex-wrap items-center justify-between gap-3 mb-3 pb-2 border-b border-border-subtle">
-                <div class="flex items-center gap-2 flex-wrap">
-                    <span class="text-xs text-text-secondary font-medium">Lọc tập:</span>
-                    <div class="join" id="showTreeFilterGroup">
-                        <button type="button" class="btn btn-xs join-item ${showTreeFilter === 'missing_vi' ? 'btn-primary' : 'btn-ghost bg-bg-input'}" onclick="setShowTreeFilter('missing_vi')">
-                            <span class="w-1.5 h-1.5 rounded-full bg-error inline-block mr-1"></span>
-                            <span>Thiếu Vietsub</span>
-                        </button>
-                        <button type="button" class="btn btn-xs join-item ${showTreeFilter === 'all' ? 'btn-primary' : 'btn-ghost bg-bg-input'}" onclick="setShowTreeFilter('all')">
-                            <span>Tất cả</span>
-                        </button>
-                        <button type="button" class="btn btn-xs join-item ${showTreeFilter === 'can_translate' ? 'btn-primary' : 'btn-ghost bg-bg-input'}" onclick="setShowTreeFilter('can_translate')">
-                            <span class="w-1.5 h-1.5 rounded-full bg-warning inline-block mr-1"></span>
-                            <span>Có thể dịch AI</span>
-                        </button>
-                    </div>
-                </div>
-
-                <button type="button" class="btn btn-xs btn-outline btn-secondary" onclick="toggleShowTreeFilterAll()">
-                    ${showTreeFilter === 'missing_vi' ? 'Hiện tất cả tập' : 'Chỉ hiện tập thiếu Vietsub'}
-                </button>
             </div>
 
             ${noticeHtml}
@@ -1584,14 +1564,14 @@
 
             html += `
                 <div class="border border-border-subtle rounded-xl overflow-hidden bg-bg-surface mb-4">
-                    <div class="bg-bg-input px-4 py-3 flex items-center justify-between gap-3 flex-wrap border-b border-border-subtle">
-                        <h4 class="font-semibold text-text-primary text-sm m-0">${escapeHtml(season.title)} (${visibleEpisodes.length}/${season.episodes.length} tập)</h4>
-                        <div class="flex items-center gap-2">
-                            <button type="button" class="btn btn-xs sm:btn-sm btn-secondary gap-1.5" onclick="startBatchActionForSeason('${season.rating_key}', 'upload_target', this)">
-                                ${ICONS.search} Tìm sub Mùa
+                    <div class="bg-bg-input pl-4 pr-2 py-2 flex items-center justify-between gap-2 border-b border-border-subtle">
+                        <h4 class="font-semibold text-text-primary text-sm m-0 truncate">${escapeHtml(season.title)} <span class="text-text-muted font-normal">· ${visibleEpisodes.length}/${season.episodes.length} tập</span></h4>
+                        <div class="flex items-center gap-1.5 shrink-0">
+                            <button type="button" class="btn btn-sm btn-secondary ep-btn" onclick="startBatchActionForSeason('${season.rating_key}', 'upload_target', this)" title="Tìm sub cả mùa" aria-label="Tìm sub cả mùa">
+                                <i class="fa-solid fa-magnifying-glass"></i><span class="hidden sm:inline">Tìm sub mùa</span>
                             </button>
-                            <button type="button" class="btn btn-xs sm:btn-sm btn-primary gap-1.5" onclick="startBatchActionForSeason('${season.rating_key}', 'translate', this)">
-                                ${ICONS.translate} Dịch tập thiếu
+                            <button type="button" class="btn btn-sm btn-primary ep-btn" onclick="startBatchActionForSeason('${season.rating_key}', 'translate', this)" title="Dịch AI các tập thiếu trong mùa" aria-label="Dịch AI các tập thiếu trong mùa">
+                                <i class="fa-solid fa-language"></i><span class="hidden sm:inline">Dịch tập thiếu</span>
                             </button>
                         </div>
                     </div>
@@ -1606,31 +1586,29 @@
                 `;
             } else {
                 visibleEpisodes.forEach(ep => {
-                    let badge = '';
+                    let status;
                     if (ep.has_vi) {
-                        badge = `<span class="badge badge-success badge-sm gap-1">${ICONS.check} Đã có Vietsub</span>`;
+                        status = { cls: 'badge-success', icon: 'fa-check', label: 'Có Vietsub' };
                     } else if (ep.can_translate) {
-                        badge = `<span class="badge badge-warning badge-sm gap-1">${ICONS.sparkles} Có thể dịch AI</span>`;
+                        status = { cls: 'badge-warning', icon: 'fa-wand-magic-sparkles', label: 'Dịch được' };
                     } else {
-                        badge = `<span class="badge badge-error badge-sm gap-1">${ICONS.cross} Chưa có sub</span>`;
+                        status = { cls: 'badge-error', icon: 'fa-xmark', label: 'Chưa có sub' };
                     }
+                    const skipped = Boolean(ep.translation_skipped);
+                    const epTitle = escapeHtml(ep.title);
 
                     html += `
-                        <div class="px-3.5 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 hover:bg-bg-surface-hover transition-colors">
-                            <div class="flex items-center justify-between gap-2 min-w-0 flex-1">
-                                <div class="text-sm font-medium text-text-primary truncate" title="Tập ${ep.episode_number}: ${escapeHtml(ep.title)}">
-                                    <span class="text-text-muted font-normal mr-1.5">Tập ${ep.episode_number}:</span>
-                                    <span>${escapeHtml(ep.title)}</span>
-                                </div>
-                                <div class="shrink-0 sm:hidden">${badge}</div>
+                        <div class="ep-row hover:bg-bg-surface-hover transition-colors">
+                            <span class="badge badge-sm ${status.cls} ep-status" title="${status.label}"><i class="fa-solid ${status.icon}"></i><span class="hidden sm:inline">${status.label}</span></span>
+                            <div class="min-w-0 flex-1 text-sm text-text-primary truncate" title="Tập ${ep.episode_number}: ${epTitle}">
+                                <span class="text-text-muted font-mono text-xs mr-1">E${String(ep.episode_number).padStart(2, '0')}</span>${epTitle}
                             </div>
-                            <div class="flex items-center justify-between sm:justify-end gap-2 flex-wrap sm:flex-nowrap">
-                                <div class="shrink-0 hidden sm:block">${badge}</div>
-                                <div class="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
-                                    <button class="btn btn-xs sm:btn-sm btn-secondary gap-1 whitespace-nowrap text-xs" onclick="quickUploadTarget('${ep.rating_key}', this)">${ICONS.search} <span>Tìm sub</span></button>
-                                    <button class="btn btn-xs sm:btn-sm ${ep.translation_skipped ? 'btn-warning' : 'btn-ghost border border-border-subtle'} gap-1 whitespace-nowrap text-xs" onclick="toggleTranslationSkip('${ep.rating_key}', this)">${ep.translation_skipped ? ICONS.check + ' Bật' : ICONS.skip + ' Bỏ qua'}</button>
-                                    ${ep.can_translate && !ep.translation_skipped ? `<button class="btn btn-xs sm:btn-sm btn-primary gap-1 whitespace-nowrap text-xs" onclick="quickTranslate('${ep.rating_key}', this)">${ICONS.translate} <span>Dịch AI</span></button>` : ''}
-                                </div>
+                            <div class="flex items-center gap-1 shrink-0">
+                                <button class="btn btn-sm btn-icon btn-secondary" onclick="quickUploadTarget('${ep.rating_key}', this)" title="Tìm sub" aria-label="Tìm sub tập ${ep.episode_number}"><i class="fa-solid fa-magnifying-glass"></i></button>
+                                <button class="btn btn-sm btn-icon ${skipped ? 'btn-warning' : 'btn-ghost'}" data-skipped="${skipped ? 1 : 0}" aria-pressed="${skipped}" onclick="toggleTranslationSkip('${ep.rating_key}', this)" title="${skipped ? 'Đang bỏ qua dịch AI — bấm để bật lại' : 'Bỏ qua dịch AI'}" aria-label="${skipped ? 'Bật lại dịch AI' : 'Bỏ qua dịch AI'}"><i class="fa-solid ${skipped ? 'fa-rotate-left' : 'fa-ban'}"></i></button>
+                                ${ep.can_translate && !skipped
+                                    ? `<button class="btn btn-sm btn-icon btn-primary" onclick="quickTranslate('${ep.rating_key}', this)" title="Dịch AI" aria-label="Dịch AI tập ${ep.episode_number}"><i class="fa-solid fa-language"></i></button>`
+                                    : `<span class="ep-btn-placeholder" aria-hidden="true"></span>`}
                             </div>
                         </div>
                     `;
@@ -1715,18 +1693,18 @@
         const skipped = Boolean(data.translation_skipped);
         body.innerHTML = `
             <div class="flex flex-col gap-4">
-                <div class="flex items-center justify-between gap-3 p-3 rounded-xl bg-bg-input border border-border-subtle">
-                    <span class="text-xs text-text-secondary font-medium">Trạng thái phụ đề:</span>${badge}
+                <div class="flex items-center justify-between gap-3">
+                    ${badge}
+                    <button type="button" class="btn btn-sm ${skipped ? 'btn-warning' : 'btn-ghost'}" data-skipped="${skipped ? 1 : 0}" aria-pressed="${skipped}" onclick="toggleTranslationSkip('${data.rating_key}', this)" title="${skipped ? 'Bật lại dịch AI cho phim này' : 'Không tự dịch AI phim này'}">
+                        <i class="fa-solid ${skipped ? 'fa-rotate-left' : 'fa-ban'}"></i><span>${skipped ? 'Bật lại dịch' : 'Bỏ qua dịch'}</span>
+                    </button>
                 </div>
-                <button type="button" class="btn btn-sm ${skipped ? 'btn-warning' : 'btn-ghost border border-border-subtle'} w-full justify-center gap-2 whitespace-nowrap" onclick="toggleTranslationSkip('${data.rating_key}', this)">
-                    ${skipped ? ICONS.check + ' Bật lại dịch AI' : ICONS.skip + ' Bỏ qua dịch AI'}
-                </button>
                 <p class="text-xs text-text-secondary leading-relaxed bg-bg-app/50 p-3 rounded-xl border border-border-subtle">
                     ${data.summary ? escapeHtml(data.summary) : '<span class="italic text-text-muted">Không có mô tả tóm tắt cho phim này.</span>'}
                 </p>
-                <div class="pt-2 flex flex-col sm:flex-row gap-3">
-                    <button class="btn btn-secondary flex-1 gap-2 whitespace-nowrap" id="movieSearchSubBtn" onclick="quickUploadTarget('${data.rating_key}', this)">${ICONS.search} Tìm &amp; Tải Vietsub</button>
-                    ${data.can_translate && !skipped ? `<button class="btn btn-primary flex-1 gap-2 whitespace-nowrap" onclick="quickTranslate('${data.rating_key}', this)">${ICONS.translate} Dịch AI từ Engsub</button>` : ''}
+                <div class="flex gap-2">
+                    <button class="btn btn-secondary flex-1 whitespace-nowrap" id="movieSearchSubBtn" onclick="quickUploadTarget('${data.rating_key}', this)">${ICONS.search} Tìm sub</button>
+                    ${data.can_translate && !skipped ? `<button class="btn btn-primary flex-1 whitespace-nowrap" onclick="quickTranslate('${data.rating_key}', this)">${ICONS.translate} Dịch AI</button>` : ''}
                 </div>
             </div>
         `;
@@ -1734,7 +1712,7 @@
 
     async function toggleTranslationSkip(ratingKey, button) {
         const data = await fetch(`/api/library/translation-skip/${encodeURIComponent(ratingKey)}`, {
-            method: button.textContent.includes('Bật') ? 'DELETE' : 'POST'
+            method: button.dataset.skipped === '1' ? 'DELETE' : 'POST'
         }).then(async response => {
             if (!response.ok) throw new Error((await response.json()).detail || 'Không thể cập nhật trạng thái bỏ qua dịch');
             return response.json();

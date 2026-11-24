@@ -2,7 +2,7 @@
 <html lang="vi" data-theme="dark">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>{% block title %}Plex Subtitle Service{% endblock %}</title>
     <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23E5A00D'/%3E%3Ctext x='16' y='23' text-anchor='middle' font-family='Arial,sans-serif' font-weight='700' font-size='22' fill='%231A1A1A'%3EP%3C/text%3E%3C/svg%3E">
@@ -11,39 +11,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script data-cfasync="false" src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.23/dist/full.min.css" rel="stylesheet" type="text/css" />
+    <!-- DaisyUI 4.12.23 (vendored). Thứ tự cascade: daisyui → <style> nội bộ → tailwind.css (cuối head) -->
+    <link href="/static/css/daisyui.min.css?v={{ static_version }}" rel="stylesheet" type="text/css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <script data-cfasync="false">
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        plex: {
-                            gold: '#E5A00D',
-                            'gold-hover': '#CC8B00',
-                            dark: '#1F1F23',
-                            surface: '#282830',
-                            elevated: '#32323C',
-                        },
-                        primary: '#E5A00D',
-                        gold: '#E5A00D',
-                        'gold-hover': '#CC8B00',
-                        'bg-deepest': '#111113',
-                        'bg-app': '#1F1F23',
-                        'bg-surface': '#282830',
-                        'text-primary': '#EAEAEA',
-                        'text-secondary': '#A0A0A0',
-                        'text-muted': '#6A6A6A',
-                        'border-subtle': '#3A3A44',
-                        'border-default': '#44444E',
-                        'plex-gold': '#E5A00D',
-                        'plex-gold-hover': '#CC8B00',
-                    }
-                }
-            }
-        }
-    </script>
     <style>
         /* ── Plex Design System & DaisyUI Dark Theme ── */
         :root,
@@ -911,7 +881,8 @@
             top: 0;
             left: 0;
             right: 0;
-            height: 52px;
+            height: calc(52px + env(safe-area-inset-top, 0px));
+            padding-top: env(safe-area-inset-top, 0px) !important;
             background: rgba(24, 24, 30, 0.94);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
@@ -967,7 +938,7 @@
             bottom: 0;
             left: 0;
             right: 0;
-            height: 60px;
+            height: calc(60px + env(safe-area-inset-bottom, 0px));
             background: rgba(24, 24, 30, 0.96);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
@@ -1163,8 +1134,7 @@
             }
 
             .page-header .page-description {
-                font-size: 12px;
-                word-break: break-word;
+                display: none; /* Tiết kiệm chiều cao trên mobile — tiêu đề đã đủ ngữ cảnh */
             }
 
             .page-body {
@@ -1177,6 +1147,14 @@
             .stats-grid {
                 grid-template-columns: 1fr;
             }
+        }
+
+        /* ── Touch targets (thiết bị cảm ứng): tối thiểu ~32-36px ── */
+        @media (pointer: coarse) {
+            .btn-xs { min-height: 32px !important; }
+            .btn-sm { min-height: 36px !important; }
+            .btn-icon { min-width: 36px !important; width: 36px !important; height: 36px !important; }
+            .toggle-sm, .toggle-xs { --handleoffset: 1.25rem; height: 1.5rem !important; width: 2.75rem !important; }
         }
 
         /* ── Loading Spinner ── */
@@ -1296,7 +1274,7 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
-        /* ── Fallback Utility Classes (Guarantees styling even under Safari Content Blockers / CDN failure) ── */
+        /* ── Utility bổ sung: màu/token riêng của project + fallback (nằm trước tailwind.css nên utility Tailwind thắng) ── */
         .bg-bg-surface { background-color: var(--bg-surface, #282830) !important; }
         .bg-bg-input { background-color: var(--bg-input, #32323C) !important; }
         .bg-bg-elevated { background-color: var(--bg-elevated, #3D3D47) !important; }
@@ -1311,56 +1289,56 @@
         .shadow-sm { box-shadow: 0 1px 2px rgba(0,0,0,0.2) !important; }
         .shadow-md, .shadow { box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important; }
         .shadow-2xl { box-shadow: 0 16px 36px rgba(0,0,0,0.5) !important; }
-        .p-2 { padding: 8px !important; }
-        .p-3 { padding: 12px !important; }
-        .p-4 { padding: 16px !important; }
-        .p-5 { padding: 20px !important; }
-        .p-6 { padding: 24px !important; }
-        .px-3 { padding-left: 12px !important; padding-right: 12px !important; }
-        .px-4 { padding-left: 16px !important; padding-right: 16px !important; }
-        .px-6 { padding-left: 24px !important; padding-right: 24px !important; }
-        .py-1 { padding-top: 4px !important; padding-bottom: 4px !important; }
-        .py-2 { padding-top: 8px !important; padding-bottom: 8px !important; }
-        .py-3 { padding-top: 12px !important; padding-bottom: 12px !important; }
-        .py-4 { padding-top: 16px !important; padding-bottom: 16px !important; }
-        .m-0 { margin: 0 !important; }
-        .mb-1 { margin-bottom: 4px !important; }
-        .mb-2 { margin-bottom: 8px !important; }
-        .mb-3 { margin-bottom: 12px !important; }
-        .mb-4 { margin-bottom: 16px !important; }
-        .mb-6 { margin-bottom: 24px !important; }
-        .mt-2 { margin-top: 8px !important; }
-        .mt-4 { margin-top: 16px !important; }
-        .mt-auto { margin-top: auto !important; }
-        .flex { display: flex !important; }
-        .inline-flex { display: inline-flex !important; }
-        .flex-col { flex-direction: column !important; }
-        .flex-wrap { flex-wrap: wrap !important; }
-        .items-center { align-items: center !important; }
-        .items-stretch { align-items: stretch !important; }
-        .justify-between { justify-content: space-between !important; }
-        .justify-center { justify-content: center !important; }
-        .justify-end { justify-content: flex-end !important; }
-        .gap-1 { gap: 4px !important; }
-        .gap-1\.5 { gap: 6px !important; }
-        .gap-2 { gap: 8px !important; }
-        .gap-2\.5 { gap: 10px !important; }
-        .gap-3 { gap: 12px !important; }
-        .gap-4 { gap: 16px !important; }
-        .flex-1 { flex: 1 1 0% !important; }
-        .shrink-0 { flex-shrink: 0 !important; }
-        .min-w-0 { min-width: 0 !important; }
-        .grid { display: grid !important; }
-        .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
-        .grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
-        .text-xs { font-size: 12px !important; line-height: 1.4 !important; }
-        .text-sm { font-size: 14px !important; line-height: 1.4 !important; }
-        .text-base { font-size: 16px !important; }
-        .text-lg { font-size: 18px !important; }
-        .text-2xl { font-size: 24px !important; }
-        .font-medium { font-weight: 500 !important; }
-        .font-semibold { font-weight: 600 !important; }
-        .font-bold { font-weight: 700 !important; }
+        .p-2 { padding: 8px; }
+        .p-3 { padding: 12px; }
+        .p-4 { padding: 16px; }
+        .p-5 { padding: 20px; }
+        .p-6 { padding: 24px; }
+        .px-3 { padding-left: 12px; padding-right: 12px; }
+        .px-4 { padding-left: 16px; padding-right: 16px; }
+        .px-6 { padding-left: 24px; padding-right: 24px; }
+        .py-1 { padding-top: 4px; padding-bottom: 4px; }
+        .py-2 { padding-top: 8px; padding-bottom: 8px; }
+        .py-3 { padding-top: 12px; padding-bottom: 12px; }
+        .py-4 { padding-top: 16px; padding-bottom: 16px; }
+        .m-0 { margin: 0; }
+        .mb-1 { margin-bottom: 4px; }
+        .mb-2 { margin-bottom: 8px; }
+        .mb-3 { margin-bottom: 12px; }
+        .mb-4 { margin-bottom: 16px; }
+        .mb-6 { margin-bottom: 24px; }
+        .mt-2 { margin-top: 8px; }
+        .mt-4 { margin-top: 16px; }
+        .mt-auto { margin-top: auto; }
+        .flex { display: flex; }
+        .inline-flex { display: inline-flex; }
+        .flex-col { flex-direction: column; }
+        .flex-wrap { flex-wrap: wrap; }
+        .items-center { align-items: center; }
+        .items-stretch { align-items: stretch; }
+        .justify-between { justify-content: space-between; }
+        .justify-center { justify-content: center; }
+        .justify-end { justify-content: flex-end; }
+        .gap-1 { gap: 4px; }
+        .gap-1\.5 { gap: 6px; }
+        .gap-2 { gap: 8px; }
+        .gap-2\.5 { gap: 10px; }
+        .gap-3 { gap: 12px; }
+        .gap-4 { gap: 16px; }
+        .flex-1 { flex: 1 1 0%; }
+        .shrink-0 { flex-shrink: 0; }
+        .min-w-0 { min-width: 0; }
+        .grid { display: grid; }
+        .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        .text-xs { font-size: 12px; line-height: 1.4; }
+        .text-sm { font-size: 14px; line-height: 1.4; }
+        .text-base { font-size: 16px; }
+        .text-lg { font-size: 18px; }
+        .text-2xl { font-size: 24px; }
+        .font-medium { font-weight: 500; }
+        .font-semibold { font-weight: 600; }
+        .font-bold { font-weight: 700; }
         .truncate { overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; }
         .line-clamp-2 { display: -webkit-box !important; -webkit-line-clamp: 2 !important; -webkit-box-orient: vertical !important; overflow: hidden !important; }
         .text-text-primary { color: var(--text-primary, #EAEAEA) !important; }
@@ -1382,16 +1360,16 @@
         .btn-sm { min-height: 34px !important; height: auto !important; padding: 5px 11px !important; font-size: 12px !important; line-height: 1.25 !important; }
         .btn-xs { min-height: 28px !important; height: auto !important; padding: 3px 8px !important; font-size: 11px !important; line-height: 1.2 !important; }
         .btn-loading { opacity: 0.75; cursor: not-allowed !important; pointer-events: none; }
+        .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
         .stat-card { background: var(--bg-surface, #282830); border: 1px solid var(--border-subtle, #3A3A44); border-radius: 12px; }
     </style>
     {% block extra_styles %}{% endblock %}
+    <!-- Tailwind utilities build sẵn (npm run build:css) — đặt cuối head như vị trí bản CDN cũ chèn vào -->
+    <link href="/static/css/tailwind.css?v={{ static_version }}" rel="stylesheet" type="text/css" />
 </head>
 <body>
     <!-- Mobile Top Bar -->
     <header class="mobile-top-bar" id="mobileTopBar">
-        <button class="mobile-toggle-btn" onclick="toggleSidebar()" aria-label="Menu" type="button">
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
-        </button>
         <div class="mobile-top-brand">
             <div class="mobile-logo">P</div>
             <span class="mobile-brand-title">Plex Subtitles</span>
@@ -1423,36 +1401,36 @@
             </div>
 
             <nav class="sidebar-nav">
-                <span class="nav-section-label">Workspace</span>
+                <span class="nav-section-label">Làm việc</span>
 
                 <a href="/workspace" class="nav-item {% block nav_workspace %}{% endblock %}">
                     <span class="nav-icon">
                         <svg viewBox="0 0 24 24"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
                     </span>
-                    <span>Subtitle Workspace</span>
+                    <span>Xử lý phụ đề</span>
                 </a>
 
                 <a href="/library" class="nav-item {% block nav_library %}{% endblock %}">
                     <span class="nav-icon">
                         <svg viewBox="0 0 24 24"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12zm-7-2h2v-4h4V8h-4V4h-2v4H9v2h4v4z"/></svg>
                     </span>
-                    <span>Plex Library</span>
+                    <span>Thư viện Plex</span>
                 </a>
 
                 <a href="/logs" class="nav-item {% block nav_logs %}{% endblock %}">
                     <span class="nav-icon">
                         <svg viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V8h16v10zm-2-1h-6v-2h6v2zm-8-4H6v-2h4v2zm0 4H6v-2h4v2zm2-4h6v-2h-6v2z"/></svg>
                     </span>
-                    <span>Logs</span>
+                    <span>Nhật ký</span>
                 </a>
 
-                <span class="nav-section-label">System</span>
+                <span class="nav-section-label">Hệ thống</span>
 
                 <a href="/settings" class="nav-item {% block nav_settings %}{% endblock %}">
                     <span class="nav-icon">
                         <svg viewBox="0 0 24 24"><path d="M22 9V7h-2V5c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-2h2v-2h-2v-2h2v-2h-2V9h2zm-4 10H4V5h14v14zM6 13h5v4H6v-4zm6-6h4v3h-4V7zM6 7h5v5H6V7zm6 4h4v6h-4v-6z"/></svg>
                     </span>
-                    <span>Settings &amp; Setup</span>
+                    <span>Cài đặt</span>
                 </a>
 
                 <a href="/docs" class="nav-item" target="_blank">
@@ -1466,7 +1444,7 @@
             <div class="sidebar-footer">
                 <span id="service-status" class="service-status in-sidebar checking">
                     <span class="pulse"></span>
-                    <span class="status-label">Checking...</span>
+                    <span class="status-label">Đang kiểm tra...</span>
                 </span>
                 <span class="version">Plex Subtitle Service v0.3.0</span>
             </div>
@@ -1501,7 +1479,7 @@
         </a>
         <a href="/workspace" class="mobile-nav-item" id="mob-nav-workspace" data-nav="workspace">
             <svg viewBox="0 0 24 24" class="mob-nav-svg"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
-            <span>Đồng bộ</span>
+            <span>Xử lý</span>
         </a>
         <a href="/logs" class="mobile-nav-item" id="mob-nav-logs" data-nav="logs">
             <svg viewBox="0 0 24 24" class="mob-nav-svg"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V8h16v10zm-2-1h-6v-2h6v2zm-8-4H6v-2h4v2zm0 4H6v-2h4v2zm2-4h6v-2h-6v2z"/></svg>
@@ -1722,14 +1700,14 @@
                 try {
                     const res = await fetch('/health', { signal: AbortSignal.timeout(5000) });
                     if (res.ok) {
-                        if (el) { el.className = 'service-status in-sidebar running'; if (label) label.textContent = 'Running'; }
+                        if (el) { el.className = 'service-status in-sidebar running'; if (label) label.textContent = 'Đang chạy'; }
                         if (mobEl) { mobEl.className = 'service-status running'; }
                     } else {
-                        if (el) { el.className = 'service-status in-sidebar stopped'; if (label) label.textContent = 'Stopped'; }
+                        if (el) { el.className = 'service-status in-sidebar stopped'; if (label) label.textContent = 'Mất kết nối'; }
                         if (mobEl) { mobEl.className = 'service-status stopped'; }
                     }
                 } catch {
-                    if (el) { el.className = 'service-status in-sidebar stopped'; if (label) label.textContent = 'Stopped'; }
+                    if (el) { el.className = 'service-status in-sidebar stopped'; if (label) label.textContent = 'Mất kết nối'; }
                     if (mobEl) { mobEl.className = 'service-status stopped'; }
                 }
             }

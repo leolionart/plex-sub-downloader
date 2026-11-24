@@ -84,13 +84,14 @@ docker compose up -d
 
 ## Web UI
 
-| URL              | Chức năng                                  |
-| ---------------- | -------------------------------------------- |
-| `/`            | Settings — cấu hình download, AI, quality |
-| `/setup`       | Setup wizard — credentials                  |
-| `/sync`        | Manual sync/translate bất kỳ media         |
-| `/translation` | Duyệt translation requests                  |
-| `/logs`        | Log viewer real-time                         |
+| URL          | Chức năng                                                                 |
+| ------------ | ------------------------------------------------------------------------- |
+| `/workspace` | **Xử lý phụ đề**: kiểm tra, tìm, dịch, sync cho một media (`/` và `/sync` chuyển hướng về đây) |
+| `/library`   | **Thư viện Plex**: lọc media thiếu Vietsub, tìm/dịch hàng loạt theo phim, mùa, series |
+| `/logs`      | **Nhật ký**: xem log real-time                                            |
+| `/settings`  | **Cài đặt**: download, AI, quality, credentials (`/setup` chuyển hướng về đây) |
+
+Trên mobile, điều hướng chính nằm ở thanh tab dưới cùng; desktop dùng sidebar.
 
 ## Tài liệu
 

@@ -2,6 +2,13 @@
 
 ## Unreleased - 2026-11-24
 
+- Chỉnh lại toàn bộ UI cho mobile và desktop: không còn nút tràn ngang; toolbar Thư viện gom vào 2-3 hàng gọn với nút sắp xếp/lưới/danh sách/làm mới chỉ còn icon; bulk bar thành một hàng; dòng tập phim trong drawer series có nút icon và nằm trên một hàng; form Xử lý phụ đề gọn lại, thêm tuỳ chọn thu gọn.
+- Sửa lỗi CSS fallback có `!important` đè lên class responsive của Tailwind (`sm:flex-row`, `sm:justify-end`...), nguyên nhân khiến nhiều layout desktop bị xếp dọc.
+- Mobile chỉ còn thanh tab dưới làm điều hướng chính (bỏ hamburger trùng), hỗ trợ safe-area cho iPhone, tăng vùng chạm trên thiết bị cảm ứng; thống nhất nhãn điều hướng tiếng Việt.
+- Bỏ Tailwind Play CDN: CSS được build sẵn (`npm run build:css`) và phục vụ từ `/static` có gzip; DaisyUI 4.12.23 được vendor. Giao diện giữ nguyên từng pixel (đã so ảnh chụp trước/sau).
+- Cài đặt: một thanh "Lưu" chung, chỉ hiện khi có thay đổi (thay cho hai nút Save Settings và Save Configuration riêng); cảnh báo khi rời trang mà chưa lưu. Ô secret (token, API key) hiện rõ trạng thái "Đã lưu / Chưa có / Sẽ thay" thay vì trông như bị trống.
+- Việt hoá phần lớn nhãn còn lẫn tiếng Anh (Cài đặt, kết quả kiểm tra, lịch sử đồng bộ, sidebar). Bảng lịch sử đồng bộ gọn lại trên mobile.
+- Xoá template không dùng `translation.html`, `setup.html` (các route đã chuyển hướng từ trước).
 - **Cải tổ toàn diện UI/UX Mobile & Flow thao tác**:
   - **Hệ thống Component dùng chung chuẩn (Plex Design System)**: Chuẩn hóa hệ thống Button (`.btn`, `.btn-primary`, `.btn-secondary`, `.btn-ghost`, `.btn-danger`, `.btn-warning`, `.btn-xs`, `.btn-sm`, `.btn-md`), loại bỏ hoàn toàn thuộc tính cố định chiều cao `height: 32px !important` gây lỗi chữ nhảy dòng bị đè và đè chữ lên nhau.
   - **Xử lý triệt để tình trạng Loading cản trở thao tác**: Bổ sung cơ chế chạy ngầm (Background Task Runner) với widget tiến trình nổi (`#floatingTaskWidget`). Người dùng có thể thu nhỏ hoặc đóng Modal tác vụ bất cứ lúc nào để tiếp tục duyệt phim, kiểm tra thư viện hoặc chuyển tab mà không bị khóa màn hình.

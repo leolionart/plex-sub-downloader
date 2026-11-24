@@ -271,8 +271,8 @@ async def test_library_ui_bulk_selection_controls(mock_service):
         # Floating bulk action bar
         assert 'id="bulkActionBar"' in html
         assert 'id="bulkSelectedCountBadge"' in html
-        assert "Tìm sub đã chọn" in html
-        assert "Dịch AI đã chọn" in html
+        assert 'onclick="triggerBatchUploadSelected()"' in html
+        assert 'onclick="triggerBatchTranslateSelected()"' in html
         # Toolbar select all
         assert 'id="btnSelectAllPage"' in html
         # Season bulk action handler

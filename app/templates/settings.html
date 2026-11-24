@@ -2,7 +2,7 @@
 
 {% block title %}Settings - Plex Subtitle Service{% endblock %}
 {% block nav_settings %}active{% endblock %}
-{% block page_title %}Settings{% endblock %}
+{% block page_title %}Cài đặt{% endblock %}
 {% block page_description %}Cấu hình subtitle download và xử lý tự động{% endblock %}
 
 {% block extra_styles %}
@@ -23,9 +23,15 @@
     }
 
     @media (max-width: 768px) {
+        /* Stats: 1 hàng 4 ô gọn thay vì 2x2 card lớn */
         .stats-grid {
-            grid-template-columns: repeat(2, 1fr) !important;
+            grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+            gap: 8px !important;
+            margin-bottom: 16px !important;
         }
+        .stats-grid .stat-card { padding: 10px 8px; text-align: center; }
+        .stats-grid .stat-card .stat-value { font-size: 18px; margin-bottom: 4px; }
+        .stats-grid .stat-card .stat-label { font-size: 10px; line-height: 1.2; }
         .setting-row {
             gap: 12px;
         }
@@ -135,7 +141,45 @@
         line-height: 1.4;
     }
 
+    .cfg-state {
+        display: inline-flex; align-items: center; gap: 4px;
+        margin-left: 8px; padding: 1px 7px; border-radius: 999px;
+        font-size: 10px; font-weight: 600; vertical-align: middle;
+        border: 1px solid var(--border-subtle); color: var(--text-muted);
+    }
+    .cfg-state.saved { color: var(--success); border-color: rgba(76, 175, 80, 0.35); background: rgba(76, 175, 80, 0.1); }
+    .cfg-state.changed { color: var(--plex-gold); border-color: rgba(229, 160, 13, 0.4); background: rgba(229, 160, 13, 0.1); }
+    .form-input.is-saved::placeholder { color: var(--text-secondary); letter-spacing: 0.5px; }
+    .form-input.is-saved { border-color: rgba(76, 175, 80, 0.35); }
+
+    .save-bar {
+        /* fixed thay vì sticky: các thẻ cha có overflow-x: hidden làm sticky mất tác dụng */
+        position: fixed;
+        bottom: 16px;
+        left: calc(var(--sidebar-width) + 32px);
+        right: 32px;
+        max-width: 720px;
+        margin: 0 auto;
+        z-index: 60;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 8px 8px 14px;
+        border-radius: 12px;
+        background: rgba(40, 40, 48, 0.96);
+        backdrop-filter: blur(12px);
+        border: 1px solid var(--plex-gold);
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+    }
+    .save-bar[hidden] { display: none; }
+    @media (max-width: 768px) {
+        .save-bar { left: 12px; right: 12px; bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
+    }
+
     .prompt-link {
+        display: inline-block;
+        padding: 6px 2px;
+        margin: -6px 0;
         color: var(--plex-gold);
         text-decoration: underline;
         text-underline-offset: 2px;
@@ -421,19 +465,19 @@
 <div class="stats-grid">
     <div class="stat-card">
         <div class="stat-value">{{ stats.total_downloads }}</div>
-        <div class="stat-label">Downloaded</div>
+        <div class="stat-label">Đã tải</div>
     </div>
     <div class="stat-card">
         <div class="stat-value">{{ stats.total_translations }}</div>
-        <div class="stat-label">AI Translated</div>
+        <div class="stat-label">Đã dịch AI</div>
     </div>
     <div class="stat-card">
         <div class="stat-value">{{ stats.total_syncs }}</div>
-        <div class="stat-label">Timing Synced</div>
+        <div class="stat-label">Đã sync</div>
     </div>
     <div class="stat-card">
         <div class="stat-value">{{ stats.success_rate }}%</div>
-        <div class="stat-label">Success Rate</div>
+        <div class="stat-label">Thành công</div>
     </div>
 </div>
 
@@ -442,10 +486,10 @@
     <!-- Target Languages — compact full-width -->
     <div class="card" style="margin-bottom: 20px; overflow: visible;">
         <div class="card-header">
-            <h2>Target Languages</h2>
+            <h2>Ngôn ngữ phụ đề</h2>
         </div>
         <div class="card-body">
-            <div class="setting-desc" style="margin-bottom: 10px;">Ngôn ngữ đầu tiên là primary — dùng cho download, dịch AI, và sync timing</div>
+            <div class="setting-desc" style="margin-bottom: 10px;">Ngôn ngữ đầu tiên là ngôn ngữ chính, dùng cho tải sub, dịch AI và sync timing</div>
             <div class="multi-select" id="language-select">
                 <div class="multi-select-trigger" id="language-trigger">
                     <span class="placeholder">Chọn ngôn ngữ...</span>
@@ -467,14 +511,14 @@
         <!-- Left: Download & Translation -->
         <div class="card">
             <div class="card-header">
-                <h2>Download & Translation</h2>
+                <h2>Tải &amp; dịch</h2>
             </div>
             <div class="card-body">
-                <div class="setting-section-label">Download Triggers</div>
+                <div class="setting-section-label">Khi nào tự tải</div>
 
                 <label class="setting-row" for="auto_download_on_add">
                     <div class="setting-info">
-                        <div class="setting-title">On media added</div>
+                        <div class="setting-title">Khi thêm media mới</div>
                         <div class="setting-desc">Tự động tải subtitle khi thêm phim/tập mới</div>
                     </div>
                     <div class="toggle-switch">
@@ -485,8 +529,8 @@
 
                 <label class="setting-row" for="auto_download_on_play">
                     <div class="setting-info">
-                        <div class="setting-title">On playback</div>
-                        <div class="setting-desc">Tải subtitle khi user bắt đầu xem (nếu chưa có)</div>
+                        <div class="setting-title">Khi bắt đầu phát</div>
+                        <div class="setting-desc">Tải subtitle khi bắt đầu xem (nếu chưa có)</div>
                     </div>
                     <div class="toggle-switch">
                         <input type="checkbox" id="auto_download_on_play" name="auto_download_on_play">
@@ -496,7 +540,7 @@
 
                 <div class="setting-row">
                     <div class="setting-info">
-                        <div class="setting-title">New Media Delay</div>
+                        <div class="setting-title">Chờ trước khi xử lý</div>
                         <div class="setting-desc">Chờ Plex index metadata trước khi xử lý</div>
                     </div>
                     <select id="new_media_delay_seconds" name="new_media_delay_seconds" class="form-select setting-select">
@@ -509,14 +553,14 @@
                     </select>
                 </div>
 
-                <div class="setting-section-label">AI Translation</div>
+                <div class="setting-section-label">Dịch AI</div>
 
                 <label class="setting-row" for="translation_enabled">
                     <div class="setting-info">
-                        <div class="setting-title">Auto Translate</div>
+                        <div class="setting-title">Tự dịch khi thiếu sub</div>
                         <div class="setting-desc">
-                            Dịch Engsub khi không tìm thấy target subtitle ·
-                            <a href="#" class="prompt-link" onclick="openPromptEditorFromLink('translation', event)">Edit prompt</a>
+                            Dịch từ Engsub khi không tìm thấy sub ngôn ngữ chính ·
+                            <a href="#" class="prompt-link" onclick="openPromptEditorFromLink('translation', event)">Sửa prompt</a>
                         </div>
                     </div>
                     <div class="toggle-switch">
@@ -527,8 +571,8 @@
 
                 <div class="setting-row">
                     <div class="setting-info">
-                        <div class="setting-title">Parallel Batches</div>
-                        <div class="setting-desc">Batch dịch đồng thời (tăng = nhanh hơn)</div>
+                        <div class="setting-title">Số batch song song</div>
+                        <div class="setting-desc">Tăng để dịch nhanh hơn (tốn quota hơn)</div>
                     </div>
                     <input type="number" id="translation_batch_concurrency" name="translation_batch_concurrency"
                            class="form-input setting-number" min="1" max="20" value="5">
@@ -539,17 +583,17 @@
         <!-- Right: Processing & Filters -->
         <div class="card">
             <div class="card-header">
-                <h2>Processing & Filters</h2>
+                <h2>Xử lý &amp; bộ lọc</h2>
             </div>
             <div class="card-body">
-                <div class="setting-section-label">Post-Download</div>
+                <div class="setting-section-label">Sau khi tải</div>
 
                 <label class="setting-row" for="auto_sync_timing">
                     <div class="setting-info">
-                        <div class="setting-title">Auto Sync Timing</div>
+                        <div class="setting-title">Tự sync timing</div>
                         <div class="setting-desc">
                             Tự động sync timing sau khi download subtitle ·
-                            <a href="#" class="prompt-link" onclick="openPromptEditorFromLink('sync', event)">Edit prompt</a>
+                            <a href="#" class="prompt-link" onclick="openPromptEditorFromLink('sync', event)">Sửa prompt</a>
                         </div>
                     </div>
                     <div class="toggle-switch">
@@ -560,21 +604,21 @@
 
                 <div class="setting-row">
                     <div class="setting-info">
-                        <div class="setting-title">Minimum Quality</div>
-                        <div class="setting-desc">Chỉ download từ mức chất lượng này trở lên</div>
+                        <div class="setting-title">Chất lượng tối thiểu</div>
+                        <div class="setting-desc">Chỉ tải sub từ mức chất lượng này trở lên</div>
                     </div>
                     <select id="min_quality_threshold" name="min_quality_threshold" class="form-select setting-select">
-                        <option value="any">Any quality</option>
-                        <option value="translated" selected>Translated+</option>
-                        <option value="retail">Retail only</option>
+                        <option value="any">Mọi chất lượng</option>
+                        <option value="translated" selected>Bản dịch trở lên</option>
+                        <option value="retail">Chỉ retail</option>
                     </select>
                 </div>
 
-                <div class="setting-section-label">Duplicate Prevention</div>
+                <div class="setting-section-label">Tránh trùng lặp</div>
 
                 <label class="setting-row" for="skip_if_has_subtitle">
                     <div class="setting-info">
-                        <div class="setting-title">Skip if subtitle exists</div>
+                        <div class="setting-title">Bỏ qua nếu đã có sub</div>
                         <div class="setting-desc">Bỏ qua nếu đã có subtitle cùng ngôn ngữ</div>
                     </div>
                     <div class="toggle-switch">
@@ -585,8 +629,8 @@
 
                 <label class="setting-row" for="replace_existing">
                     <div class="setting-info">
-                        <div class="setting-title">Replace existing subtitles</div>
-                        <div class="setting-desc">Thay subtitle cũ bằng bản mới nếu quality tốt hơn</div>
+                        <div class="setting-title">Thay sub bằng bản tốt hơn</div>
+                        <div class="setting-desc">Chỉ chạy khi thêm media mới; im lặng trừ khi thay thành công</div>
                     </div>
                     <div class="toggle-switch">
                         <input type="checkbox" id="replace_existing" name="replace_existing">
@@ -596,8 +640,8 @@
 
                 <label class="setting-row" for="skip_forced_subtitles">
                     <div class="setting-info">
-                        <div class="setting-title">Skip forced subtitles</div>
-                        <div class="setting-desc">Không download nếu đã có forced subtitle</div>
+                        <div class="setting-title">Bỏ qua nếu có forced sub</div>
+                        <div class="setting-desc">Không tải nếu đã có forced subtitle</div>
                     </div>
                     <div class="toggle-switch">
                         <input type="checkbox" id="skip_forced_subtitles" name="skip_forced_subtitles" checked>
@@ -607,8 +651,8 @@
 
                 <label class="setting-row" for="skip_if_embedded">
                     <div class="setting-info">
-                        <div class="setting-title">Skip embedded subtitles</div>
-                        <div class="setting-desc">Không download nếu có embedded sub (PGS, VobSub)</div>
+                        <div class="setting-title">Bỏ qua nếu có sub nhúng</div>
+                        <div class="setting-desc">Không tải nếu file đã có sub nhúng (PGS, VobSub...)</div>
                     </div>
                     <div class="toggle-switch">
                         <input type="checkbox" id="skip_if_embedded" name="skip_if_embedded" checked>
@@ -624,36 +668,31 @@
 
     <div id="prompt-modal" class="prompt-modal" onclick="onPromptModalBackdrop(event)">
         <div class="prompt-modal-dialog">
-            <div class="prompt-modal-header" id="prompt-modal-title">Edit Prompt</div>
+            <div class="prompt-modal-header" id="prompt-modal-title">Sửa prompt</div>
             <div class="prompt-modal-body">
                 <div class="setting-desc" id="prompt-modal-hint" style="margin-bottom: 10px;"></div>
                 <textarea id="prompt-modal-textarea" class="form-input setting-textarea"></textarea>
             </div>
             <div class="prompt-modal-footer">
-                <button type="button" class="btn btn-ghost" onclick="closePromptEditor()">Cancel</button>
-                <button type="button" class="btn btn-primary" onclick="savePromptEditor()">Save prompt</button>
+                <button type="button" class="btn btn-ghost" onclick="closePromptEditor()">Huỷ</button>
+                <button type="button" class="btn btn-primary" onclick="savePromptEditor()">Áp dụng</button>
             </div>
         </div>
     </div>
 
-    <!-- Actions -->
-    <div class="btn-group" style="margin-top: 20px;">
-        <button type="submit" class="btn btn-primary">Save Settings</button>
-        <button type="button" class="btn btn-ghost" onclick="loadSettings()">Reset</button>
-    </div>
 </form>
 
 <!-- Unified service configuration (migrated from Setup) -->
 <section class="card" id="service-configuration" style="margin-top:24px;">
-    <div class="card-header"><h2>Service Configuration</h2><span id="plex-status" class="status-badge missing">Not configured</span></div>
+    <div class="card-header"><h2>Kết nối dịch vụ</h2><div class="flex items-center gap-2"><span id="plex-status" class="status-badge missing">Chưa cấu hình</span><button type="button" id="btn-reload-config" class="btn btn-sm btn-icon btn-ghost" title="Tải lại từ file config trên đĩa" aria-label="Tải lại cấu hình từ file"><i class="fa-solid fa-rotate"></i></button></div></div>
     <div class="card-body">
-        <div class="setting-section-label">Plex Connection</div>
-        <div class="btn-group" style="margin-bottom:12px;"><button type="button" id="btn-plex-pin" class="btn btn-secondary">Login with Plex</button><span id="pin-info" class="setting-desc"></span></div>
+        <div class="setting-section-label">Plex</div>
+        <div class="btn-group" style="margin-bottom:12px;"><button type="button" id="btn-plex-pin" class="btn btn-secondary">Đăng nhập bằng Plex</button><span id="pin-info" class="setting-desc"></span></div>
         <div class="form-row">
             <div class="form-group"><label for="plex_url">Plex URL</label><input id="plex_url" class="form-input" placeholder="http://localhost:32400"></div>
             <div class="form-group"><label for="plex_token">Plex Token</label><input id="plex_token" class="form-input" placeholder="token" type="password"></div>
         </div>
-        <div class="setting-section-label">Subtitle Providers</div>
+        <div class="setting-section-label">Nguồn phụ đề</div>
         <div class="form-row">
             <div class="form-group"><label for="subsource_api_key">Subsource API Key</label><input id="subsource_api_key" class="form-input" type="password"></div>
             <div class="form-group"><label for="opensubtitles_api_key">OpenSubtitles API Key</label><input id="opensubtitles_api_key" class="form-input" type="password"></div>
@@ -665,24 +704,33 @@
             <div class="form-group"><label for="opensubtitles_base_url">OpenSubtitles Base URL</label><input id="opensubtitles_base_url" class="form-input"></div>
             <div class="form-group"><label for="subdl_base_url">SubDL Base URL</label><input id="subdl_base_url" class="form-input"></div>
         </div>
-        <div class="setting-section-label">OpenAI Translation</div>
+        <div class="setting-section-label">Dịch AI (OpenAI)</div>
         <div class="form-row">
             <div class="form-group"><label for="openai_api_key">OpenAI API Key</label><input id="openai_api_key" class="form-input" type="password"></div>
             <div class="form-group"><label for="openai_model">OpenAI Model</label><input id="openai_model" class="form-input"></div>
             <div class="form-group"><label for="openai_base_url">OpenAI Base URL</label><input id="openai_base_url" class="form-input"></div>
         </div>
-        <div class="setting-section-label">Notifications & Cache</div>
+        <div class="setting-section-label">Thông báo &amp; cache</div>
         <div class="form-row">
             <div class="form-group"><label for="webhook_secret">Webhook Secret</label><input id="webhook_secret" class="form-input" type="password"></div>
             <div class="form-group"><label for="telegram_bot_token">Telegram Bot Token</label><input id="telegram_bot_token" class="form-input" type="password"></div>
             <div class="form-group"><label for="telegram_chat_id">Telegram Chat ID</label><input id="telegram_chat_id" class="form-input"></div>
             <div class="form-group"><label for="redis_url">Redis URL</label><input id="redis_url" class="form-input"></div>
-            <div class="form-group"><label for="cache_ttl_seconds">Cache TTL (seconds)</label><input id="cache_ttl_seconds" class="form-input" type="number" value="3600"></div>
-            <div class="form-group"><label for="cache_enabled">Enable cache</label><select id="cache_enabled" class="form-select"><option value="true">On</option><option value="false">Off</option></select></div>
+            <div class="form-group"><label for="cache_ttl_seconds">Cache TTL (giây)</label><input id="cache_ttl_seconds" class="form-input" type="number" value="3600"></div>
+            <div class="form-group"><label for="cache_enabled">Cache</label><select id="cache_enabled" class="form-select"><option value="true">Bật</option><option value="false">Tắt</option></select></div>
         </div>
-        <div class="btn-group" style="margin-top:14px;"><button type="button" id="btn-save-config" class="btn btn-primary">Save Configuration</button><button type="button" id="btn-reload-config" class="btn btn-ghost">Reload from Disk</button></div>
     </div>
 </section>
+
+<!-- Thanh lưu chung: chỉ hiện khi có thay đổi chưa lưu -->
+<div style="height: 72px;" aria-hidden="true"></div>
+<div id="save-bar" class="save-bar" role="region" aria-label="Lưu thay đổi" hidden>
+    <span class="text-xs text-text-secondary"><i class="fa-solid fa-circle text-plex-gold" style="font-size:7px;vertical-align:middle;"></i> Có thay đổi chưa lưu</span>
+    <div class="flex items-center gap-2 ml-auto">
+        <button type="button" class="btn btn-sm btn-ghost" id="btn-discard">Huỷ</button>
+        <button type="button" class="btn btn-sm btn-primary" id="btn-save-all"><i class="fa-solid fa-floppy-disk"></i><span>Lưu</span></button>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -715,12 +763,12 @@
     function openPromptEditor(type) {
         if (type === 'translation') {
             activePromptField = 'translation_system_prompt_template';
-            promptModalTitle.textContent = 'Translation System Prompt Template';
+            promptModalTitle.textContent = 'Prompt dịch AI';
             promptModalHint.textContent = 'Hỗ trợ placeholders: {from_lang}, {to_lang}, {count}';
         } else {
             activePromptField = 'sync_system_prompt_template';
-            promptModalTitle.textContent = 'Sync System Prompt Template';
-            promptModalHint.textContent = 'Prompt dùng để AI match Vietnamese entries với English entries';
+            promptModalTitle.textContent = 'Prompt sync timing';
+            promptModalHint.textContent = 'Prompt để AI ghép câu phụ đề đích với câu phụ đề nguồn';
         }
 
         const field = document.getElementById(activePromptField);
@@ -739,6 +787,7 @@
         const field = document.getElementById(activePromptField);
         if (field) {
             field.value = promptModalTextarea.value;
+            if (typeof markDirty === 'function') markDirty('settings');
         }
         closePromptEditor();
     }
@@ -758,6 +807,7 @@
     }
 
     function toggleLanguage(code) {
+        if (typeof markDirty === 'function') markDirty('settings');
         if (isSelected(code)) {
             selectedLanguages = selectedLanguages.filter(c => c !== code);
         } else {
@@ -769,6 +819,7 @@
 
     function removeLanguage(code, event) {
         if (event) { event.stopPropagation(); event.preventDefault(); }
+        if (typeof markDirty === 'function') markDirty('settings');
         selectedLanguages = selectedLanguages.filter(c => c !== code);
         updateTrigger();
         renderOptions(searchEl.value);
@@ -787,7 +838,7 @@
                 const tag = document.createElement('span');
                 tag.className = 'lang-tag' + (i === 0 ? ' primary' : '');
                 const name = LANGUAGES[code] ? cap(LANGUAGES[code]) : code.toUpperCase();
-                tag.innerHTML = `<span class="tag-label">${name}</span><span class="tag-remove" title="Remove">&#10005;</span>`;
+                tag.innerHTML = `<span class="tag-label">${name}</span><span class="tag-remove" title="Bỏ">&#10005;</span>`;
                 tag.querySelector('.tag-remove').addEventListener('click', (e) => removeLanguage(code, e));
                 triggerEl.insertBefore(tag, chevron);
             });
@@ -881,19 +932,52 @@
             document.getElementById('translation_system_prompt_template').value = settings.translation_system_prompt_template ?? '';
             document.getElementById('sync_system_prompt_template').value = settings.sync_system_prompt_template ?? '';
         } catch (error) {
-            showAlert('Error loading settings: ' + error.message, 'error');
+            showAlert('Lỗi tải cài đặt: ' + error.message, 'error');
         }
     }
 
-    document.getElementById('settings-form').addEventListener('submit', async (e) => {
-        e.preventDefault();
+    // ── Dirty tracking + thanh lưu chung ──────────────────
+    const dirty = { settings: false, config: false };
+    const saveBar = document.getElementById('save-bar');
+    function refreshSaveBar() { saveBar.hidden = !(dirty.settings || dirty.config); }
+    function markDirty(part) { dirty[part] = true; refreshSaveBar(); }
+    const settingsFormEl = document.getElementById('settings-form');
+    ['input', 'change'].forEach(evt => {
+        settingsFormEl.addEventListener(evt, (e) => { if (e.target.id !== 'language-search') markDirty('settings'); });
+        document.getElementById('service-configuration').addEventListener(evt, () => markDirty('config'));
+    });
+    settingsFormEl.addEventListener('submit', (e) => { e.preventDefault(); saveAll(); });
 
+    async function saveAll() {
+        const btn = document.getElementById('btn-save-all');
+        btn.disabled = true;
+        let ok = true;
+        try {
+            if (dirty.settings) ok = (await saveSettings()) && ok;
+            if (dirty.config) ok = (await saveConfig()) && ok;
+        } finally {
+            btn.disabled = false;
+            refreshSaveBar();
+        }
+        if (ok) showAlert('Đã lưu thay đổi', 'success');
+    }
+    document.getElementById('btn-save-all').addEventListener('click', saveAll);
+    document.getElementById('btn-discard').addEventListener('click', async () => {
+        await Promise.all([loadSettings(), loadConfig()]);
+        dirty.settings = dirty.config = false;
+        refreshSaveBar();
+    });
+    window.addEventListener('beforeunload', (e) => {
+        if (dirty.settings || dirty.config) { e.preventDefault(); e.returnValue = ''; }
+    });
+
+    async function saveSettings() {
         if (selectedLanguages.length === 0) {
             showAlert('Vui lòng chọn ít nhất một ngôn ngữ', 'error');
-            return;
+            return false;
         }
 
-        const formData = new FormData(e.target);
+        const formData = new FormData(settingsFormEl);
         const payload = {
             default_language: selectedLanguages[0],
             languages: selectedLanguages,
@@ -921,15 +1005,17 @@
                 body: JSON.stringify(payload)
             });
 
-            if (response.ok) {
-                showAlert('Settings saved successfully!', 'success');
-            } else {
-                showAlert('Failed to save settings', 'error');
+            if (!response.ok) {
+                showAlert('Lưu cài đặt thất bại', 'error');
+                return false;
             }
+            dirty.settings = false;
+            return true;
         } catch (error) {
-            showAlert('Error: ' + error.message, 'error');
+            showAlert('Lỗi: ' + error.message, 'error');
+            return false;
         }
-    });
+    }
 
     loadSettings();
 
@@ -938,25 +1024,57 @@
     const cfgSecrets = ['plex_token','subsource_api_key','opensubtitles_api_key','opensubtitles_password','subdl_api_key','openai_api_key','webhook_secret','telegram_bot_token'];
     const cfgDirty = {};
     cfgSecrets.forEach(id => cfg$(id)?.addEventListener('input', () => { cfgDirty[id] = true; }));
+    const cfgPlain = ['plex_url','opensubtitles_username','opensubtitles_base_url','subdl_base_url','openai_model','openai_base_url','telegram_chat_id','redis_url'];
+    function setCfgState(id, state) {
+        const label = document.querySelector(`label[for="${id}"]`); if (!label) return;
+        let pill = label.querySelector('.cfg-state');
+        if (!pill) { pill = document.createElement('span'); label.appendChild(pill); }
+        pill.className = 'cfg-state ' + state;
+        pill.innerHTML = state === 'saved' ? '<i class="fa-solid fa-check"></i> Đã lưu'
+                       : state === 'changed' ? '<i class="fa-solid fa-pen"></i> Sẽ thay'
+                       : 'Chưa có';
+    }
+    cfgSecrets.forEach(id => cfg$(id)?.addEventListener('input', (e) => {
+        const el = e.target;
+        setCfgState(id, el.value ? 'changed' : (el.classList.contains('is-saved') ? 'saved' : 'missing'));
+    }));
     async function loadConfig() {
         const res = await fetch('/api/setup/config'); if (!res.ok) return;
         const d = await res.json();
         const fill = (id,v) => { const e=cfg$(id); if(e) e.value = v ?? ''; };
         ['plex_url','opensubtitles_username','opensubtitles_base_url','subdl_base_url','openai_model','openai_base_url','telegram_chat_id','redis_url','cache_ttl_seconds'].forEach(id=>fill(id,d[id]));
-        cfgSecrets.forEach(id => { const v=d[id]; fill(id, v==='***'?'':v||''); cfgDirty[id]=false; });
+        // Secret không bao giờ trả về giá trị thật (chỉ '***' = đã lưu, null = chưa có):
+        // để trống input nhưng hiển thị rõ trạng thái để người dùng biết đã cấu hình hay chưa.
+        cfgSecrets.forEach(id => {
+            const saved = d[id] === '***';
+            fill(id, '');
+            cfgDirty[id] = false;
+            const el = cfg$(id); if (!el) return;
+            el.placeholder = saved ? '•••••••• (đã lưu, nhập để thay)' : 'Chưa cấu hình';
+            el.classList.toggle('is-saved', saved);
+            setCfgState(id, saved ? 'saved' : 'missing');
+        });
+        // Field thường: đánh dấu ô trống để không bị nhầm là lỗi hiển thị
+        cfgPlain.forEach(id => {
+            const el = cfg$(id); if (!el) return;
+            if (!el.dataset.ph) el.dataset.ph = el.getAttribute('placeholder') || '';
+            el.placeholder = el.dataset.ph || 'Chưa cấu hình (tuỳ chọn)';
+        });
         if (cfg$('cache_enabled')) cfg$('cache_enabled').value=String(d.cache_enabled ?? true);
         const ok = !!(d.plex_url && d.plex_token && (d.subsource_api_key || d.opensubtitles_api_key || d.subdl_api_key));
-        const st=cfg$('plex-status'); if(st){ st.className='status-badge '+(ok?'ok':'missing'); st.textContent=ok?'Connected':'Not configured'; }
+        const st=cfg$('plex-status'); if(st){ st.className='status-badge '+(ok?'ok':'missing'); st.textContent=ok?'Đã kết nối':'Chưa cấu hình'; }
     }
     async function saveConfig() {
         const p={plex_url:cfg$('plex_url').value.trim()||null, opensubtitles_username:cfg$('opensubtitles_username').value.trim()||null, opensubtitles_base_url:cfg$('opensubtitles_base_url').value.trim(), subdl_base_url:cfg$('subdl_base_url').value.trim(), openai_model:cfg$('openai_model').value.trim()||'gpt-4o-mini', openai_base_url:cfg$('openai_base_url').value.trim(), telegram_chat_id:cfg$('telegram_chat_id').value.trim()||null, redis_url:cfg$('redis_url').value.trim()||null, cache_ttl_seconds:Number(cfg$('cache_ttl_seconds').value)||3600, cache_enabled:cfg$('cache_enabled').value==='true'};
         cfgSecrets.forEach(id=>{if(cfgDirty[id]) p[id]=cfg$(id).value.trim()||null;});
         const r=await fetch('/api/setup/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});
-        showAlert(r.ok?'Configuration saved successfully':'Failed to save configuration',r.ok?'success':'error'); if(r.ok) await loadConfig();
+        if (!r.ok) { showAlert('Lưu kết nối dịch vụ thất bại', 'error'); return false; }
+        dirty.config = false;
+        await loadConfig();
+        return true;
     }
-    cfg$('btn-save-config')?.addEventListener('click', saveConfig);
-    cfg$('btn-reload-config')?.addEventListener('click', async()=>{const r=await fetch('/api/setup/reload',{method:'POST'}); showAlert(r.ok?'Config reloaded from disk':'Failed to reload config',r.ok?'success':'error'); if(r.ok) await loadConfig();});
-    cfg$('btn-plex-pin')?.addEventListener('click', async()=>{ const r=await fetch('/api/setup/plex/pin',{method:'POST'}); if(!r.ok)return showAlert('PIN request failed','error'); const d=await r.json(); cfg$('pin-info').textContent=`Code: ${d.code}`; if(d.verification_url) window.open(d.verification_url,'_blank'); });
+    cfg$('btn-reload-config')?.addEventListener('click', async()=>{const r=await fetch('/api/setup/reload',{method:'POST'}); showAlert(r.ok?'Đã tải lại cấu hình từ file':'Tải lại cấu hình thất bại',r.ok?'success':'error'); if(r.ok){ await loadConfig(); dirty.config=false; refreshSaveBar(); }});
+    cfg$('btn-plex-pin')?.addEventListener('click', async()=>{ const r=await fetch('/api/setup/plex/pin',{method:'POST'}); if(!r.ok)return showAlert('Không lấy được mã PIN Plex','error'); const d=await r.json(); cfg$('pin-info').textContent=`Code: ${d.code}`; if(d.verification_url) window.open(d.verification_url,'_blank'); });
     loadConfig();
 </script>
 {% endblock %}

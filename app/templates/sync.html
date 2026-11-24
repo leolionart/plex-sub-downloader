@@ -2,11 +2,31 @@
 
 {% block title %}Subtitle Workspace - Plex Subtitle Service{% endblock %}
 {% block nav_workspace %}active{% endblock %}
-{% block page_title %}Subtitle Workspace{% endblock %}
+{% block page_title %}Xử lý phụ đề{% endblock %}
 {% block page_description %}Tìm, dịch và đồng bộ subtitle trong một màn hình{% endblock %}
 
 {% block extra_styles %}
 <style>
+    .status-chip {
+        display: inline-flex; align-items: center; gap: 5px;
+        height: 24px; padding: 0 8px; border-radius: 999px;
+        background: var(--bg-input); border: 1px solid var(--border-subtle);
+        color: var(--text-secondary); font-weight: 600; white-space: nowrap;
+        max-width: 160px; overflow: hidden; text-overflow: ellipsis;
+    }
+    .status-chip.is-on { color: var(--success); border-color: rgba(76, 175, 80, 0.35); }
+    .ws-input { height: 40px; }
+    .ws-btn { min-height: 40px !important; }
+    .ws-btn i { margin: 0 !important; }
+    @media (max-width: 640px) { .ws-btn-icon-sm { width: 40px !important; padding: 0 !important; } }
+    details > summary { list-style: none; }
+    details > summary::-webkit-details-marker { display: none; }
+    details > summary::after {
+        content: '\f078'; font-family: 'Font Awesome 6 Free'; font-weight: 900;
+        font-size: 10px; margin-left: auto; transition: transform .2s; color: var(--text-muted);
+    }
+    .ws-options > summary::after { margin-left: 4px; }
+    details[open] > summary::after { transform: rotate(180deg); }
     /* ── Specialized Media Cards for Now Playing ── */
     .media-card-grid {
         display: grid;
@@ -100,6 +120,10 @@
         border-bottom: 1px solid var(--border-subtle);
         vertical-align: middle;
     }
+    @media (max-width: 640px) {
+        .history-table .col-opt { display: none; }
+        .history-table th, .history-table td { padding: 10px 12px; }
+    }
     .history-table tr:last-child td {
         border-bottom: none;
     }
@@ -158,81 +182,59 @@
 {% endblock %}
 
 {% block content %}
-<!-- Status Banner -->
-<div id="sync-status-banner" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-    <div class="stat-card bg-bg-surface border border-border-subtle rounded-xl p-4 flex flex-col justify-center">
-        <div class="stat-value text-2xl font-bold" id="stat-enabled">--</div>
-        <div class="stat-label text-xs uppercase text-text-muted font-medium tracking-wide mt-1">Auto Sync</div>
-    </div>
-    <div class="stat-card bg-bg-surface border border-border-subtle rounded-xl p-4 flex flex-col justify-center">
-        <div class="stat-value text-base font-bold text-text-primary" id="stat-model">--</div>
-        <div class="stat-label text-xs uppercase text-text-muted font-medium tracking-wide mt-1">AI Model</div>
-    </div>
-</div>
-
-<!-- Now Playing -->
-<div id="now-playing-section" style="display: none;" class="mb-6">
-    <div class="bg-bg-surface border border-border-subtle rounded-xl p-5 shadow-sm">
-        <div class="flex items-center justify-between mb-1">
-            <h3 class="text-base font-semibold text-text-primary">Now Playing</h3>
+<!-- Now Playing (chỉ hiện khi có phiên đang phát) -->
+<div id="now-playing-section" style="display: none;" class="mb-4">
+    <div class="bg-bg-surface border border-border-subtle rounded-xl p-4 shadow-sm">
+        <div class="flex items-center gap-2 mb-3">
+            <h3 class="text-sm font-semibold text-text-primary m-0">Đang phát</h3>
             <span class="badge badge-warning badge-sm font-semibold">Live</span>
         </div>
-        <p class="text-xs text-text-muted mb-4">Chọn phim đang xem để kiểm tra và xử lý subtitle</p>
         <div id="now-playing-cards" class="media-card-grid"></div>
     </div>
 </div>
 
-
 <!-- Main Subtitle Action Form -->
-<div class="bg-bg-surface border border-border-subtle rounded-xl p-5 mb-6 shadow-sm" id="subtitle-action-form">
-    <h3 class="text-base font-semibold text-text-primary mb-1">Tìm và xử lý subtitle</h3>
-    <p class="text-xs text-text-muted mb-4">
-        Paste Plex share link, web URL, hoặc nhập rating key. Nếu kết quả chưa đúng, dùng tìm thủ công; mọi thao tác dịch, sync và upload đều thực hiện ngay trong kết quả.
-    </p>
-
-    <div class="flex flex-col md:flex-row gap-3 items-stretch md:items-end">
-        <div class="form-control flex-1">
-            <label class="label py-1" for="rating-key">
-                <span class="label-text text-xs font-medium text-text-secondary">Rating Key hoặc Plex Link</span>
-            </label>
-            <input type="text" id="rating-key" class="input input-bordered input-sm md:input-md w-full bg-bg-input border-border-subtle focus:border-plex-gold text-sm" placeholder="12345 hoặc https://l.plex.tv/...">
-        </div>
-        <div class="form-control flex-1">
-            <label class="label py-1" for="manual-video-filename">
-                <span class="label-text text-xs font-medium text-text-secondary">Tên file video <span class="text-text-muted">(tuỳ chọn)</span></span>
-            </label>
-            <input type="text" id="manual-video-filename" class="input input-bordered input-sm md:input-md w-full bg-bg-input border-border-subtle focus:border-plex-gold text-sm" placeholder="Show.S01E02.1080p.WEB-DL.mkv">
-        </div>
-        <div class="flex flex-col sm:flex-row gap-2 shrink-0 pt-1 md:pt-0 w-full md:w-auto">
-            <button class="btn btn-primary btn-sm md:btn-md gap-2 whitespace-nowrap flex-1 sm:flex-none" onclick="previewSync()" id="btn-preview"><i class="fa-solid fa-eye"></i><span>Preview</span></button>
-            <button class="btn btn-secondary btn-sm md:btn-md gap-2 whitespace-nowrap flex-1 sm:flex-none" onclick="manualSearch()" id="btn-manual-search" title="Tìm lại từ provider, bỏ qua cache">
-                <i class="fa-solid fa-magnifying-glass"></i><span>Tìm sub thủ công</span>
-            </button>
+<div class="bg-bg-surface border border-border-subtle rounded-xl p-4 sm:p-5 mb-4 shadow-sm" id="subtitle-action-form">
+    <div class="flex items-center justify-between gap-2 mb-3">
+        <h3 class="text-base font-semibold text-text-primary m-0">Tìm và xử lý subtitle</h3>
+        <!-- Status chips (thay cho 2 stat card cũ) -->
+        <div id="sync-status-banner" class="flex items-center gap-1.5 shrink-0 text-xs">
+            <span class="status-chip" title="Auto sync timing"><i class="fa-solid fa-wave-square"></i><span id="stat-enabled">--</span></span>
+            <span class="status-chip hidden sm:inline-flex" title="AI model"><i class="fa-solid fa-microchip"></i><span id="stat-model">--</span></span>
         </div>
     </div>
 
-    <!-- Pronoun Override Input -->
-    <div class="mt-3 flex flex-col md:flex-row gap-2 items-center">
-        <label class="label py-0 shrink-0" for="manual-pronoun-override">
-            <span class="label-text text-xs font-medium text-text-secondary flex items-center gap-1.5">
-                <i class="fa-solid fa-user-group text-warning text-xs"></i>
-                <span>Xưng hô AI (tuỳ chọn):</span>
-            </span>
-        </label>
-        <input type="text" id="manual-pronoun-override" class="input input-bordered input-xs md:input-sm flex-1 w-full bg-bg-input border-border-subtle focus:border-plex-gold text-xs" placeholder="Ghi đè xưng hô nhân vật (VD: John - Mary: anh - em; Boss: sếp)">
+    <label class="sr-only" for="rating-key">Rating Key hoặc Plex Link</label>
+    <div class="flex items-center gap-2">
+        <input type="text" id="rating-key" class="input input-bordered w-full bg-bg-input border-border-subtle focus:border-plex-gold text-sm ws-input" placeholder="Rating key hoặc link Plex (l.plex.tv/...)" enterkeyhint="go" onkeydown="if(event.key==='Enter')previewSync()">
+        <button class="btn btn-primary whitespace-nowrap shrink-0 ws-btn" onclick="previewSync()" id="btn-preview" title="Kiểm tra subtitle trên Plex và provider"><i class="fa-solid fa-eye"></i><span>Kiểm tra</span></button>
+        <button class="btn btn-secondary whitespace-nowrap shrink-0 ws-btn ws-btn-icon-sm" onclick="manualSearch()" id="btn-manual-search" title="Tìm lại từ provider, bỏ qua cache" aria-label="Tìm lại từ provider, bỏ qua cache">
+            <i class="fa-solid fa-magnifying-glass"></i><span class="hidden sm:inline">Tìm thủ công</span>
+        </button>
     </div>
+
+    <!-- Tuỳ chọn ít dùng: gom vào disclosure để form gọn -->
+    <details class="ws-options mt-3">
+        <summary class="text-xs text-text-secondary cursor-pointer select-none flex items-center gap-1.5">
+            <i class="fa-solid fa-sliders"></i><span>Tuỳ chọn: tên file, xưng hô AI</span>
+        </summary>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
+            <div>
+                <label class="text-xs text-text-muted mb-1 block" for="manual-video-filename">Tên file video</label>
+                <input type="text" id="manual-video-filename" class="input input-bordered input-sm w-full bg-bg-input border-border-subtle focus:border-plex-gold text-xs" placeholder="Show.S01E02.1080p.WEB-DL.mkv">
+            </div>
+            <div>
+                <label class="text-xs text-text-muted mb-1 block" for="manual-pronoun-override">Xưng hô AI</label>
+                <input type="text" id="manual-pronoun-override" class="input input-bordered input-sm w-full bg-bg-input border-border-subtle focus:border-plex-gold text-xs" placeholder="VD: John - Mary: anh - em; Boss: sếp">
+            </div>
+        </div>
+    </details>
 
     <!-- Auto-fallback Toggle -->
-    <div class="mt-4 pt-3 border-t border-border-subtle flex flex-wrap items-center justify-between gap-3">
-        <label class="cursor-pointer label p-0 flex items-center gap-2.5">
-            <input type="checkbox" id="auto-fallback-toggle" class="toggle toggle-warning toggle-sm">
-            <span class="label-text text-xs font-medium text-text-primary">Tự động fallback dịch AI khi không tìm thấy Vietsub</span>
-        </label>
-        <div class="text-xs text-text-muted flex items-center gap-1.5">
-            <span class="badge badge-xs badge-ghost">AI Fallback</span>
-            <span>Tự kích hoạt dịch nếu thiếu Vietsub</span>
-        </div>
-    </div>
+    <label class="mt-3 pt-3 border-t border-border-subtle cursor-pointer flex items-center justify-between gap-3">
+        <span class="text-xs font-medium text-text-primary">Tự dịch AI khi không tìm thấy Vietsub</span>
+        <input type="checkbox" id="auto-fallback-toggle" class="toggle toggle-warning toggle-sm">
+    </label>
 
     <!-- Progress Bar -->
     <div class="progress-bar-container mt-4" id="progress-container" style="display: none;">
@@ -241,7 +243,7 @@
         </div>
         <p class="text-xs text-text-muted mt-2 flex items-center gap-2" id="progress-label">
             <span class="loading loading-spinner loading-xs text-warning"></span>
-            <span>Processing...</span>
+            <span>Đang xử lý...</span>
         </p>
     </div>
 </div>
@@ -249,50 +251,34 @@
 <!-- Preview / Results Area -->
 <div id="results-area"></div>
 
-<!-- How it works -->
-<div class="bg-bg-surface border border-border-subtle rounded-xl p-5 mb-6 shadow-sm">
-    <h3 class="text-base font-semibold text-text-primary mb-3">Cách hoạt động</h3>
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div class="flex gap-3 items-start p-3 bg-bg-input rounded-lg">
-            <span class="w-6 h-6 rounded-full bg-plex-gold/20 text-plex-gold font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">1</span>
-            <div class="text-xs text-text-secondary leading-relaxed">
-                <b class="text-text-primary block mb-0.5">Tìm kiếm</b>
-                Preview trước để kiểm tra subtitle trên Plex và các provider; dùng “Tìm sub thủ công” để bỏ qua cache khi kết quả tự động chưa đúng.
-            </div>
-        </div>
-        <div class="flex gap-3 items-start p-3 bg-bg-input rounded-lg">
-            <span class="w-6 h-6 rounded-full bg-plex-gold/20 text-plex-gold font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">2</span>
-            <div class="text-xs text-text-secondary leading-relaxed">
-                <b class="text-text-primary block mb-0.5">Dịch (khi thiếu Vietsub)</b>
-                Nếu đã có source nhưng chưa có Vietsub, nút AI Translate sẽ xuất hiện. Nếu bật Fallback AI, hệ thống sẽ tự động dịch.
-            </div>
-        </div>
-        <div class="flex gap-3 items-start p-3 bg-bg-input rounded-lg">
-            <span class="w-6 h-6 rounded-full bg-plex-gold/20 text-plex-gold font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">3</span>
-            <div class="text-xs text-text-secondary leading-relaxed">
-                <b class="text-text-primary block mb-0.5">Sync timing</b>
-                Khi đã có đủ source + Vietsub, chọn Sync Timing để căn chỉnh khớp từng mili-giây rồi upload kết quả lên Plex.
-            </div>
-        </div>
-    </div>
-</div>
+<!-- How it works (thu gọn mặc định) -->
+<details class="bg-bg-surface border border-border-subtle rounded-xl mb-4 shadow-sm ws-help">
+    <summary class="px-4 py-3 text-sm font-semibold text-text-primary cursor-pointer select-none flex items-center gap-2">
+        <i class="fa-regular fa-circle-question text-text-muted"></i><span>Cách hoạt động</span>
+    </summary>
+    <ol class="px-4 pb-4 m-0 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-text-secondary leading-relaxed list-none">
+        <li class="p-3 bg-bg-input rounded-lg"><b class="text-text-primary block mb-0.5">1. Kiểm tra</b>Xem subtitle có sẵn trên Plex và provider. “Tìm thủ công” bỏ qua cache khi kết quả chưa đúng.</li>
+        <li class="p-3 bg-bg-input rounded-lg"><b class="text-text-primary block mb-0.5">2. Dịch khi thiếu Vietsub</b>Có sub nguồn nhưng chưa có Vietsub thì nút dịch AI xuất hiện; bật “Tự dịch” để chạy tự động.</li>
+        <li class="p-3 bg-bg-input rounded-lg"><b class="text-text-primary block mb-0.5">3. Sync timing</b>Đủ sub nguồn + Vietsub thì Sync Timing căn lại thời gian theo audio rồi upload lên Plex.</li>
+    </ol>
+</details>
 
 <!-- Sync History -->
-<div class="flex items-center gap-4 my-8">
-    <h2 class="text-lg font-semibold text-text-primary whitespace-nowrap">Sync History</h2>
+<div class="flex items-center gap-4 mt-6 mb-3">
+    <h2 class="text-base font-semibold text-text-primary whitespace-nowrap m-0">Lịch sử đồng bộ</h2>
     <div class="h-px bg-border-subtle flex-1"></div>
 </div>
 <div id="history-stats" class="flex flex-wrap gap-3 mb-4" style="display:none;"></div>
 <div id="history-section" class="bg-bg-surface border border-border-subtle rounded-xl overflow-hidden shadow-sm">
-    <div class="text-center py-8 text-sm text-text-muted">Loading history...</div>
+    <div class="text-center py-8 text-sm text-text-muted">Đang tải lịch sử...</div>
 </div>
 
 <!-- Detail Modal -->
 <div id="sync-detail-modal" class="modal-overlay fixed inset-0 bg-black/70 z-50 backdrop-blur-sm hidden items-center justify-center" onclick="if(event.target===this)closeSyncDetail()">
     <div class="modal-box bg-bg-surface border border-border-subtle rounded-xl max-w-lg w-full p-0 overflow-hidden shadow-2xl mx-4">
         <div class="flex items-center justify-between p-4 border-b border-border-subtle">
-            <h3 class="font-semibold text-base text-text-primary truncate" id="detail-title">Sync Detail</h3>
-            <button class="btn btn-sm btn-circle btn-ghost text-text-muted hover:text-text-primary" onclick="closeSyncDetail()">&times;</button>
+            <h3 class="font-semibold text-base text-text-primary truncate" id="detail-title">Chi tiết sync</h3>
+            <button class="btn btn-sm btn-icon btn-ghost" onclick="closeSyncDetail()" title="Đóng" aria-label="Đóng"><i class="fa-solid fa-xmark"></i></button>
         </div>
         <div class="p-5 overflow-y-auto max-h-[75vh]" id="detail-body"></div>
     </div>
@@ -373,14 +359,14 @@
             const data = await res.json();
 
             const enabledEl = document.getElementById('stat-enabled');
-            enabledEl.textContent = data.sync_enabled ? 'ON' : 'OFF';
-            enabledEl.className = 'stat-value text-2xl font-bold ' + (data.sync_enabled ? 'text-success' : 'text-error');
+            enabledEl.textContent = data.sync_enabled ? 'Sync ON' : 'Sync OFF';
+            enabledEl.parentElement.classList.toggle('is-on', !!data.sync_enabled);
 
             const modelEl = document.getElementById('stat-model');
             modelEl.textContent = data.model || '--';
 
             if (!data.ai_available) {
-                showAlert('OpenAI API key chưa được cấu hình. Vào Settings để cài đặt.', 'warning');
+                showAlert('OpenAI API key chưa được cấu hình. Vào Cài đặt để thiết lập.', 'warning');
             }
         } catch (e) {
             console.error('Failed to load sync status:', e);
@@ -434,7 +420,7 @@
                 });
                 if (!resolveRes.ok) {
                     const err = await resolveRes.json();
-                    throw new Error(err.detail || 'Could not resolve link');
+                    throw new Error(err.detail || 'Không đọc được link');
                 }
                 const resolved = await resolveRes.json();
                 ratingKey = resolved.rating_key;
@@ -484,7 +470,7 @@
 
             if (!res.ok) {
                 const err = await res.json();
-                throw new Error(err.detail || 'Preview failed');
+                throw new Error(err.detail || 'Kiểm tra thất bại');
             }
 
             previewData = await res.json();
@@ -495,18 +481,18 @@
             if (e.name === 'AbortError') {
                 if (previewTimedOut) {
                     document.getElementById('results-area').innerHTML = '';
-                    showAlert('Preview timeout — Subsource không phản hồi sau 60s. Thử lại sau.', 'warning');
+                    showAlert('Hết thời gian chờ: provider không phản hồi sau 60 giây. Thử lại sau.', 'warning');
                 } else {
                     document.getElementById('results-area').innerHTML = '';
                 }
                 return;
             }
             document.getElementById('results-area').innerHTML = '';
-            showAlert('Error: ' + e.message, 'error');
+            showAlert('Lỗi: ' + e.message, 'error');
         } finally {
             clearTimeout(previewTimeoutId);
             btn.disabled = false;
-            btn.textContent = 'Preview';
+            btn.innerHTML = '<i class="fa-solid fa-eye"></i><span>Kiểm tra</span>';
         }
     }
 
@@ -517,7 +503,7 @@
         const vi = data.vi_status || {};
         const hasViCandidates = Array.isArray(data.vi_candidates) && data.vi_candidates.length > 0;
         const hasAnyVi = data.has_vi_on_plex || hasViCandidates;
-        const srcLangLabel = data.source_lang ? data.source_lang.toUpperCase() : 'Source';
+        const srcLangLabel = data.source_lang ? data.source_lang.toUpperCase() : 'Nguồn';
 
         selectedSubtitleId = null;
 
@@ -530,14 +516,14 @@
             subInfoHtml += `
                 <div class="flex items-center gap-2 p-2.5 px-3.5 bg-bg-input rounded-md text-xs text-text-secondary mb-2">
                     <span class="w-2.5 h-2.5 rounded-full bg-success shrink-0"></span>
-                    <span>${srcLangLabel} subtitle: ${src.detail || srcFrom}</span>
+                    <span>Sub ${srcLangLabel}: ${src.detail || srcFrom}</span>
                 </div>
             `;
         } else {
             subInfoHtml += `
                 <div class="flex items-center gap-2 p-2.5 px-3.5 bg-bg-input rounded-md text-xs text-text-secondary mb-2">
                     <span class="w-2.5 h-2.5 rounded-full bg-error shrink-0"></span>
-                    <span>Source subtitle: ${src.detail || 'Not found (Plex & Subsource)'}</span>
+                    <span>Sub nguồn: ${src.detail || 'Không có trên Plex và provider'}</span>
                 </div>
             `;
         }
@@ -550,14 +536,14 @@
             subInfoHtml += `
                 <div class="flex items-center gap-2 p-2.5 px-3.5 bg-bg-input rounded-md text-xs text-text-secondary mb-2">
                     <span class="w-2.5 h-2.5 rounded-full bg-success shrink-0"></span>
-                    <span>Vietnamese subtitle: ${viNote}</span>
+                    <span>Vietsub: ${viNote}</span>
                 </div>
             `;
         } else if (vi.detail) {
             subInfoHtml += `
                 <div class="flex items-center gap-2 p-2.5 px-3.5 bg-bg-input rounded-md text-xs text-text-secondary mb-2">
                     <span class="w-2.5 h-2.5 rounded-full bg-error shrink-0"></span>
-                    <span>Vietnamese subtitle: ${vi.detail}</span>
+                    <span>Vietsub: ${vi.detail}</span>
                 </div>
             `;
         }
@@ -575,7 +561,7 @@
                 <select class="select select-bordered select-sm md:select-md w-full bg-bg-input border-border-subtle text-xs md:text-sm text-text-primary mb-3" id="vi-sub-select" onchange="onSubSelect(this.value)">
                     ${data.vi_candidates.map((c, i) => `
                         <option value="${c.provider}:${c.id}" ${i === 0 ? 'selected' : ''}>
-                            [${c.provider}] ${c.name} (${c.quality}, ${c.downloads ?? 0} downloads${c.rating ? ', rating: ' + c.rating.toFixed(1) : ''})
+                            [${c.provider}] ${c.name} (${c.quality}, ${c.downloads ?? 0} lượt tải${c.rating ? ', ★ ' + c.rating.toFixed(1) : ''})
                         </option>
                     `).join('')}
                 </select>
@@ -585,7 +571,7 @@
             subInfoHtml += `
                 <div class="flex items-center gap-2 p-2.5 px-3.5 bg-bg-input rounded-md text-xs text-text-secondary mb-2">
                     <span class="w-2.5 h-2.5 rounded-full bg-error shrink-0"></span>
-                    <span>Vietnamese subtitle: Not found (Plex & Subsource)</span>
+                    <span>Vietsub: không có trên Plex và provider</span>
                 </div>
             `;
         }
@@ -594,34 +580,34 @@
         let actionsHtml = '<div class="flex flex-wrap gap-2 mt-4 pt-3 border-t border-border-subtle">';
 
         if (hasViCandidates) {
-            const uploadLabel = data.has_vi_on_plex ? 'Thử / Thay Vietsub' : 'Upload Vietsub';
+            const uploadLabel = data.has_vi_on_plex ? 'Thay Vietsub' : 'Upload Vietsub';
             actionsHtml += `
-                <button class="btn btn-primary btn-sm md:btn-md flex-1" onclick="executeUploadTarget()" id="btn-upload-target">
+                <button class="btn btn-primary btn-sm md:btn-md flex-1 md:flex-none md:min-w-[160px]" onclick="executeUploadTarget()" id="btn-upload-target">
                     ${uploadLabel}
                 </button>
             `;
         }
 
         if (data.can_sync && data.sync_enabled) {
-            const syncLabel = data.has_vi_on_plex ? 'Re-sync Timing (optional)' : 'Sync Timing';
+            const syncLabel = data.has_vi_on_plex ? 'Sync lại timing' : 'Sync timing';
             const syncStyle = data.has_vi_on_plex ? 'btn btn-secondary' : 'btn btn-primary';
             actionsHtml += `
-                <button class="${syncStyle} btn-sm md:btn-md flex-1" onclick="executeSync()" id="btn-sync">
+                <button class="${syncStyle} btn-sm md:btn-md flex-1 md:flex-none md:min-w-[160px]" onclick="executeSync()" id="btn-sync">
                     ${syncLabel}
                 </button>
             `;
         } else if (data.can_sync && !data.sync_enabled) {
             actionsHtml += `
-                <button class="btn btn-primary btn-sm md:btn-md flex-1" disabled title="Enable sync in Settings">
-                    Sync Timing (disabled)
+                <button class="btn btn-primary btn-sm md:btn-md flex-1 md:flex-none md:min-w-[160px]" disabled title="Bật Tự sync timing trong Cài đặt">
+                    Sync timing (đang tắt)
                 </button>
             `;
         }
 
         if (!hasAnyVi && data.can_translate) {
             actionsHtml += `
-                <button class="btn btn-info btn-sm md:btn-md flex-1" onclick="executeTranslation()" id="btn-translate">
-                    AI Translate (${srcLangLabel} to VI)
+                <button class="btn btn-info btn-sm md:btn-md flex-1 md:flex-none md:min-w-[160px]" onclick="executeTranslation()" id="btn-translate">
+                    Dịch AI (${srcLangLabel} → VI)
                 </button>
             `;
         }
@@ -632,20 +618,20 @@
         let statusTag;
         if (data.can_sync && data.sync_enabled) {
             statusTag = data.has_vi_on_plex
-                ? '<span class="badge badge-info font-medium">Re-sync Timing</span>'
-                : '<span class="badge badge-info font-medium">Ready to Sync</span>';
+                ? '<span class="badge badge-info font-medium">Có thể sync lại</span>'
+                : '<span class="badge badge-info font-medium">Sẵn sàng sync</span>';
         } else if (!hasAnyVi && data.can_translate) {
-            statusTag = '<span class="badge badge-info font-medium">Translate Only</span>';
+            statusTag = '<span class="badge badge-info font-medium">Chỉ dịch được</span>';
         } else if (hasViCandidates && data.has_vi_on_plex) {
             statusTag = '<span class="badge badge-info font-medium">Có Vietsub khác để thử</span>';
         } else if (hasViCandidates) {
-            statusTag = '<span class="badge badge-info font-medium">Có Vietsub trên Subsource</span>';
+            statusTag = '<span class="badge badge-info font-medium">Có Vietsub trên provider</span>';
         } else if (data.has_vi_on_plex) {
             statusTag = '<span class="badge badge-warning font-medium">Không thể sync theo audio</span>';
         } else if (!src.available) {
             statusTag = '<span class="badge badge-error font-medium">Không tìm thấy sub nguồn</span>';
         } else {
-            statusTag = '<span class="badge badge-error font-medium">Không tìm thấy VI sub</span>';
+            statusTag = '<span class="badge badge-error font-medium">Không tìm thấy Vietsub</span>';
         }
 
         // Auto-fallback AI Translation check
@@ -677,7 +663,7 @@
                 <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-border-subtle mb-4">
                     <div class="flex items-center gap-2">
                         <h3 class="text-base font-semibold text-text-primary">${data.title}</h3>
-                        ${isCached ? `<span class="badge badge-sm badge-ghost gap-1 cursor-pointer hover:badge-warning transition-colors whitespace-nowrap" onclick="previewSync(true)" title="Bấm để tải lại từ server"><i class="fa-solid fa-bolt"></i> Cached <span class="underline ml-0.5">Làm mới</span></span>` : ''}
+                        ${isCached ? `<span class="badge badge-sm badge-ghost gap-1 cursor-pointer hover:badge-warning transition-colors whitespace-nowrap" onclick="previewSync(true)" title="Bấm để tải lại từ server"><i class="fa-solid fa-bolt"></i> Cache <span class="underline ml-0.5">Làm mới</span></span>` : ''}
                     </div>
                     <div>${statusTag}</div>
                 </div>
@@ -705,7 +691,7 @@
 
         const btn = document.getElementById('btn-manual-search');
         btn.disabled = true;
-        btn.innerHTML = '<span class="loading loading-spinner loading-sm"></span> Đang tìm...';
+        btn.innerHTML = '<span class="loading loading-spinner loading-sm"></span><span class="hidden sm:inline">Đang tìm...</span>';
 
         // Clear cache for this ratingKey
         if (ratingKey && /^\d+$/.test(ratingKey)) {
@@ -739,7 +725,7 @@
 
             if (!res.ok) {
                 const err = await res.json();
-                throw new Error(err.detail || 'Manual search failed');
+                throw new Error(err.detail || 'Tìm thủ công thất bại');
             }
 
             const result = await res.json();
@@ -756,8 +742,8 @@
                 document.getElementById('results-area').innerHTML = `
                     <div class="card bg-bg-surface border border-border-subtle p-5 mb-4 shadow-sm">
                         <div class="flex items-center justify-between pb-3 border-b border-border-subtle mb-4">
-                            <h3 class="text-base font-semibold text-text-primary">Manual subtitle search</h3>
-                            <span class="badge badge-info">${candidates.length} candidates</span>
+                            <h3 class="text-base font-semibold text-text-primary">Kết quả tìm thủ công</h3>
+                            <span class="badge badge-info">${candidates.length} kết quả</span>
                         </div>
                         <div class="space-y-4">
                             ${candidates.length ? `
@@ -772,19 +758,19 @@
                     </div>`;
                 if (candidates.length) selectedSubtitleId = `${candidates[0].provider}:${candidates[0].id}`;
             }
-            showAlert(`${(result.candidates || []).length} candidate subtitle tìm thấy`, 'success');
+            showAlert(`Tìm thấy ${(result.candidates || []).length} subtitle`, 'success');
         } catch (e) {
-            showAlert('Manual search failed: ' + e.message, 'error');
+            showAlert('Tìm thủ công thất bại: ' + e.message, 'error');
         } finally {
             btn.disabled = false;
-            btn.innerHTML = '<i class="fa-solid fa-magnifying-glass mr-1.5"></i><span>Tìm sub thủ công</span>';
+            btn.innerHTML = '<i class="fa-solid fa-magnifying-glass"></i><span class="hidden sm:inline">Tìm thủ công</span>';
         }
     }
 
     // Execute upload target subtitle
     async function executeUploadTarget() {
         if (!currentRatingKey) {
-            showAlert('No media selected', 'warning');
+            showAlert('Chưa chọn media', 'warning');
             return;
         }
 
@@ -794,7 +780,7 @@
         }
 
         setButtonsLoading(true);
-        showProgress('Downloading subtitle...');
+        showProgress('Đang tải subtitle...');
 
         try {
             const res = await fetch('/api/sync/upload-target', {
@@ -808,7 +794,7 @@
 
             if (!res.ok) {
                 const err = await res.json();
-                throw new Error(err.detail || 'Upload failed');
+                throw new Error(err.detail || 'Upload thất bại');
             }
 
             const result = await res.json();
@@ -821,7 +807,7 @@
             setTimeout(() => previewSync(true), 1500);
         } catch (e) {
             hideProgress();
-            showAlert('Upload failed: ' + e.message, 'error');
+            showAlert('Upload thất bại: ' + e.message, 'error');
         } finally {
             setButtonsLoading(false);
         }
@@ -830,11 +816,11 @@
     // Execute sync timing
     async function executeSync() {
         if (!currentRatingKey) {
-            showAlert('No media selected', 'warning');
+            showAlert('Chưa chọn media', 'warning');
             return;
         }
 
-        if (!confirm('Execute sync timing? Sẽ sử dụng AI API credits.')) return;
+        if (!confirm('Chạy sync timing? Thao tác này dùng credit AI API.')) return;
 
         setButtonsLoading(true);
         showProgress('Downloading subtitles...');
@@ -856,7 +842,7 @@
 
             if (!res.ok) {
                 const err = await res.json();
-                throw new Error(err.detail || 'Sync failed');
+                throw new Error(err.detail || 'Sync thất bại');
             }
 
             const result = await res.json();
@@ -870,7 +856,7 @@
 
         } catch (e) {
             hideProgress();
-            showAlert('Sync failed: ' + e.message, 'error');
+            showAlert('Sync thất bại: ' + e.message, 'error');
         } finally {
             setButtonsLoading(false);
         }
@@ -879,7 +865,7 @@
     // Execute AI Translation
     async function executeTranslation() {
         if (!currentRatingKey) {
-            showAlert('No media selected', 'warning');
+            showAlert('Chưa chọn media', 'warning');
             return;
         }
 
@@ -887,7 +873,7 @@
         isTranslating = true;
 
         setButtonsLoading(true);
-        showProgress('Translating subtitle...');
+        showProgress('Đang dịch subtitle...');
 
         try {
             const pronounOverride = document.getElementById('manual-pronoun-override')?.value?.trim() || null;
@@ -905,12 +891,12 @@
 
             if (!res.ok) {
                 const err = await res.json();
-                throw new Error(err.detail || 'Translation failed');
+                throw new Error(err.detail || 'Dịch thất bại');
             }
 
             const result = await res.json();
             finishProgress();
-            showAlert(result.message || 'Translation completed', 'success');
+            showAlert(result.message || 'Đã dịch xong', 'success');
 
             // Invalidate cache so next preview fetches newly translated Vietsub from Plex
             SessionCache.remove('preview_' + currentRatingKey);
@@ -918,7 +904,7 @@
             setTimeout(() => previewSync(true), 1500);
         } catch (e) {
             hideProgress();
-            showAlert('Translation failed: ' + e.message, 'error');
+            showAlert('Dịch thất bại: ' + e.message, 'error');
         } finally {
             isTranslating = false;
             setButtonsLoading(false);
@@ -944,8 +930,8 @@
             let stepLabel = label;
             if (progress < 30) stepLabel = 'Downloading subtitles...';
             else if (progress < 60) stepLabel = 'AI processing...';
-            else if (progress < 80) stepLabel = 'Applying corrections...';
-            else stepLabel = 'Uploading to Plex...';
+            else if (progress < 80) stepLabel = 'Đang áp dụng chỉnh sửa...';
+            else stepLabel = 'Đang upload lên Plex...';
             labelEl.innerHTML = `<span class="loading loading-spinner loading-xs text-warning"></span> <span>${stepLabel}</span>`;
         }, 500);
     }
@@ -972,15 +958,15 @@
         if (btnTranslate) btnTranslate.disabled = loading;
         if (btnPreview) btnPreview.disabled = loading;
 
-        if (loading && btnSync) btnSync.innerHTML = '<span class="loading loading-spinner loading-xs"></span> Processing...';
-        if (loading && btnUploadTarget) btnUploadTarget.innerHTML = '<span class="loading loading-spinner loading-xs"></span> Processing...';
-        if (loading && btnTranslate) btnTranslate.innerHTML = '<span class="loading loading-spinner loading-xs"></span> Processing...';
+        if (loading && btnSync) btnSync.innerHTML = '<span class="loading loading-spinner loading-xs"></span> Đang xử lý...';
+        if (loading && btnUploadTarget) btnUploadTarget.innerHTML = '<span class="loading loading-spinner loading-xs"></span> Đang xử lý...';
+        if (loading && btnTranslate) btnTranslate.innerHTML = '<span class="loading loading-spinner loading-xs"></span> Đang xử lý...';
 
         if (!loading && btnSync) {
-            btnSync.textContent = previewData?.has_vi_on_plex ? 'Re-sync Timing (optional)' : 'Sync Timing';
+            btnSync.textContent = previewData?.has_vi_on_plex ? 'Sync lại timing' : 'Sync timing';
         }
         if (!loading && btnUploadTarget) {
-            btnUploadTarget.textContent = previewData?.has_vi_on_plex ? 'Thử / Thay Vietsub' : 'Upload Vietsub';
+            btnUploadTarget.textContent = previewData?.has_vi_on_plex ? 'Thay Vietsub' : 'Upload Vietsub';
         }
         if (!loading && btnTranslate) {
             const srcLangLabel = previewData?.source_lang ? previewData.source_lang.toUpperCase() : 'EN';
@@ -993,32 +979,32 @@
         if (!stats) return;
 
         const offsetS = (Math.abs(stats.avg_offset_ms) / 1000).toFixed(1);
-        const direction = stats.avg_offset_ms > 0 ? 'delayed' : 'early';
+        const direction = stats.avg_offset_ms > 0 ? 'trễ' : 'sớm';
 
         const area = document.getElementById('results-area');
         area.innerHTML = `
             <div class="card bg-bg-surface border border-border-subtle p-5 mb-6 shadow-sm">
                 <div class="flex items-center justify-between pb-3 border-b border-border-subtle mb-4">
-                    <h3 class="text-base font-semibold text-text-primary">Sync Complete</h3>
-                    <span class="badge badge-success">Done</span>
+                    <h3 class="text-base font-semibold text-text-primary">Sync xong</h3>
+                    <span class="badge badge-success">Hoàn tất</span>
                 </div>
                 <div>
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
                         <div class="p-3 bg-bg-input rounded-md text-center">
                             <div class="text-2xl font-bold text-plex-gold">${stats.entries_synced}</div>
-                            <div class="text-xs uppercase text-text-muted mt-1">Entries Synced</div>
+                            <div class="text-xs uppercase text-text-muted mt-1">Câu đã sync</div>
                         </div>
                         <div class="p-3 bg-bg-input rounded-md text-center">
                             <div class="text-2xl font-bold text-plex-gold">${stats.anchors_found}</div>
-                            <div class="text-xs uppercase text-text-muted mt-1">Anchor Points</div>
+                            <div class="text-xs uppercase text-text-muted mt-1">Điểm neo</div>
                         </div>
                         <div class="p-3 bg-bg-input rounded-md text-center">
                             <div class="text-2xl font-bold text-plex-gold">${offsetS}s</div>
-                            <div class="text-xs uppercase text-text-muted mt-1">Avg Offset (${direction})</div>
+                            <div class="text-xs uppercase text-text-muted mt-1">Lệch TB (${direction})</div>
                         </div>
                         <div class="p-3 bg-bg-input rounded-md text-center">
                             <div class="text-2xl font-bold text-plex-gold">${stats.total_ref_entries}</div>
-                            <div class="text-xs uppercase text-text-muted mt-1">EN Reference</div>
+                            <div class="text-xs uppercase text-text-muted mt-1">Câu tham chiếu</div>
                         </div>
                     </div>
                 </div>
@@ -1048,8 +1034,8 @@
                     selectMedia(data.sessions[0].rating_key);
                 }
             } else {
-                container.innerHTML = '<p class="text-xs text-text-muted py-2">Không có phim nào đang phát</p>';
-                section.style.display = 'block';
+                container.innerHTML = '';
+                section.style.display = 'none';
             }
         } catch (e) {
             console.error('Failed to load now playing:', e);
@@ -1127,7 +1113,7 @@
             renderHistory(syncHistoryItems);
         } catch (e) {
             document.getElementById('history-section').innerHTML =
-                '<div class="text-center py-8 text-sm text-text-muted">Failed to load history</div>';
+                '<div class="text-center py-8 text-sm text-text-muted">Không tải được lịch sử</div>';
         }
     }
 
@@ -1136,7 +1122,7 @@
         const statsEl = document.getElementById('history-stats');
 
         if (!items || items.length === 0) {
-            section.innerHTML = '<div class="text-center py-8 text-sm text-text-muted">No sync history yet</div>';
+            section.innerHTML = '<div class="text-center py-8 text-sm text-text-muted">Chưa có lịch sử đồng bộ</div>';
             statsEl.style.display = 'none';
             return;
         }
@@ -1149,20 +1135,20 @@
 
         statsEl.style.display = 'flex';
         statsEl.innerHTML = `
-            <div class="badge badge-outline badge-lg p-3 text-xs gap-1.5"><strong class="text-text-primary">${success}</strong> synced</div>
-            <div class="badge badge-outline badge-lg p-3 text-xs gap-1.5"><strong class="text-text-primary">${failed}</strong> failed</div>
-            <div class="badge badge-outline badge-lg p-3 text-xs gap-1.5"><strong class="text-text-primary">${avgAnchors}</strong> avg anchors</div>
+            <div class="badge badge-outline badge-lg p-3 text-xs gap-1.5"><strong class="text-text-primary">${success}</strong> thành công</div>
+            <div class="badge badge-outline badge-lg p-3 text-xs gap-1.5"><strong class="text-text-primary">${failed}</strong> thất bại</div>
+            <div class="badge badge-outline badge-lg p-3 text-xs gap-1.5"><strong class="text-text-primary">${avgAnchors}</strong> điểm neo TB</div>
         `;
 
         section.innerHTML = `
             <table class="history-table">
                 <thead>
                     <tr>
-                        <th>Title</th>
-                        <th>Status</th>
-                        <th>Anchors</th>
-                        <th>Offset</th>
-                        <th>Date</th>
+                        <th>Media</th>
+                        <th>Trạng thái</th>
+                        <th class="col-opt">Điểm neo</th>
+                        <th class="col-opt">Lệch</th>
+                        <th class="col-opt">Thời gian</th>
                         <th></th>
                     </tr>
                 </thead>
@@ -1171,7 +1157,7 @@
                         const offsetSec = Math.abs(item.avg_offset_ms || 0) / 1000;
                         const offsetDir = (item.avg_offset_ms || 0) > 0 ? 'trễ' : 'sớm';
                         const offsetText = item.status === 'success' ? `${offsetSec.toFixed(1)}s ${offsetDir}` : '—';
-                        const sourceBadge = item.source === 'auto' ? 'auto' : 'manual';
+                        const sourceBadge = item.source === 'auto' ? 'tự động' : 'thủ công';
                         return `
                         <tr>
                             <td>
@@ -1180,14 +1166,14 @@
                             </td>
                             <td>
                                 <span class="badge ${item.status === 'success' ? 'badge-success' : 'badge-error'} badge-sm font-semibold">
-                                    ${item.status === 'success' ? '<i class="fa-solid fa-check text-success mr-1"></i>' : '<i class="fa-solid fa-xmark text-error mr-1"></i>'} ${item.status}
+                                    ${item.status === 'success' ? '<i class="fa-solid fa-check text-success mr-1"></i>' : '<i class="fa-solid fa-xmark text-error mr-1"></i>'}<span class="hidden sm:inline">${item.status === 'success' ? 'Thành công' : 'Thất bại'}</span>
                                 </span>
                             </td>
-                            <td>${item.status === 'success' ? item.anchors_found : '—'}</td>
-                            <td>${offsetText}</td>
-                            <td>${formatDate(item.timestamp)}</td>
-                            <td>
-                                <button class="btn btn-ghost btn-xs border border-border-subtle hover:border-plex-gold" onclick="openSyncDetail(${idx})">View</button>
+                            <td class="col-opt">${item.status === 'success' ? item.anchors_found : '—'}</td>
+                            <td class="col-opt">${offsetText}</td>
+                            <td class="col-opt">${formatDate(item.timestamp)}</td>
+                            <td class="text-right">
+                                <button class="btn btn-sm btn-icon btn-ghost" onclick="openSyncDetail(${idx})" title="Xem chi tiết" aria-label="Xem chi tiết"><i class="fa-solid fa-chevron-right"></i></button>
                             </td>
                         </tr>`;
                     }).join('')}
@@ -1206,14 +1192,14 @@
             const hours = Math.floor(diff / 3600000);
             if (hours < 1) {
                 const mins = Math.floor(diff / 60000);
-                return mins <= 0 ? 'Just now' : `${mins}m ago`;
+                return mins <= 0 ? 'Vừa xong' : `${mins} phút trước`;
             }
-            return `${hours}h ago`;
+            return `${hours} giờ trước`;
         }
 
         if (diff < 604800000) {
             const days = Math.floor(diff / 86400000);
-            return `${days}d ago`;
+            return `${days} ngày trước`;
         }
 
         return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -1224,23 +1210,23 @@
         if (!item) return;
 
         const modal = document.getElementById('sync-detail-modal');
-        document.getElementById('detail-title').textContent = item.title || 'Sync Detail';
+        document.getElementById('detail-title').textContent = item.title || 'Chi tiết sync';
 
         const offsetSec = Math.abs(item.avg_offset_ms || 0) / 1000;
         const offsetDir = (item.avg_offset_ms || 0) > 0 ? 'trễ' : 'sớm';
 
         const rows = [
-            ['Status', `<span class="badge ${item.status === 'success' ? 'badge-success' : 'badge-error'} badge-sm font-semibold">${item.status === 'success' ? '<i class="fa-solid fa-check mr-1"></i>' : '<i class="fa-solid fa-xmark mr-1"></i>'} ${item.status}</span>`],
-            ['Source', item.source === 'auto' ? 'Auto (after download)' : 'Manual'],
-            ['Anchors Found', item.status === 'success' ? item.anchors_found : '—'],
-            ['Avg Offset', item.status === 'success' ? `${offsetSec.toFixed(1)}s ${offsetDir}` : '—'],
-            ['Reference', item.ref_lang ? `${item.ref_lang.toUpperCase()} from ${item.ref_source || '—'}` : '—'],
-            ['AI Model', item.model || '—'],
-            ['Date', item.timestamp ? new Date(item.timestamp).toLocaleString('vi-VN') : '—'],
+            ['Trạng thái', `<span class="badge ${item.status === 'success' ? 'badge-success' : 'badge-error'} badge-sm font-semibold">${item.status === 'success' ? '<i class="fa-solid fa-check mr-1"></i>' : '<i class="fa-solid fa-xmark mr-1"></i>'} ${item.status === 'success' ? 'Thành công' : 'Thất bại'}</span>`],
+            ['Nguồn', item.source === 'auto' ? 'Tự động (sau khi tải)' : 'Thủ công'],
+            ['Điểm neo', item.status === 'success' ? item.anchors_found : '—'],
+            ['Lệch trung bình', item.status === 'success' ? `${offsetSec.toFixed(1)}s ${offsetDir}` : '—'],
+            ['Tham chiếu', item.ref_lang ? `${item.ref_lang.toUpperCase()} từ ${item.ref_source || '—'}` : '—'],
+            ['Model AI', item.model || '—'],
+            ['Thời gian', item.timestamp ? new Date(item.timestamp).toLocaleString('vi-VN') : '—'],
         ];
 
         if (item.error) {
-            rows.push(['Error', `<span class="text-error">${item.error}</span>`]);
+            rows.push(['Lỗi', `<span class="text-error">${item.error}</span>`]);
         }
 
         document.getElementById('detail-body').innerHTML = rows.map(([label, value]) =>

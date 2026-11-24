@@ -2,7 +2,7 @@
 
 {% block title %}Logs - Plex Subtitle Service{% endblock %}
 {% block nav_logs %}active{% endblock %}
-{% block page_title %}Logs{% endblock %}
+{% block page_title %}Nhật ký{% endblock %}
 {% block page_description %}Theo dõi hoạt động của service trong thời gian thực{% endblock %}
 
 {% block extra_styles %}
@@ -344,10 +344,17 @@
 
         .log-search {
             min-width: 120px;
+            flex: 1 1 120px;
         }
 
+        .log-filters { width: 100%; }
+        .log-filter-btn { flex: 1; min-height: 32px; }
+        /* Pause/Clear: icon-only trên mobile (icon quen thuộc, có tooltip/aria-label) */
+        .log-action-btn span { display: none; }
+        .log-action-btn { min-width: 36px; min-height: 36px; justify-content: center; }
+
         .log-terminal-wrap {
-            height: calc(100vh - 320px);
+            height: calc(100dvh - 300px);
             min-height: 300px;
         }
 
@@ -379,14 +386,17 @@
         <button class="log-filter-btn" data-level="ERROR" onclick="setFilter('ERROR')">Error</button>
     </div>
 
-    <input type="text" class="log-search" id="logSearch" placeholder="Search logs..." oninput="applyFilters()">
+    <input type="search" class="log-search" id="logSearch" placeholder="Tìm trong log..." aria-label="Tìm trong log" oninput="applyFilters()">
 
     <div class="log-actions">
-        <button class="log-action-btn" id="btnPause" onclick="togglePause()">
+        <button class="log-action-btn" id="btnPause" onclick="togglePause()" title="Tạm dừng / tiếp tục stream" aria-label="Tạm dừng / tiếp tục stream">
             <svg id="pauseIcon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
             <span id="pauseLabel">Pause</span>
         </button>
-        <button class="log-action-btn" onclick="clearLogs()">Clear</button>
+        <button class="log-action-btn" onclick="clearLogs()" title="Xoá log" aria-label="Xoá log">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+            <span>Clear</span>
+        </button>
     </div>
 
     <div class="log-status">

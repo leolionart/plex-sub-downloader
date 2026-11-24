@@ -13,6 +13,8 @@ from fastapi import FastAPI, Request, HTTPException, Header, BackgroundTasks
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
+from starlette.middleware.gzip import GZipMiddleware
 
 from app.config import settings
 from app.models.runtime_config import RuntimeConfig
@@ -41,6 +43,19 @@ config_store: ConfigStore | None = None
 
 # Templates
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+
+STATIC_DIR = Path(__file__).parent / "static"
+
+
+def _static_version() -> str:
+    """Cache-busting token cho CSS build sẵn (đổi khi file CSS thay đổi)."""
+    try:
+        return str(int(max(f.stat().st_mtime for f in (STATIC_DIR / "css").glob("*.css"))))
+    except ValueError:
+        return "0"
+
+
+templates.env.globals["static_version"] = _static_version()
 
 
 @asynccontextmanager
@@ -128,6 +143,9 @@ app.include_router(logs.router)
 app.include_router(sync.router)
 app.include_router(subtitles.router)
 app.include_router(telegram.router)
+# CSS build sẵn (Tailwind + DaisyUI). Chỉ gzip riêng /static — không bật GZip toàn app
+# vì Starlette 0.36 sẽ buffer SSE của /api/logs/stream.
+app.mount("/static", GZipMiddleware(StaticFiles(directory=str(STATIC_DIR)), minimum_size=1024), name="static")
 app.include_router(library.router)
 
 

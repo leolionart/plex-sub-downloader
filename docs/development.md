@@ -57,13 +57,32 @@ app/
 │   └── logs.py              # /api/logs
 ├── utils/
 │   └── logger.py            # Logging setup, RequestContextLogger
+├── static/
+│   ├── src/tailwind.css     # Input cho Tailwind CLI
+│   └── css/                 # CSS build sẵn, commit vào repo (Docker không cần Node)
+│       ├── tailwind.css     # npm run build:css
+│       └── daisyui.min.css  # DaisyUI 4.12.23 vendored (npm run vendor:daisyui)
 └── templates/
-    ├── settings.html        # Main UI (/)
-    ├── sync.html            # Sync/Translate UI (/sync)
-    ├── translation.html     # Translation approval (/translation)
-    ├── logs.html            # Log viewer (/logs)
-    └── setup.html           # Setup wizard (/setup)
+    ├── base.html            # Layout chung: sidebar (desktop), tab bar (mobile), design tokens
+    ├── sync.html            # Xử lý phụ đề (/workspace; /, /sync chuyển hướng về đây)
+    ├── library.html         # Thư viện Plex (/library)
+    ├── settings.html        # Cài đặt + credentials (/settings; /setup chuyển hướng về đây)
+    └── logs.html            # Nhật ký real-time (/logs)
 ```
+
+## Build CSS (Tailwind)
+
+UI không dùng Tailwind Play CDN nữa. Sau khi thêm/sửa class Tailwind trong `app/templates/*.html`:
+
+```bash
+npm install          # lần đầu (chỉ cần tailwindcss CLI)
+npm run build:css    # build lại app/static/css/tailwind.css (đã minify)
+npm run watch:css    # hoặc watch khi đang sửa giao diện
+```
+
+Commit cả file CSS đã build. Thứ tự cascade trong `base.html`: `daisyui.min.css` → `<style>` nội bộ → `tailwind.css`
+(cuối `<head>`), nên utility responsive của Tailwind (`sm:`, `md:`) luôn thắng CSS nội bộ không có `!important`.
+`/static` được gzip riêng; không bật GZip cho toàn app vì sẽ buffer SSE của `/api/logs/stream`.
 
 ## Key Patterns
 
