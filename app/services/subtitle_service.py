@@ -1223,6 +1223,15 @@ class SubtitleService:
                 log.warning(f"[Preview] Subsource multi-lang search failed: {e}")
                 multi_results = {}
 
+            # Cache multi-lang provider results for fast subsequent manual operations
+            cache_scope = self.subtitle_provider_manager.cache_scope
+            for l_code, l_items in multi_results.items():
+                if l_items:
+                    l_params = base_params.model_copy(update={"language": l_code})
+                    await self.cache_client.set_search_results(
+                        l_params, l_items, scope=cache_scope
+                    )
+
             # Kết quả target lang (VI)
             target_results = multi_results.get(lang, [])
             target_providers = sorted({r.provider for r in target_results})
@@ -1784,6 +1793,20 @@ class SubtitleService:
                     ),
                     None,
                 )
+                if not selected and use_cache:
+                    fresh_results = await self._search_subtitles_by_params(
+                        source_params,
+                        log,
+                        use_cache=False,
+                    )
+                    selected = next(
+                        (
+                            result
+                            for result in fresh_results
+                            if self._subtitle_id_matches(result, source_subtitle_id)
+                        ),
+                        None,
+                    )
                 source_results = [selected] if selected else []
 
             if source_results:
@@ -2454,7 +2477,7 @@ class SubtitleService:
             log.info(f"✓ Translation completed: {stats['lines_translated']} lines")
 
             # Upload translated subtitle
-            await self._upload_to_plex(video, target_subtitle_path, log)
+            await self._upload_to_plex(video, target_subtitle_path, log, force_replace=True)
 
             # Notify success
             await self.telegram_client.notify_translation_completed(

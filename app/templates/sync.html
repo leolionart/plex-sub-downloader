@@ -320,6 +320,7 @@
 
     let currentRatingKey = '';
     let selectedSubtitleId = null;
+    let selectedSourceSubtitleId = null;
     let previewData = null;
     let autoSelected = false;
     let previewAbortController = null;
@@ -502,10 +503,12 @@
         const src = data.source_status || {};
         const vi = data.vi_status || {};
         const hasViCandidates = Array.isArray(data.vi_candidates) && data.vi_candidates.length > 0;
+        const hasSourceCandidates = Array.isArray(data.source_candidates) && data.source_candidates.length > 0;
         const hasAnyVi = data.has_vi_on_plex || hasViCandidates;
         const srcLangLabel = data.source_lang ? data.source_lang.toUpperCase() : 'Nguồn';
 
         selectedSubtitleId = null;
+        selectedSourceSubtitleId = null;
 
         // Build subtitle info section
         let subInfoHtml = '';
@@ -526,6 +529,25 @@
                     <span>Sub nguồn: ${src.detail || 'Không có trên Plex và provider'}</span>
                 </div>
             `;
+        }
+
+        // Source candidates dropdown (Engsub found on internet)
+        if (hasSourceCandidates) {
+            const srcCandidateLabel = `${data.source_candidates.length} bản Engsub tìm thấy trên internet (sẵn sàng dịch AI sang Vietsub)`;
+            subInfoHtml += `
+                <div class="flex items-center gap-2 p-2.5 px-3.5 bg-bg-input rounded-md text-xs text-text-secondary mb-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-warning shrink-0"></span>
+                    <span>${srcCandidateLabel}</span>
+                </div>
+                <select class="select select-bordered select-sm md:select-md w-full bg-bg-input border-border-subtle text-xs md:text-sm text-text-primary mb-3" id="source-sub-select" onchange="onSourceSubSelect(this.value)">
+                    ${data.source_candidates.map((c, i) => `
+                        <option value="${c.provider}:${c.id}" ${i === 0 ? 'selected' : ''}>
+                            [${c.provider}] ${c.name} (${c.quality}, ${c.downloads ?? 0} lượt tải${c.rating ? ', ★ ' + c.rating.toFixed(1) : ''})
+                        </option>
+                    `).join('')}
+                </select>
+            `;
+            selectedSourceSubtitleId = `${data.source_candidates[0].provider}:${data.source_candidates[0].id}`;
         }
 
         // Vietnamese subtitle status
@@ -604,10 +626,18 @@
             `;
         }
 
-        if (!hasAnyVi && data.can_translate) {
+        // Translate button: dedicated button for downloading Engsub from internet & AI translating to Plex
+        if (hasSourceCandidates) {
+            const btnClass = !hasAnyVi ? 'btn btn-primary' : 'btn btn-warning';
+            actionsHtml += `
+                <button class="${btnClass} btn-sm md:btn-md flex-1 md:flex-none md:min-w-[200px]" onclick="executeTranslation(selectedSourceSubtitleId)" id="btn-translate-source">
+                    <i class="fa-solid fa-cloud-arrow-down mr-1"></i><i class="fa-solid fa-language mr-1.5"></i>Tải Engsub & Dịch AI lên Plex
+                </button>
+            `;
+        } else if (!hasAnyVi && data.can_translate) {
             actionsHtml += `
                 <button class="btn btn-info btn-sm md:btn-md flex-1 md:flex-none md:min-w-[160px]" onclick="executeTranslation()" id="btn-translate">
-                    Dịch AI (${srcLangLabel} → VI)
+                    <i class="fa-solid fa-language mr-1.5"></i>Dịch AI (${srcLangLabel} → VI)
                 </button>
             `;
         }
@@ -620,6 +650,8 @@
             statusTag = data.has_vi_on_plex
                 ? '<span class="badge badge-info font-medium">Có thể sync lại</span>'
                 : '<span class="badge badge-info font-medium">Sẵn sàng sync</span>';
+        } else if (!hasAnyVi && hasSourceCandidates) {
+            statusTag = '<span class="badge badge-warning font-medium">Chỉ có Engsub trên mạng</span>';
         } else if (!hasAnyVi && data.can_translate) {
             statusTag = '<span class="badge badge-info font-medium">Chỉ dịch được</span>';
         } else if (hasViCandidates && data.has_vi_on_plex) {
@@ -639,12 +671,13 @@
         const toggleEl = document.getElementById('auto-fallback-toggle');
         const autoFallbackEnabled = toggleEl ? toggleEl.checked : (sessionStorage.getItem('plex_auto_fallback_translate') === 'true');
 
-        if (!hasAnyVi && data.can_translate && autoFallbackEnabled && !isTranslating) {
+        if (!hasAnyVi && (data.can_translate || hasSourceCandidates) && autoFallbackEnabled && !isTranslating) {
+            const autoSrcText = hasSourceCandidates ? 'Engsub từ internet' : `sub ${srcLangLabel}`;
             fallbackAlertHtml = `
                 <div class="alert alert-warning shadow-md my-4 flex items-center justify-between text-xs md:text-sm py-3 px-4" id="auto-fallback-alert">
                     <div class="flex items-center gap-3">
                         <span class="loading loading-spinner loading-sm text-warning-content shrink-0"></span>
-                        <span>Không tìm thấy Vietsub. <strong>Tự động kích hoạt AI Dịch phụ đề</strong> từ <b>${srcLangLabel}</b>...</span>
+                        <span>Không tìm thấy Vietsub. <strong>Tự động tải ${autoSrcText} & dịch AI sang Vietsub</strong>...</span>
                     </div>
                     <button class="btn btn-xs btn-ghost border border-black/20" onclick="cancelAutoFallback()">Hủy</button>
                 </div>
@@ -654,7 +687,7 @@
             if (fallbackTimer) clearTimeout(fallbackTimer);
             fallbackTimer = setTimeout(() => {
                 fallbackTimer = null;
-                executeTranslation();
+                executeTranslation(selectedSourceSubtitleId);
             }, 800);
         }
 
@@ -678,6 +711,10 @@
 
     function onSubSelect(subtitleId) {
         selectedSubtitleId = subtitleId;
+    }
+
+    function onSourceSubSelect(subtitleId) {
+        selectedSourceSubtitleId = subtitleId;
     }
 
     // Manual search bypassing cache
@@ -863,7 +900,7 @@
     }
 
     // Execute AI Translation
-    async function executeTranslation() {
+    async function executeTranslation(sourceSubId = null) {
         if (!currentRatingKey) {
             showAlert('Chưa chọn media', 'warning');
             return;
@@ -873,7 +910,8 @@
         isTranslating = true;
 
         setButtonsLoading(true);
-        showProgress('Đang dịch subtitle...');
+        const subIdToUse = sourceSubId || selectedSourceSubtitleId || null;
+        showProgress(subIdToUse ? 'Đang tải Engsub từ provider & dịch AI sang Vietsub...' : 'Đang dịch subtitle...');
 
         try {
             const pronounOverride = document.getElementById('manual-pronoun-override')?.value?.trim() || null;
@@ -881,6 +919,7 @@
                 rating_key: currentRatingKey,
                 from_lang: previewData?.source_lang || 'en',
             };
+            if (subIdToUse) payload.source_subtitle_id = subIdToUse;
             if (pronounOverride) payload.pronoun_override = pronounOverride;
 
             const res = await fetch('/api/translation/execute', {
@@ -896,7 +935,7 @@
 
             const result = await res.json();
             finishProgress();
-            showAlert(result.message || 'Đã dịch xong', 'success');
+            showAlert(result.message || 'Đã dịch xong và upload lên Plex', 'success');
 
             // Invalidate cache so next preview fetches newly translated Vietsub from Plex
             SessionCache.remove('preview_' + currentRatingKey);
@@ -951,16 +990,19 @@
         const btnSync = document.getElementById('btn-sync');
         const btnUploadTarget = document.getElementById('btn-upload-target');
         const btnTranslate = document.getElementById('btn-translate');
+        const btnTranslateSource = document.getElementById('btn-translate-source');
         const btnPreview = document.getElementById('btn-preview');
 
         if (btnSync) btnSync.disabled = loading;
         if (btnUploadTarget) btnUploadTarget.disabled = loading;
         if (btnTranslate) btnTranslate.disabled = loading;
+        if (btnTranslateSource) btnTranslateSource.disabled = loading;
         if (btnPreview) btnPreview.disabled = loading;
 
         if (loading && btnSync) btnSync.innerHTML = '<span class="loading loading-spinner loading-xs"></span> Đang xử lý...';
         if (loading && btnUploadTarget) btnUploadTarget.innerHTML = '<span class="loading loading-spinner loading-xs"></span> Đang xử lý...';
         if (loading && btnTranslate) btnTranslate.innerHTML = '<span class="loading loading-spinner loading-xs"></span> Đang xử lý...';
+        if (loading && btnTranslateSource) btnTranslateSource.innerHTML = '<span class="loading loading-spinner loading-xs"></span> Đang tải & dịch...';
 
         if (!loading && btnSync) {
             btnSync.textContent = previewData?.has_vi_on_plex ? 'Sync lại timing' : 'Sync timing';
@@ -971,6 +1013,9 @@
         if (!loading && btnTranslate) {
             const srcLangLabel = previewData?.source_lang ? previewData.source_lang.toUpperCase() : 'EN';
             btnTranslate.innerHTML = `<i class="fa-solid fa-language mr-1.5"></i>AI Translate (${srcLangLabel} <span aria-hidden="true">-&gt;</span> VI)`;
+        }
+        if (!loading && btnTranslateSource) {
+            btnTranslateSource.innerHTML = '<i class="fa-solid fa-cloud-arrow-down mr-1"></i><i class="fa-solid fa-language mr-1.5"></i>Tải Engsub & Dịch AI lên Plex';
         }
     }
 
@@ -1095,6 +1140,7 @@
         if (ratingKey !== currentRatingKey) {
             document.getElementById('results-area').innerHTML = '';
             selectedSubtitleId = null;
+            selectedSourceSubtitleId = null;
             previewData = null;
         }
 

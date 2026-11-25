@@ -75,3 +75,38 @@ async def test_translate_endpoint(monkeypatch) -> None:
         resp = await client.post("/api/subtitles/translate", json={"rating_key": "12345"})
         assert resp.status_code == 200
         assert resp.json() == {"status": "success", "message": "Translated"}
+
+
+@pytest.mark.asyncio
+async def test_translation_execute_endpoint_with_source_subtitle_id(monkeypatch) -> None:
+    from unittest.mock import AsyncMock, MagicMock
+    from httpx import AsyncClient, ASGITransport
+    from app.main import app
+
+    mock_service = MagicMock()
+    mock_service.runtime_config.ai_available = True
+    mock_service.execute_translate_for_media = AsyncMock(
+        return_value={"status": "success", "message": "Translated from source candidate"}
+    )
+    monkeypatch.setattr("app.main.subtitle_service", mock_service)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/api/translation/execute",
+            json={
+                "rating_key": "9999",
+                "from_lang": "en",
+                "source_subtitle_id": "subdl:123456",
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "success", "message": "Translated from source candidate"}
+        mock_service.execute_translate_for_media.assert_awaited_once_with(
+            rating_key="9999",
+            from_lang="en",
+            use_cache=True,
+            source_subtitle_id="subdl:123456",
+            source_search_override=None,
+            pronoun_override=None,
+        )
