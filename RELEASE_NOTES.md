@@ -1,5 +1,11 @@
 # Release Notes
 
+## Unreleased - 2026-11-26 06:36 +07
+
+Generated before push from commits:
+
+- `0e9ee00` feat: add dedicated button to download internet engsub, translate with AI and upload to Plex
+
 ## v0.5.1 - 2026-11-24
 
 - Bỏ qua tìm sub chủ động: đánh dấu phim/series (chọn nhiều được) để không tự tìm sub, không dịch AI, ẩn khỏi danh sách "Thiếu Vietsub"; tab "Bỏ qua" để xem và khôi phục. Bỏ qua series áp dụng cho mọi tập.
