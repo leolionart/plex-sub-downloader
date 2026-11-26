@@ -148,6 +148,29 @@ async def test_get_section_items_refresh_and_no_cache(mock_service):
             use_cache=False,
         )
 
+
+@pytest.mark.asyncio
+async def test_get_section_stats_endpoint(mock_service):
+    mock_service.get_library_section_stats = MagicMock(return_value={
+        "total": 100,
+        "has_vi": 40,
+        "missing_vi": 60,
+        "can_translate": 20,
+        "ignored": 5,
+    })
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/library/sections/1/stats")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["section_key"] == "1"
+        assert data["stats"]["total"] == 100
+        assert data["stats"]["has_vi"] == 40
+        mock_service.get_library_section_stats.assert_called_with(
+            section_key="1",
+            use_cache=True,
+        )
+
         # Test use_cache=false disables cache
         response = await client.get("/api/library/sections/1/items?use_cache=false")
         assert response.status_code == 200

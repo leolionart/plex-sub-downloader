@@ -732,7 +732,7 @@
 
     let activeSectionKey = null;
     let currentOffset = 0;
-    const pageSize = 40;
+    const pageSize = 20;
     let totalItems = 0;
     let activeTaskId = null;
     let currentTaskType = null;
@@ -1400,6 +1400,27 @@
         loadCurrentSectionItems();
     }
 
+    let currentStatsAbortController = null;
+    async function fetchSectionStats(sectionKey, bypassCache = false) {
+        if (!sectionKey) return;
+        if (currentStatsAbortController) {
+            currentStatsAbortController.abort();
+        }
+        currentStatsAbortController = new AbortController();
+        try {
+            const res = await fetch(`/api/library/sections/${sectionKey}/stats?refresh=${bypassCache}`, {
+                signal: currentStatsAbortController.signal
+            });
+            if (!res.ok) return;
+            const resData = await res.json();
+            if (resData.stats && String(activeSectionKey) === String(sectionKey)) {
+                updateFilterStats(resData.stats);
+            }
+        } catch (e) {
+            if (e.name !== 'AbortError') console.error("Failed to load stats:", e);
+        }
+    }
+
     async function loadCurrentSectionItems(append = false, bypassCache = false) {
         if (!activeSectionKey) return;
         const grid = document.getElementById("itemsGrid");
@@ -1411,6 +1432,8 @@
             if (cachedData) {
                 if (cachedData.stats) {
                     updateFilterStats(cachedData.stats);
+                } else if (currentOffset === 0) {
+                    fetchSectionStats(activeSectionKey, false);
                 }
                 totalItems = cachedData.total_size || 0;
                 const items = cachedData.items || [];
@@ -1442,16 +1465,17 @@
         }
         if (!append) {
             cachedItems = [];
-            grid.innerHTML = `
-                <div class="col-span-full flex flex-col items-center justify-center py-16 gap-3 text-text-muted">
-                    <i class="fa-solid fa-circle-notch fa-spin text-3xl text-primary mb-2"></i>
-                    <span class="text-sm">Đang tải danh mục phim...</span>
+            grid.innerHTML = Array.from({length: 6}).map(() => `
+                <div class="card bg-bg-surface border border-border-subtle rounded-xl overflow-hidden p-3 animate-pulse">
+                    <div class="aspect-[2/3] bg-bg-input/60 rounded-lg mb-3"></div>
+                    <div class="h-4 bg-bg-input/60 rounded w-3/4 mb-2"></div>
+                    <div class="h-3 bg-bg-input/40 rounded w-1/2"></div>
                 </div>
-            `;
+            `).join('');
         }
 
         try {
-            const url = `/api/library/sections/${activeSectionKey}/items?offset=${currentOffset}&limit=${pageSize}&query=${encodeURIComponent(query)}&filter=${encodeURIComponent(currentSubtitleFilter)}&sort=${encodeURIComponent(currentSort)}`;
+            const url = `/api/library/sections/${activeSectionKey}/items?offset=${currentOffset}&limit=${pageSize}&query=${encodeURIComponent(query)}&filter=${encodeURIComponent(currentSubtitleFilter)}&sort=${encodeURIComponent(currentSort)}&include_stats=false`;
             const res = await fetch(url);
             const data = await res.json();
 
@@ -1461,6 +1485,8 @@
             const items = data.items || [];
             if (data.stats) {
                 updateFilterStats(data.stats);
+            } else if (!append && currentOffset === 0) {
+                fetchSectionStats(activeSectionKey, bypassCache);
             }
             if (!append && items.length === 0) {
                 cachedItems = [];
@@ -1505,6 +1531,9 @@
         currentOffset = 0;
         cachedItems = [];
         loadCurrentSectionItems(false, true);
+        if (activeSectionKey) {
+            fetchSectionStats(activeSectionKey, true);
+        }
     }
 
     function loadMoreItems() {

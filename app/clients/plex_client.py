@@ -1082,11 +1082,13 @@ class PlexClient:
         sort: str | None = None,
         use_cache: bool = True,
         exclude_audio_language: str | None = None,
+        include_stats: bool = True,
     ) -> dict:
         """Fetch items in a library section with optional search, subtitle filter, sort, and pagination.
 
         exclude_audio_language: nếu đặt (VD "vi"), các bộ lọc "thiếu sub" sẽ loại media có audio
         cùng ngôn ngữ này ngay phía Plex server, nên phân trang vẫn chính xác.
+        include_stats: nếu False, bỏ qua quét toàn thư viện để tính stats badges, trả về kết quả trang tức thì.
         """
         cache_key = (
             str(section_key),
@@ -1096,6 +1098,7 @@ class PlexClient:
             offset,
             limit,
             exclude_audio_language,
+            include_stats,
         )
         if use_cache:
             cached = self._section_items_cache.get(cache_key)
@@ -1122,7 +1125,7 @@ class PlexClient:
                     "has_vi": 1 if subtitle_filter == "has_vi" else 0,
                     "missing_vi": 0 if subtitle_filter == "has_vi" else 1,
                     "can_translate": 1,
-                },
+                } if include_stats else None,
                 "items": [
                     {
                         "rating_key": "1001",
@@ -1184,8 +1187,26 @@ class PlexClient:
                     maxresults=limit,
                 )
             total = getattr(paged, "totalSize", len(paged))
-            vi_keys, en_keys = self._get_section_subtitle_keys(section, str(section_key))
-            native_only = (native_keys - vi_keys) if native_keys else set()
+            stats = None
+            if include_stats:
+                vi_keys, en_keys = self._get_section_subtitle_keys(section, str(section_key), use_cache=use_cache)
+                native_only = (native_keys - vi_keys) if native_keys else set()
+                total_size_attr = getattr(section, "totalSize", None)
+                total_in_section = total_size_attr if isinstance(total_size_attr, int) else total
+                stats = {
+                    "total": total_in_section,
+                    "has_vi": len(vi_keys),
+                    "missing_vi": max(0, total_in_section - len(vi_keys) - len(native_only)),
+                    "can_translate": len(en_keys - vi_keys - native_only),
+                    "native_language": len(native_only),
+                }
+            else:
+                stats_cache_key = f"stats:{section_key}:{exclude_audio_language}"
+                cached_stats = self._section_subtitles_cache.get(stats_cache_key)
+                if cached_stats and isinstance(cached_stats, dict):
+                    stats = copy.deepcopy(cached_stats)
+                vi_keys = None
+                en_keys = None
 
             items = []
             for item in paged:
@@ -1193,8 +1214,8 @@ class PlexClient:
                 rk = str(item.ratingKey)
                 vi_det = self.get_subtitle_details(item, "vi")
                 en_det = self.get_subtitle_details(item, "en")
-                has_vi = bool(vi_det.get("has_subtitle")) if vi_det.get("subtitle_info") else rk in vi_keys
-                has_en = bool(en_det.get("has_subtitle")) if en_det.get("subtitle_info") else rk in en_keys
+                has_vi = bool(vi_det.get("has_subtitle")) if vi_det.get("subtitle_info") else (rk in vi_keys if vi_keys is not None else bool(vi_det.get("has_subtitle")))
+                has_en = bool(en_det.get("has_subtitle")) if en_det.get("subtitle_info") else (rk in en_keys if en_keys is not None else bool(en_det.get("has_subtitle")))
                 target_usable = bool(vi_det.get("target_usable")) if vi_det.get("subtitle_info") else has_vi
                 source_usable = bool(en_det.get("source_usable")) if en_det.get("subtitle_info") else has_en
                 items.append({
@@ -1214,8 +1235,6 @@ class PlexClient:
                     "can_translate": bool(not has_vi and source_usable),
                 })
 
-            total_size_attr = getattr(section, "totalSize", None)
-            total_in_section = total_size_attr if isinstance(total_size_attr, int) else total
             result = {
                 "section_key": str(section_key),
                 "section_title": section.title,
@@ -1223,13 +1242,7 @@ class PlexClient:
                 "total_size": total,
                 "offset": offset,
                 "limit": limit,
-                "stats": {
-                    "total": total_in_section,
-                    "has_vi": len(vi_keys),
-                    "missing_vi": max(0, total_in_section - len(vi_keys) - len(native_only)),
-                    "can_translate": len(en_keys - vi_keys - native_only),
-                    "native_language": len(native_only),
-                },
+                "stats": stats,
                 "items": items,
             }
             if use_cache:
@@ -1239,6 +1252,51 @@ class PlexClient:
         except Exception as e:
             logger.error(f"Failed to get items for section {section_key}: {e}")
             raise PlexClientError(f"Failed to get section items: {e}") from e
+
+    def get_section_stats(
+        self,
+        section_key: str,
+        use_cache: bool = True,
+        exclude_audio_language: str | None = None,
+    ) -> dict:
+        """Fetch overall subtitle stats for section without loading item list."""
+        cache_key = f"stats:{section_key}:{exclude_audio_language}"
+        if use_cache:
+            cached = self._section_subtitles_cache.get(cache_key)
+            if cached is not None and isinstance(cached, dict):
+                return copy.deepcopy(cached)
+
+        if self._mock_mode:
+            return {
+                "total": 1,
+                "has_vi": 1,
+                "missing_vi": 0,
+                "can_translate": 1,
+                "native_language": 0,
+            }
+
+        section = self.server.library.sectionByID(int(section_key))
+        total_size_attr = getattr(section, "totalSize", None)
+        total_in_section = total_size_attr if isinstance(total_size_attr, int) else len(section.all())
+
+        vi_keys, en_keys = self._get_section_subtitle_keys(section, str(section_key), use_cache=use_cache)
+        native_keys = (
+            self._get_section_native_keys(section, str(section_key), exclude_audio_language, use_cache=use_cache)
+            if exclude_audio_language
+            else None
+        )
+        native_only = (native_keys - vi_keys) if native_keys else set()
+
+        stats = {
+            "total": total_in_section,
+            "has_vi": len(vi_keys),
+            "missing_vi": max(0, total_in_section - len(vi_keys) - len(native_only)),
+            "can_translate": len(en_keys - vi_keys - native_only),
+            "native_language": len(native_only),
+        }
+        if use_cache:
+            self._section_subtitles_cache.set(cache_key, stats)
+        return stats
 
     def get_show_tree(
         self,

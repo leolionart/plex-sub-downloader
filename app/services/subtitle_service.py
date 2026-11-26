@@ -2618,6 +2618,7 @@ class SubtitleService:
         subtitle_filter: str = "missing_vi",
         sort: str | None = None,
         use_cache: bool = True,
+        include_stats: bool = True,
     ) -> dict:
         ignored = self.config.subtitle_settings.ignored_media
         sk = str(section_key)
@@ -2647,6 +2648,7 @@ class SubtitleService:
             base = self.plex_client.get_section_items(
                 section_key=section_key, offset=0, limit=1, subtitle_filter="all", use_cache=True,
                 exclude_audio_language=self._native_exclude_language(),
+                include_stats=include_stats,
             )
             stats = dict(base.get("stats") or {})
             stats["ignored"] = len([1 for m in ignored.values() if (m or {}).get("section_key") == sk])
@@ -2659,6 +2661,7 @@ class SubtitleService:
             section_key=section_key, query=query, offset=offset, limit=limit,
             subtitle_filter=subtitle_filter, sort=sort, use_cache=use_cache,
             exclude_audio_language=self._native_exclude_language(),
+            include_stats=include_stats,
         )
         result = dict(data)
         items = []
@@ -2672,7 +2675,7 @@ class SubtitleService:
                     continue
             items.append(item)
         result["items"] = items
-        if "stats" in result:
+        if "stats" in result and result["stats"]:
             stats = dict(result["stats"])
             stats["can_translate"] = sum(1 for item in items if item.get("can_translate"))
             section_ignored = sum(1 for m in ignored.values() if (m or {}).get("section_key") == sk)
@@ -2681,6 +2684,26 @@ class SubtitleService:
                 stats["missing_vi"] = max(0, stats["missing_vi"] - section_ignored)
             result["stats"] = stats
         return result
+
+    def get_library_section_stats(
+        self,
+        section_key: str,
+        use_cache: bool = True,
+    ) -> dict:
+        """Fetch overall section statistics including ignored media."""
+        ignored = self.config.subtitle_settings.ignored_media
+        sk = str(section_key)
+        stats = self.plex_client.get_section_stats(
+            section_key=section_key,
+            use_cache=use_cache,
+            exclude_audio_language=self._native_exclude_language(),
+        )
+        stats = dict(stats or {})
+        section_ignored = len([1 for m in ignored.values() if (m or {}).get("section_key") == sk])
+        stats["ignored"] = section_ignored
+        if isinstance(stats.get("missing_vi"), int):
+            stats["missing_vi"] = max(0, stats["missing_vi"] - section_ignored)
+        return stats
 
     def _native_exclude_language(self) -> str | None:
         if not self.config.subtitle_settings.skip_native_language:

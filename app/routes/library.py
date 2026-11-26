@@ -145,26 +145,53 @@ async def get_section_items(
     sort: str | None = Query(None),
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
+    include_stats: bool | None = Query(None),
     use_cache: bool = Query(True),
     refresh: bool = Query(False),
 ):
     """List media items in a section with search, subtitle filter, sort, and pagination."""
     service = get_subtitle_service()
     effective_use_cache = use_cache and not refresh
+    kwargs = {
+        "section_key": section_key,
+        "query": query,
+        "offset": offset,
+        "limit": limit,
+        "subtitle_filter": filter,
+        "sort": sort,
+        "use_cache": effective_use_cache,
+    }
+    if include_stats is not None:
+        kwargs["include_stats"] = include_stats
     try:
         data = await asyncio.to_thread(
             service.get_library_items,
-            section_key=section_key,
-            query=query,
-            offset=offset,
-            limit=limit,
-            subtitle_filter=filter,
-            sort=sort,
-            use_cache=effective_use_cache,
+            **kwargs,
         )
         return data
     except Exception as e:
         logger.error(f"Error fetching section items: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/sections/{section_key}/stats")
+async def get_section_stats(
+    section_key: str,
+    use_cache: bool = Query(True),
+    refresh: bool = Query(False),
+):
+    """Fetch section subtitle statistics asynchronously without blocking item listing."""
+    service = get_subtitle_service()
+    effective_use_cache = use_cache and not refresh
+    try:
+        stats = await asyncio.to_thread(
+            service.get_library_section_stats,
+            section_key=section_key,
+            use_cache=effective_use_cache,
+        )
+        return {"section_key": str(section_key), "stats": stats}
+    except Exception as e:
+        logger.error(f"Error fetching section stats: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
