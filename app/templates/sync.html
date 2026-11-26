@@ -707,6 +707,7 @@
                 </div>
             </div>
         `;
+        checkOngoingTranslation();
     }
 
     function onSubSelect(subtitleId) {
@@ -920,6 +921,7 @@
             const payload = {
                 rating_key: currentRatingKey,
                 from_lang: previewData?.source_lang || 'en',
+                background: true,
             };
             if (subIdToUse) payload.source_subtitle_id = subIdToUse;
             if (pronounOverride) payload.pronoun_override = pronounOverride;
@@ -936,19 +938,88 @@
             }
 
             const result = await res.json();
-            finishProgress();
-            showAlert(result.message || 'Đã dịch xong và upload lên Plex', 'success');
-
-            // Invalidate cache so next preview fetches newly translated Vietsub from Plex
-            SessionCache.remove('preview_' + currentRatingKey);
-
-            setTimeout(() => previewSync(true), 1500);
+            if (result.task_id) {
+                pollTranslationTask(result.task_id);
+            } else {
+                finishProgress();
+                showAlert(result.message || 'Đã dịch xong và upload lên Plex', 'success');
+                SessionCache.remove('preview_' + currentRatingKey);
+                setTimeout(() => previewSync(true), 1500);
+                isTranslating = false;
+                setButtonsLoading(false);
+            }
         } catch (e) {
             hideProgress();
             showAlert('Dịch thất bại: ' + e.message, 'error');
-        } finally {
             isTranslating = false;
             setButtonsLoading(false);
+        }
+    }
+
+    let translationPollInterval = null;
+    function pollTranslationTask(taskId) {
+        if (translationPollInterval) clearInterval(translationPollInterval);
+        localStorage.setItem('plex_active_task_id', taskId);
+        localStorage.setItem('plex_active_task_rating_key', currentRatingKey);
+
+        translationPollInterval = setInterval(async () => {
+            try {
+                const res = await fetch(`/api/library/tasks/${taskId}`);
+                if (!res.ok) return;
+                const task = await res.json();
+                if (!task) return;
+
+                const labelEl = document.getElementById('progress-label');
+                if (task.logs && task.logs.length > 0) {
+                    const lastLog = task.logs[task.logs.length - 1];
+                    if (labelEl) {
+                        labelEl.innerHTML = `<span class="loading loading-spinner loading-xs text-warning"></span> <span>${lastLog}</span>`;
+                    }
+                }
+
+                if (task.status === 'completed') {
+                    clearInterval(translationPollInterval);
+                    translationPollInterval = null;
+                    isTranslating = false;
+                    setButtonsLoading(false);
+                    finishProgress();
+                    localStorage.removeItem('plex_active_task_id');
+                    localStorage.removeItem('plex_active_task_rating_key');
+                    showAlert('Đã dịch xong và upload lên Plex!', 'success');
+                    SessionCache.remove('preview_' + currentRatingKey);
+                    setTimeout(() => previewSync(true), 1200);
+                } else if (task.status === 'failed') {
+                    clearInterval(translationPollInterval);
+                    translationPollInterval = null;
+                    isTranslating = false;
+                    setButtonsLoading(false);
+                    hideProgress();
+                    localStorage.removeItem('plex_active_task_id');
+                    localStorage.removeItem('plex_active_task_rating_key');
+                    const lastLog = (task.logs && task.logs.length) ? task.logs[task.logs.length - 1] : 'Dịch thất bại';
+                    showAlert(lastLog, 'error');
+                }
+            } catch (err) {
+                console.error('Translation poll error:', err);
+            }
+        }, 1000);
+    }
+
+    async function checkOngoingTranslation() {
+        if (!currentRatingKey) return;
+        try {
+            const res = await fetch('/api/library/tasks/active');
+            if (!res.ok) return;
+            const data = await res.json();
+            const task = data.task;
+            if (task && task.status === 'running' && String(task.rating_key) === String(currentRatingKey)) {
+                isTranslating = true;
+                setButtonsLoading(true);
+                showProgress(task.current_item || 'Đang tiếp tục dịch phụ đề...');
+                pollTranslationTask(task.id);
+            }
+        } catch (e) {
+            console.error('Check ongoing task error:', e);
         }
     }
 

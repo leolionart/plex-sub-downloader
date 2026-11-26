@@ -2004,6 +2004,8 @@
     function openTaskModal(taskId, taskType = 'upload_target') {
         activeTaskId = taskId;
         currentTaskType = taskType;
+        localStorage.setItem('plex_active_task_id', taskId);
+        localStorage.setItem('plex_active_task_type', taskType);
         const modal = document.getElementById("taskModal");
         const btn = document.getElementById("taskCloseBtn");
         const minimizeBtn = document.getElementById("taskMinimizeBtn");
@@ -2051,6 +2053,7 @@
             if (floatingWidget) floatingWidget.style.display = "none";
         }
     };
+    window.localReopenTaskModal = window.reopenActiveTaskModal;
 
     async function pollTaskStatus() {
         if (!activeTaskId) return;
@@ -2081,6 +2084,8 @@
             if (task.status === "completed" || task.status === "failed") {
                 clearInterval(taskPollInterval);
                 resetActiveSearchButton();
+                localStorage.removeItem('plex_active_task_id');
+                localStorage.removeItem('plex_active_task_type');
                 document.getElementById("taskStatusLabel").innerText = task.status === "completed" ? "Hoàn tất" : "Thất bại";
 
                 if (activeBatchKeys && activeBatchKeys.length) {
@@ -2153,6 +2158,8 @@
         const floatingWidget = document.getElementById("floatingTaskWidget");
         if (floatingWidget) floatingWidget.style.display = "none";
         activeTaskId = null;
+        localStorage.removeItem('plex_active_task_id');
+        localStorage.removeItem('plex_active_task_type');
         lastNotFoundRatingKeys = [];
         resetActiveSearchButton();
 
@@ -2240,6 +2247,19 @@
                 if (e.target === taskModal) minimizeTaskModal();
             });
         }
+
+        // Auto-resume ongoing task if active
+        (async function checkActiveLibraryTask() {
+            try {
+                const res = await fetch('/api/library/tasks/active');
+                if (!res.ok) return;
+                const data = await res.json();
+                const task = data.task;
+                if (task && task.status === 'running') {
+                    openTaskModal(task.id, task.type || 'upload_target');
+                }
+            } catch (e) {}
+        })();
     });
 </script>
 {% endblock %}

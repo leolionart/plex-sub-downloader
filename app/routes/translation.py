@@ -2,10 +2,12 @@
 Translation routes cho Web UI.
 """
 
-from fastapi import APIRouter, HTTPException
+from typing import Any
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 
 from app.models.subtitle import SubtitleSearchParams
+from app.services.task_tracker import task_tracker
 
 router = APIRouter(prefix="/api/translation", tags=["translation"])
 
@@ -18,6 +20,7 @@ class TranslationRequest(BaseModel):
     source_subtitle_id: str | None = None
     source_search_override: SubtitleSearchParams | None = None
     pronoun_override: str | None = None
+    background: bool = False
 
 class ImproveRequest(BaseModel):
     """Request để execute subtitle improve."""
@@ -34,8 +37,46 @@ def get_subtitle_service():
     return main_app.subtitle_service
 
 
+async def _run_single_translate_task(
+    service: Any,
+    task_id: str,
+    request: TranslationRequest,
+) -> None:
+    task_tracker.add_log(task_id, f"Bắt đầu dịch cho tập/phim {request.rating_key}...")
+    try:
+        preview = await service.preview_sync_for_media(request.rating_key)
+        item_label = preview.get("title", f"RatingKey {request.rating_key}")
+        task_tracker.update_progress(task_id, 0, item_label, f"Đang dịch: {item_label}...")
+        result = await service.execute_translate_for_media(
+            rating_key=request.rating_key,
+            from_lang=request.from_lang,
+            use_cache=request.use_cache,
+            source_subtitle_id=request.source_subtitle_id,
+            source_search_override=request.source_search_override,
+            pronoun_override=request.pronoun_override,
+        )
+        if result.get("status") == "error":
+            task_tracker.add_log(task_id, f"✕ Dịch thất bại: {result.get('message')}")
+            task_tracker.finish_task(task_id, "failed")
+        else:
+            task_tracker.update_progress(
+                task_id=task_id,
+                current=1,
+                item_title=item_label,
+                log_message=f"Đã dịch và upload Vietsub thành công ({result.get('stats', {}).get('lines_translated', 0)} dòng)!",
+                result_item=result,
+            )
+            task_tracker.finish_task(task_id, "completed")
+    except Exception as e:
+        task_tracker.add_log(task_id, f"✕ Lỗi khi dịch: {e}")
+        task_tracker.finish_task(task_id, "failed")
+
+
 @router.post("/execute")
-async def execute_translation(request: TranslationRequest):
+async def execute_translation(
+    request: TranslationRequest,
+    background_tasks: BackgroundTasks,
+):
     """
     Execute manual translation cho một media item.
     """
@@ -43,6 +84,22 @@ async def execute_translation(request: TranslationRequest):
 
     if not service.runtime_config.ai_available:
         raise HTTPException(status_code=400, detail="OpenAI API key required for translation")
+
+    if request.background:
+        task_id = task_tracker.create_task(
+            "translate", 1, f"Tập {request.rating_key}", rating_key=request.rating_key
+        )
+        if background_tasks:
+            background_tasks.add_task(
+                _run_single_translate_task,
+                service=service,
+                task_id=task_id,
+                request=request,
+            )
+        else:
+            import asyncio
+            asyncio.create_task(_run_single_translate_task(service, task_id, request))
+        return {"status": "started", "task_id": task_id, "rating_key": request.rating_key}
 
     result = await service.execute_translate_for_media(
         rating_key=request.rating_key,

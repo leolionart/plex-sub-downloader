@@ -1715,6 +1715,122 @@
             checkHealth();
             setInterval(checkHealth, 30000);
         })();
+
+        // Global Background Task Poller & Floating Widget
+        (function() {
+            let globalPollTimer = null;
+            let lastNotifiedTaskId = null;
+            let isWidgetHovered = false;
+
+            const widget = document.getElementById('floatingTaskWidget');
+            const labelEl = document.getElementById('floatingTaskLabel');
+            const percentEl = document.getElementById('floatingTaskPercent');
+            const progressFill = document.getElementById('floatingTaskProgressBar');
+            const spinner = document.getElementById('floatingTaskSpinner');
+
+            if (!widget) return;
+
+            widget.addEventListener('mouseenter', () => { isWidgetHovered = true; });
+            widget.addEventListener('mouseleave', () => { isWidgetHovered = false; });
+
+            async function checkActiveTask() {
+                try {
+                    const res = await fetch('/api/library/tasks/active');
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    const task = data.task;
+
+                    if (task && task.status === 'running') {
+                        localStorage.setItem('plex_active_task_id', task.id);
+                        if (task.rating_key) {
+                            localStorage.setItem('plex_active_task_rating_key', task.rating_key);
+                        }
+
+                        // Don't show floating widget if taskModal on library is open
+                        const libraryTaskModal = document.getElementById('taskModal');
+                        if (libraryTaskModal && libraryTaskModal.classList.contains('active')) {
+                            widget.style.display = 'none';
+                            return;
+                        }
+
+                        widget.style.display = 'block';
+                        if (spinner) spinner.style.display = 'inline-block';
+
+                        const total = task.total || 1;
+                        const current = task.current || 0;
+                        const pct = Math.min(100, Math.round((current / total) * 100));
+                        const pctStr = `${pct}% (${current}/${total})`;
+
+                        if (labelEl) {
+                            labelEl.textContent = task.current_item
+                                ? `Đang xử lý: ${task.current_item}`
+                                : (task.type === 'translate' ? 'Đang dịch AI phụ đề...' : 'Đang xử lý phụ đề...');
+                        }
+                        if (percentEl) percentEl.textContent = pctStr;
+                        if (progressFill) progressFill.style.width = pct + '%';
+
+                        lastNotifiedTaskId = task.id;
+                    } else if (task && (task.status === 'completed' || task.status === 'failed')) {
+                        const currentStored = localStorage.getItem('plex_active_task_id');
+                        if (currentStored === task.id || lastNotifiedTaskId === task.id) {
+                            localStorage.removeItem('plex_active_task_id');
+                            if (task.status === 'completed') {
+                                if (labelEl) labelEl.textContent = 'Hoàn tất phụ đề!';
+                                if (percentEl) percentEl.textContent = '100%';
+                                if (progressFill) progressFill.style.width = '100%';
+                                if (spinner) spinner.style.display = 'none';
+                                showAlert('Tác vụ phụ đề đã hoàn tất thành công!', 'success');
+                            } else {
+                                if (labelEl) labelEl.textContent = 'Xử lý thất bại!';
+                                if (spinner) spinner.style.display = 'none';
+                                showAlert('Tác vụ phụ đề gặp lỗi hoặc thất bại.', 'error');
+                            }
+
+                            setTimeout(() => {
+                                if (widget && !isWidgetHovered) {
+                                    widget.style.display = 'none';
+                                }
+                            }, 3500);
+                            lastNotifiedTaskId = null;
+                        }
+                    } else {
+                        const libraryTaskModal = document.getElementById('taskModal');
+                        if (!libraryTaskModal || !libraryTaskModal.classList.contains('active')) {
+                            const currentStored = localStorage.getItem('plex_active_task_id');
+                            if (currentStored && !task) {
+                                localStorage.removeItem('plex_active_task_id');
+                                widget.style.display = 'none';
+                            }
+                        }
+                    }
+                } catch (e) {
+                    // Ignore transient errors
+                }
+            }
+
+            if (!window.reopenActiveTaskModal) {
+                window.reopenActiveTaskModal = function() {
+                    if (typeof window.localReopenTaskModal === 'function') {
+                        window.localReopenTaskModal();
+                        return;
+                    }
+                    const activeRatingKey = localStorage.getItem('plex_active_task_rating_key');
+                    if (window.location.pathname.startsWith('/library')) {
+                        const activeTaskId = localStorage.getItem('plex_active_task_id');
+                        if (typeof window.openTaskModal === 'function' && activeTaskId) {
+                            window.openTaskModal(activeTaskId);
+                        }
+                    } else if (activeRatingKey) {
+                        window.location.href = '/sync?rating_key=' + activeRatingKey;
+                    } else {
+                        window.location.href = '/library';
+                    }
+                };
+            }
+
+            checkActiveTask();
+            globalPollTimer = setInterval(checkActiveTask, 2000);
+        })();
     </script>
     {% block scripts %}{% endblock %}
 </body>
