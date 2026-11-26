@@ -1,5 +1,11 @@
 # Release Notes
 
+## Unreleased - 2026-11-26 07:39 +07
+
+Generated before push from commits:
+
+- `09e6457` perf(library): instant tab switching with async stats and on-demand pagination
+
 ## Unreleased - 2026-11-26 07:11 +07
 
 Generated before push from commits:
