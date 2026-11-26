@@ -1,5 +1,11 @@
 # Release Notes
 
+## Unreleased - 2026-11-26 07:11 +07
+
+Generated before push from commits:
+
+- `f939f11` fix(ui): standardize single icon for all action buttons
+
 ## Unreleased - 2026-11-26 06:36 +07
 
 Generated before push from commits:
