@@ -1,5 +1,11 @@
 # Release Notes
 
+## Unreleased - 2026-11-26 17:27 +07
+
+Generated before push from commits:
+
+- `40d6680` fix: ensure parent directory exists before writing translated srt and handle utf-8-sig
+
 ## Unreleased - 2026-11-26 07:39 +07
 
 Generated before push from commits:
