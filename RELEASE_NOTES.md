@@ -1,5 +1,11 @@
 # Release Notes
 
+## Unreleased - 2026-11-26 17:43 +07
+
+Generated before push from commits:
+
+- `2af7c42` fix(ui): persist translation and search background tasks across page transitions
+
 ## Unreleased - 2026-11-26 17:27 +07
 
 Generated before push from commits:
