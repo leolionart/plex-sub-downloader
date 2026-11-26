@@ -87,7 +87,10 @@ class OpenAITranslationClient:
         Returns:
             List of {index, timing, text}
         """
-        content = srt_path.read_text(encoding="utf-8")
+        try:
+            content = srt_path.read_text(encoding="utf-8-sig")
+        except UnicodeDecodeError:
+            content = srt_path.read_text(encoding="latin-1")
 
         # SRT format:
         # 1
@@ -421,6 +424,7 @@ class OpenAITranslationClient:
             srt_content.append(entry["text"])
             srt_content.append("")  # Empty line
 
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text("\n".join(srt_content), encoding="utf-8")
 
         logger.info(f"✓ Translated subtitle saved to: {output_path}")
