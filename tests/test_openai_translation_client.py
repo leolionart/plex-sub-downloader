@@ -136,3 +136,23 @@ async def test_translate_srt_file_bypasses_context_by_default(tmp_path: Path) ->
 def test_translate_subtitles_alias() -> None:
     client = OpenAITranslationClient(RuntimeConfig(openai_api_key="test-key"))
     assert client.translate_subtitles == client.translate_srt_file
+
+
+def test_parse_numbered_response_replaces_literal_escaped_newlines() -> None:
+    client = OpenAITranslationClient(RuntimeConfig(openai_api_key="test-key"))
+    raw_response = "[1] Dòng một\\nDòng hai\\n[2] Dòng ba"
+    parsed = client._parse_numbered_response(raw_response, 2)
+    assert parsed == ["Dòng một\nDòng hai", "Dòng ba"]
+
+
+def test_has_vietnamese_diacritics() -> None:
+    from app.services.subtitle_service import has_vietnamese_diacritics
+
+    # English text with no diacritics
+    english = "The president of our company, Mr. Tyrell, he has given us the all clear"
+    assert has_vietnamese_diacritics(english) is False
+
+    # Authentic Vietnamese text
+    vietnamese = "Chủ tịch công ty chúng tôi, ông Tyrell, đã bật đèn xanh cho phép giảm giá"
+    assert has_vietnamese_diacritics(vietnamese) is True
+

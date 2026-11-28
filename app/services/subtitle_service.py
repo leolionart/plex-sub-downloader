@@ -34,6 +34,17 @@ logger = get_logger(__name__)
 # Languages to try as source for AI translation when EN not available.
 _FALLBACK_SOURCE_LANGS = ["ko", "ja", "zh", "fr", "es", "de", "pt", "ru", "it", "ar"]
 
+VIETNAMESE_DIACRITICS = set(
+    "àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ"
+    "ÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴĐ"
+)
+
+
+def has_vietnamese_diacritics(text: str, min_count: int = 5) -> bool:
+    """Return True if text contains at least min_count Vietnamese diacritic characters."""
+    count = sum(1 for ch in text if ch in VIETNAMESE_DIACRITICS)
+    return count >= min_count
+
 
 class SubtitleServiceError(Exception):
     """Base exception for subtitle service errors."""
@@ -1302,6 +1313,7 @@ class SubtitleService:
             audio_status = self.audio_sync_client.availability(video)
             can_sync = audio_status["available"] and (has_vi_text or bool(vi_candidates))
             can_translate = has_source_available and self.translation_client.enabled and not has_vi_on_plex
+            can_retranslate = has_source_available and self.translation_client.enabled
             can_improve = has_vi_text and self.translation_client.enabled
 
             return {
@@ -1311,6 +1323,7 @@ class SubtitleService:
                 "source_status": source_status,
                 "vi_status": vi_status,
                 "has_source_on_plex": source_status["source"] == "plex",
+                "has_source_available": has_source_available,
                 "has_vi_on_plex": has_vi_on_plex,
                 "has_vi_text_on_plex": has_vi_text,
                 "has_vi_embedded_on_plex": bool(has_vi_on_plex and not has_vi_text),
@@ -1319,6 +1332,7 @@ class SubtitleService:
                 "subtitle_providers": self.subtitle_provider_manager.provider_status(),
                 "can_sync": can_sync,
                 "can_translate": can_translate,
+                "can_retranslate": can_retranslate,
                 "can_improve": can_improve,
                 "source_lang": source_lang,
                 "sync_enabled": audio_status["available"],
@@ -1830,37 +1844,39 @@ class SubtitleService:
                     }
             log.info("[TranslatePath] Explicit provider source unavailable or download failed")
 
-        # 1) Subsource target language
-        target_results = await self._find_subtitles(
-            metadata,
-            log,
-            language=target_lang,
-            video_filename=video_filename,
-        )
-        if target_results:
-            downloaded_target = await self._download_first_available(
-                target_results,
+        # 1) Provider target language (only if caller specifically requested to improve/translate target_lang)
+        if requested_from_lang == target_lang:
+            target_results = await self._find_subtitles(
                 metadata,
                 log,
+                language=target_lang,
                 video_filename=video_filename,
             )
-            if downloaded_target:
-                subtitle, subtitle_path = downloaded_target
-                log.info(
-                    f"[TranslatePath] Resolved from Subsource target ({target_lang}): {subtitle.name}"
+            if target_results:
+                downloaded_target = await self._download_first_available(
+                    target_results,
+                    metadata,
+                    log,
+                    video_filename=video_filename,
                 )
-                return {
-                    "source_subtitle_path": subtitle_path,
-                    "effective_from_lang": target_lang,
-                    "source_strategy": "subsource_target_preferred",
-                    "source_origin": "subsource",
-                }
-        log.info(f"[TranslatePath] Subsource target ({target_lang}) unavailable or download failed")
+                if downloaded_target:
+                    subtitle, subtitle_path = downloaded_target
+                    log.info(
+                        f"[TranslatePath] Resolved from provider target ({target_lang}): {subtitle.name}"
+                    )
+                    return {
+                        "source_subtitle_path": subtitle_path,
+                        "effective_from_lang": target_lang,
+                        "source_strategy": "subsource_target_preferred",
+                        "source_origin": "subsource",
+                    }
+            log.info(f"[TranslatePath] Provider target ({target_lang}) unavailable or download failed")
 
-        # 2) Subsource English
-        if target_lang != "en":
+        # 2) Provider source language (requested_from_lang or English)
+        search_lang = requested_from_lang if (requested_from_lang and requested_from_lang != target_lang) else "en"
+        if target_lang != search_lang:
             en_params = SubtitleSearchParams(
-                language="en",
+                language=search_lang,
                 title=metadata.search_title,
                 year=metadata.year,
                 imdb_id=metadata.imdb_id,
@@ -1879,14 +1895,14 @@ class SubtitleService:
                 )
                 if downloaded_en:
                     subtitle, subtitle_path = downloaded_en
-                    log.info(f"[TranslatePath] Resolved from Subsource English: {subtitle.name}")
+                    log.info(f"[TranslatePath] Resolved from provider {search_lang}: {subtitle.name}")
                     return {
                         "source_subtitle_path": subtitle_path,
-                        "effective_from_lang": "en",
+                        "effective_from_lang": search_lang,
                         "source_strategy": "subsource_en_translation",
                         "source_origin": "subsource",
                     }
-            log.info("[TranslatePath] Subsource English unavailable or download failed")
+            log.info(f"[TranslatePath] Provider {search_lang} unavailable or download failed")
 
         # 3) Plex subtitle fallback (last-resort)
         dest_dir = self.temp_dir / metadata.rating_key
@@ -2216,6 +2232,19 @@ class SubtitleService:
                     log,
                     video_filename=video_filename,
                 )
+                if candidate.language in ("vi", "vie"):
+                    try:
+                        sample = path.read_text(encoding="utf-8-sig", errors="ignore")[:50000]
+                        if not has_vietnamese_diacritics(sample, min_count=5):
+                            log.warning(
+                                f"Downloaded subtitle '{candidate.name}' for language '{candidate.language}' has no Vietnamese diacritics; rejecting as mislabeled"
+                            )
+                            path.unlink(missing_ok=True)
+                            if i < len(subtitles) - 1:
+                                log.info("Trying next subtitle...")
+                            continue
+                    except Exception as verify_err:
+                        log.warning(f"Failed to verify language content for '{candidate.name}': {verify_err}")
                 return candidate, path
             except Exception as e:
                 log.warning(f"Download failed for '{candidate.name}': {e}")

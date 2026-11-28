@@ -265,7 +265,7 @@ class OpenAITranslationClient:
         for i in range(1, len(parts) - 1, 2):
             try:
                 idx = int(parts[i])
-                content = parts[i + 1].strip()
+                content = parts[i + 1].replace("\\n", "\n").strip()
                 results[idx] = content
             except (ValueError, IndexError):
                 continue
@@ -421,7 +421,8 @@ class OpenAITranslationClient:
         for entry in translated_entries:
             srt_content.append(f"{entry['index']}")
             srt_content.append(entry["timing"])
-            srt_content.append(entry["text"])
+            text = entry["text"].replace("\\n", "\n")
+            srt_content.append(text)
             srt_content.append("")  # Empty line
 
         output_path.parent.mkdir(parents=True, exist_ok=True)

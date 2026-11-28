@@ -1727,8 +1727,8 @@
                             <div class="tree-actions flex items-center gap-1 shrink-0">
                                 <button class="btn btn-sm btn-icon btn-secondary" onclick="quickUploadTarget('${ep.rating_key}', this)" title="Tìm sub" aria-label="Tìm sub tập ${ep.episode_number}"><i class="fa-solid fa-magnifying-glass"></i></button>
                                 <button class="btn btn-sm btn-icon ${skipped ? 'btn-warning' : 'btn-ghost'}" data-skipped="${skipped ? 1 : 0}" aria-pressed="${skipped}" onclick="toggleTranslationSkip('${ep.rating_key}', this)" title="${skipped ? 'Đang bỏ qua dịch AI — bấm để bật lại' : 'Bỏ qua dịch AI'}" aria-label="${skipped ? 'Bật lại dịch AI' : 'Bỏ qua dịch AI'}"><i class="fa-solid ${skipped ? 'fa-rotate-left' : 'fa-ban'}"></i></button>
-                                ${ep.can_translate && !skipped
-                                    ? `<button class="btn btn-sm btn-icon btn-primary" onclick="quickTranslate('${ep.rating_key}', this)" title="Dịch AI" aria-label="Dịch AI tập ${ep.episode_number}"><i class="fa-solid fa-language"></i></button>`
+                                ${(!skipped && (ep.can_translate || ep.has_vi))
+                                    ? `<button class="btn btn-sm btn-icon ${ep.has_vi ? 'btn-ghost text-primary' : 'btn-primary'}" onclick="quickTranslate('${ep.rating_key}', this)" title="${ep.has_vi ? 'Dịch lại AI (ghi đè sub hiện tại)' : 'Dịch AI'}" aria-label="${ep.has_vi ? 'Dịch lại AI' : 'Dịch AI'} tập ${ep.episode_number}"><i class="fa-solid fa-language"></i></button>`
                                     : `<span class="ep-btn-placeholder" aria-hidden="true"></span>`}
                             </div>
                         </div>
@@ -1850,7 +1850,7 @@
                 </p>
                 <div class="flex gap-2 ${data.ignored ? 'hidden' : ''}">
                     <button class="btn btn-secondary flex-1 whitespace-nowrap" id="movieSearchSubBtn" onclick="quickUploadTarget('${data.rating_key}', this)">${ICONS.search} Tìm sub</button>
-                    ${data.can_translate && !skipped ? `<button class="btn btn-primary flex-1 whitespace-nowrap" onclick="quickTranslate('${data.rating_key}', this)">${ICONS.translate} Dịch AI</button>` : ''}
+                    ${!skipped && (data.can_translate || data.has_vi) ? `<button class="btn ${data.has_vi ? 'btn-ghost text-primary border border-primary/40' : 'btn-primary'} flex-1 whitespace-nowrap" onclick="quickTranslate('${data.rating_key}', this)">${ICONS.translate} ${data.has_vi ? 'Dịch lại AI' : 'Dịch AI'}</button>` : ''}
                 </div>
             </div>
         `;
@@ -1978,7 +1978,7 @@
         const endpoint = actionType === 'translate' ? '/api/library/batch/translate' : '/api/library/batch/upload-target';
         
         try {
-            const payload = { rating_keys: ratingKeys, use_cache: true };
+            const payload = { rating_keys: ratingKeys, use_cache: true, force: ratingKeys.length === 1 };
             const override = document.getElementById("seriesPronounOverrideInput")?.value?.trim() || null;
             if (override) payload.pronoun_override = override;
             const res = await fetch(endpoint, {

@@ -21,6 +21,7 @@ class BatchActionRequest(BaseModel):
     rating_keys: list[str]
     use_cache: bool = True
     pronoun_override: str | None = None
+    force: bool = False
 
 
 class IgnoreItem(BaseModel):
@@ -307,6 +308,7 @@ async def _run_batch_translate_task(
     task_id: str,
     rating_keys: list[str],
     pronoun_override: str | None = None,
+    force: bool = False,
 ) -> None:
     """Execute background batch subtitle translation with progress updates."""
     service = get_subtitle_service()
@@ -329,7 +331,8 @@ async def _run_batch_translate_task(
                 await asyncio.sleep(0.2)
                 continue
 
-            if preview.get("has_vi_subtitle"):
+            allow_replace = force or (total == 1) or service.config.subtitle_settings.replace_existing
+            if preview.get("has_vi_subtitle") and not allow_replace:
                 task_tracker.update_progress(
                     task_id=task_id,
                     current=idx,
@@ -340,7 +343,8 @@ async def _run_batch_translate_task(
                 await asyncio.sleep(0.5)
                 continue
 
-            if not preview.get("can_translate"):
+            can_trans = preview.get("can_translate") or (allow_replace and preview.get("can_retranslate"))
+            if not can_trans:
                 task_tracker.update_progress(
                     task_id=task_id,
                     current=idx,
@@ -459,6 +463,7 @@ async def batch_translate(request: BatchActionRequest, background_tasks: Backgro
         task_id=task_id,
         rating_keys=expanded_keys,
         pronoun_override=request.pronoun_override,
+        force=request.force,
     )
     return {"task_id": task_id, "total": len(expanded_keys), "status": "started"}
 

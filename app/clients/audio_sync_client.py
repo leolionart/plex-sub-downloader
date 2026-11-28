@@ -22,7 +22,7 @@ from app.models.runtime_config import RuntimeConfig
 class AudioSyncClient:
     """Align subtitles from the selected Plex audio track, or fail closed."""
 
-    MAX_OFFSET_MS = 60000
+    MAX_OFFSET_MS = 180000
     MAX_DURATION_SECONDS = 4 * 3600
     SAMPLE_SECONDS = 150
     WINDOW_SECONDS = 5
