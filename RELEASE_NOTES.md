@@ -1,5 +1,11 @@
 # Release Notes
 
+## Unreleased - 2026-11-28 13:28 +07
+
+Generated before push from commits:
+
+- `d241587` fix: validate vietnamese subtitle content, strip escaped newlines, and allow retranslating existing subtitles
+
 ## Unreleased - 2026-11-26 17:43 +07
 
 Generated before push from commits:
